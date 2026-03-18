@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "autopilot"
+version = "1.1.0"
+description = "Auto Mouse & Keyboard with Image Recognition"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+    "PyQt6>=6.5.0",
+    "pyautogui>=0.9.54",
+    "pynput>=1.7.6",
+    "opencv-python>=4.8.0",
+    "mss>=9.0.0",
+    "Pillow>=10.0.0",
+]
+
+[project.scripts]
+autopilot = "main:main"
+
+[project.gui-scripts]
+autopilot-gui = "main:main"
+
+[tool.setuptools.packages.find]
+include = ["core*", "gui*", "modules*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.flake8]
+max-line-length = 120
+ignore = ["E501", "W503", "W504", "E402", "W391"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true

@@ -1,0 +1,20 @@
+{
+  "name": "Untitled",
+  "version": "1.1",
+  "settings": {
+    "loop_count": 1,
+    "delay_between_loops": 0
+  },
+  "actions": [
+    {
+      "type": "delay",
+      "params": {
+        "duration_ms": 1
+      },
+      "delay_after": 0,
+      "repeat_count": 1,
+      "description": "",
+      "enabled": true
+    }
+  ]
+}

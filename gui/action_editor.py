@@ -1,0 +1,493 @@
+"""
+Action Editor – dialog and panel for adding/editing macro actions.
+Provides a user-friendly form for each action type with appropriate widgets.
+"""
+
+import logging
+import os
+from typing import Optional, Callable, Any
+
+from PyQt6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
+    QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit, QPushButton,
+    QGroupBox, QCheckBox, QFileDialog, QWidget,
+)
+from PyQt6.QtCore import QTimer, Qt, pyqtSignal
+
+from gui.coordinate_picker import CoordinatePickerOverlay
+
+from core.action import Action, get_action_class, get_all_action_types
+
+logger = logging.getLogger(__name__)
+
+# Grouped action categories for the type selector
+ACTION_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
+    ("🖱 Mouse", [
+        ("mouse_click", "Click"),
+        ("mouse_double_click", "Double Click"),
+        ("mouse_right_click", "Right Click"),
+        ("mouse_move", "Move"),
+        ("mouse_drag", "Drag"),
+        ("mouse_scroll", "Scroll"),
+    ]),
+    ("⌨ Keyboard", [
+        ("key_press", "Key Press"),
+        ("key_combo", "Key Combo"),
+        ("type_text", "Type Text"),
+        ("hotkey", "Hotkey"),
+    ]),
+    ("🖼 Image", [
+        ("wait_for_image", "Wait for Image"),
+        ("click_on_image", "Click on Image"),
+        ("image_exists", "Image Exists"),
+    ]),
+    ("🎨 Pixel", [
+        ("check_pixel_color", "Check Pixel Color"),
+        ("wait_for_color", "Wait for Color"),
+    ]),
+    ("⏱ Flow Control", [
+        ("delay", "Delay"),
+        ("loop_block", "Loop Block"),
+        ("if_image_found", "If Image Found"),
+    ]),
+]
+
+
+class ActionEditorDialog(QDialog):
+    """
+    Modal dialog for creating or editing a single action.
+    Emits action_ready(action) when user confirms.
+    """
+    action_ready = pyqtSignal(object)  # emits Action before dialog closes
+
+    def __init__(self, parent: Any = None, action: Optional[Action] = None,
+                 macro_dir: str = "") -> None:
+        super().__init__(parent)
+        self._action = action
+        self._macro_dir = macro_dir
+        self._result_action: Optional[Action] = None
+        self._param_widgets: dict[str, Any] = {}
+
+        self.setWindowTitle("Edit Action" if action else "Add Action")
+        self.setMinimumWidth(480)
+        self.resize(500, 520)
+        self.setSizeGripEnabled(True)
+        self.setModal(True)
+        self._param_cache: dict[str, Any] = {}  # persist x,y across types
+
+        self._setup_ui()
+
+        if action:
+            self._load_action(action)
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        # Action type selector — grouped with category headers
+        type_group = QGroupBox("Action Type")
+        type_layout = QVBoxLayout(type_group)
+        self._type_combo = QComboBox()
+        self._build_grouped_combo()
+        self._type_combo.currentIndexChanged.connect(self._on_type_changed)
+        type_layout.addWidget(self._type_combo)
+        layout.addWidget(type_group)
+
+        # Parameters area (dynamic)
+        self._params_group = QGroupBox("Parameters")
+        self._params_layout = QFormLayout(self._params_group)
+        layout.addWidget(self._params_group)
+
+        # Common settings
+        common_group = QGroupBox("Common Settings")
+        common_layout = QFormLayout(common_group)
+
+        self._delay_spin = QSpinBox()
+        self._delay_spin.setRange(0, 60000)
+        self._delay_spin.setSuffix(" ms")
+        self._delay_spin.setValue(0)
+        common_layout.addRow("Delay After:", self._delay_spin)
+
+        self._repeat_spin = QSpinBox()
+        self._repeat_spin.setRange(1, 10000)
+        self._repeat_spin.setValue(1)
+        common_layout.addRow("Repeat:", self._repeat_spin)
+
+        self._desc_edit = QLineEdit()
+        self._desc_edit.setPlaceholderText("Optional description...")
+        common_layout.addRow("Description:", self._desc_edit)
+
+        self._enabled_check = QCheckBox("Enabled")
+        self._enabled_check.setChecked(True)
+        common_layout.addRow("", self._enabled_check)
+
+        layout.addWidget(common_group)
+
+        # OK / Cancel
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn)
+
+        ok_btn = QPushButton("OK")
+        ok_btn.setObjectName("primaryButton")
+        ok_btn.clicked.connect(self._on_ok)
+        btn_layout.addWidget(ok_btn)
+        layout.addLayout(btn_layout)
+
+        # Show first selectable type's params
+        # Skip to first non-header item
+        for i in range(self._type_combo.count()):
+            if self._type_combo.itemData(i, Qt.ItemDataRole.UserRole) is not None:
+                self._type_combo.setCurrentIndex(i)
+                break
+        self._on_type_changed()
+
+    def _build_grouped_combo(self) -> None:
+        """Build grouped combo box with category headers."""
+        from PyQt6.QtGui import QStandardItemModel, QStandardItem, QFont
+        model = QStandardItemModel()
+        for cat_label, actions in ACTION_CATEGORIES:
+            # Category header (non-selectable, bold)
+            header = QStandardItem(cat_label)
+            header_font = QFont()
+            header_font.setBold(True)
+            header.setFont(header_font)
+            header.setEnabled(False)                     # non-selectable
+            header.setSelectable(False)
+            model.appendRow(header)
+            # Action items (indented with spaces)
+            for atype, label in actions:
+                item = QStandardItem(f"    {label}")
+                item.setData(atype, Qt.ItemDataRole.UserRole)
+                model.appendRow(item)
+        self._type_combo.setModel(model)
+
+    def _clear_params(self) -> None:
+        """Remove all dynamic parameter widgets, cache reusable values."""
+        # Cache x,y before clearing
+        for key in ("x", "y"):
+            w = self._param_widgets.get(key)
+            if w and isinstance(w, QSpinBox):
+                self._param_cache[key] = w.value()
+        while self._params_layout.count():
+            item = self._params_layout.takeAt(0)
+            if item is None:
+                break
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        self._param_widgets.clear()
+
+    def _on_type_changed(self) -> None:
+        """Rebuild parameter widgets when action type changes."""
+        self._clear_params()
+        atype = self._type_combo.currentData(Qt.ItemDataRole.UserRole)
+        if not atype:
+            return
+
+        # Dispatch to per-category builder
+        builders: dict[str, Callable[[], None]] = {
+            "mouse_click": lambda: self._build_mouse_params(atype),
+            "mouse_double_click": lambda: self._build_mouse_params(atype),
+            "mouse_right_click": lambda: self._build_mouse_params(atype),
+            "mouse_move": lambda: self._build_mouse_params(atype),
+            "mouse_drag": self._build_drag_params,
+            "mouse_scroll": self._build_scroll_params,
+            "key_press": self._build_key_press_params,
+            "key_combo": self._build_key_combo_params,
+            "hotkey": self._build_key_combo_params,
+            "type_text": self._build_type_text_params,
+            "delay": self._build_delay_params,
+            "wait_for_image": lambda: self._build_image_params(atype),
+            "click_on_image": lambda: self._build_image_params(atype),
+            "image_exists": lambda: self._build_image_params(atype),
+            "check_pixel_color": lambda: self._build_pixel_params(atype),
+            "wait_for_color": lambda: self._build_pixel_params(atype),
+        }
+        builder = builders.get(atype)
+        if builder:
+            builder()
+
+        # Restore cached x,y values if new type also has them
+        for key in ("x", "y"):
+            if key in self._param_cache and key in self._param_widgets:
+                w = self._param_widgets[key]
+                if isinstance(w, QSpinBox):
+                    w.setValue(self._param_cache[key])
+
+    def _build_mouse_params(self, atype: str) -> None:
+        self._add_xy_params()
+        if atype in ("mouse_click", "mouse_move"):
+            self._add_duration_param()
+
+    def _build_drag_params(self) -> None:
+        self._add_xy_params()
+        self._add_duration_param()
+        self._add_button_param()
+
+    def _build_scroll_params(self) -> None:
+        self._add_xy_params()
+        clicks = QSpinBox()
+        clicks.setRange(-100, 100)
+        clicks.setValue(3)
+        self._params_layout.addRow("Clicks (+ up, - down):", clicks)
+        self._param_widgets["clicks"] = clicks
+
+    def _build_key_press_params(self) -> None:
+        key_edit = QLineEdit("enter")
+        self._params_layout.addRow("Key:", key_edit)
+        self._param_widgets["key"] = key_edit
+
+    def _build_key_combo_params(self) -> None:
+        keys_edit = QLineEdit("ctrl+c")
+        keys_edit.setPlaceholderText("e.g. ctrl+shift+s")
+        self._params_layout.addRow("Keys (use +):", keys_edit)
+        self._param_widgets["keys_str"] = keys_edit
+
+    def _build_type_text_params(self) -> None:
+        text_edit = QLineEdit()
+        text_edit.setPlaceholderText("Text to type...")
+        self._params_layout.addRow("Text:", text_edit)
+        self._param_widgets["text"] = text_edit
+        interval = QDoubleSpinBox()
+        interval.setRange(0.0, 1.0)
+        interval.setSingleStep(0.01)
+        interval.setValue(0.02)
+        interval.setSuffix(" s")
+        self._params_layout.addRow("Interval:", interval)
+        self._param_widgets["interval"] = interval
+
+    def _build_delay_params(self) -> None:
+        dur = QSpinBox()
+        dur.setRange(0, 300000)
+        dur.setSuffix(" ms")
+        dur.setValue(1000)
+        self._params_layout.addRow("Duration:", dur)
+        self._param_widgets["duration_ms"] = dur
+
+    def _build_image_params(self, atype: str) -> None:
+        self._add_image_params()
+        if atype in ("wait_for_image", "click_on_image"):
+            timeout = QSpinBox()
+            timeout.setRange(0, 120000)
+            timeout.setSuffix(" ms")
+            timeout.setValue(10000)
+            self._params_layout.addRow("Timeout:", timeout)
+            self._param_widgets["timeout_ms"] = timeout
+        if atype == "click_on_image":
+            self._add_button_param()
+
+    def _build_pixel_params(self, atype: str) -> None:
+        self._add_xy_params()
+        for color_name, default_val in [("r", 255), ("g", 0), ("b", 0)]:
+            spin = QSpinBox()
+            spin.setRange(0, 255)
+            spin.setValue(default_val)
+            self._params_layout.addRow(f"Color {color_name.upper()}:", spin)
+            self._param_widgets[color_name] = spin
+        tol = QSpinBox()
+        tol.setRange(0, 255)
+        tol.setValue(10)
+        self._params_layout.addRow("Tolerance:", tol)
+        self._param_widgets["tolerance"] = tol
+        if atype == "wait_for_color":
+            timeout = QSpinBox()
+            timeout.setRange(0, 120000)
+            timeout.setSuffix(" ms")
+            timeout.setValue(10000)
+            self._params_layout.addRow("Timeout:", timeout)
+            self._param_widgets["timeout_ms"] = timeout
+
+    def _add_xy_params(self) -> None:
+        x_spin = QSpinBox()
+        x_spin.setRange(0, 9999)
+        self._params_layout.addRow("X:", x_spin)
+        self._param_widgets["x"] = x_spin
+
+        y_spin = QSpinBox()
+        y_spin.setRange(0, 9999)
+        self._params_layout.addRow("Y:", y_spin)
+        self._param_widgets["y"] = y_spin
+
+        # Coordinate Picker button
+        pick_btn = QPushButton("📌 Pick from Screen")
+        pick_btn.setObjectName("primaryButton")
+        pick_btn.setToolTip(
+            "Click to pick coordinates from screen.\n"
+            "Click on any point → coordinates auto-fill.\n"
+            "Press Escape to cancel."
+        )
+        pick_btn.clicked.connect(
+            lambda: self._start_coordinate_picker(x_spin, y_spin)
+        )
+        self._params_layout.addRow("", pick_btn)
+
+    def _start_coordinate_picker(self, x_spin: QSpinBox, y_spin: QSpinBox) -> None:
+        """Launch coordinate picker overlay after hiding the dialog."""
+        self._picker = CoordinatePickerOverlay()
+        self._picker_x_target = x_spin
+        self._picker_y_target = y_spin
+        self._picker.coordinate_picked.connect(self._on_coordinate_picked)
+        self._picker.cancelled.connect(self._on_picker_cancelled)
+        # Hide both the dialog AND the main window behind it
+        self._parent_window = self.parent()
+        if self._parent_window:
+            self._parent_window.hide()
+        self.hide()
+        # Short delay so windows fully hide before screenshot
+        QTimer.singleShot(300, self._picker.start)
+
+    def _on_coordinate_picked(self, x: int, y: int) -> None:
+        """Handle picked coordinates."""
+        self._picker_x_target.setValue(x)
+        self._picker_y_target.setValue(y)
+        if self._parent_window:
+            self._parent_window.show()
+            self._parent_window.activateWindow()
+        self.show()
+        self.activateWindow()
+
+    def _on_picker_cancelled(self) -> None:
+        """Handle picker cancellation."""
+        if self._parent_window:
+            self._parent_window.show()
+            self._parent_window.activateWindow()
+        self.show()
+        self.activateWindow()
+
+    def _add_duration_param(self) -> None:
+        dur = QDoubleSpinBox()
+        dur.setRange(0.0, 10.0)
+        dur.setSingleStep(0.1)
+        dur.setValue(0.0)
+        dur.setSuffix(" s")
+        self._params_layout.addRow("Duration:", dur)
+        self._param_widgets["duration"] = dur
+
+    def _add_button_param(self) -> None:
+        btn = QComboBox()
+        btn.addItems(["left", "right", "middle"])
+        self._params_layout.addRow("Button:", btn)
+        self._param_widgets["button"] = btn
+
+    def _add_image_params(self) -> None:
+        img_layout = QHBoxLayout()
+        img_edit = QLineEdit()
+        img_edit.setPlaceholderText("Path to template image...")
+        browse_btn = QPushButton("Browse")
+        browse_btn.clicked.connect(lambda: self._browse_image(img_edit))
+        img_layout.addWidget(img_edit)
+        img_layout.addWidget(browse_btn)
+
+        wrapper = QWidget()
+        wrapper.setLayout(img_layout)
+        self._params_layout.addRow("Image:", wrapper)
+        self._param_widgets["image_path"] = img_edit
+
+        conf = QDoubleSpinBox()
+        conf.setRange(0.1, 1.0)
+        conf.setSingleStep(0.05)
+        conf.setValue(0.8)
+        self._params_layout.addRow("Confidence:", conf)
+        self._param_widgets["confidence"] = conf
+
+    def _browse_image(self, line_edit: QLineEdit) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Image", self._macro_dir,
+            "Images (*.png *.jpg *.bmp)")
+        if path:
+            line_edit.setText(path)
+
+    def _load_action(self, action: Action) -> None:
+        """Pre-fill dialog from an existing action."""
+        # Select the correct type
+        for i in range(self._type_combo.count()):
+            if self._type_combo.itemData(i, Qt.ItemDataRole.UserRole) == action.ACTION_TYPE:
+                self._type_combo.setCurrentIndex(i)
+                break
+
+        # Common settings
+        self._delay_spin.setValue(action.delay_after)
+        self._repeat_spin.setValue(action.repeat_count)
+        self._desc_edit.setText(action.description)
+        self._enabled_check.setChecked(action.enabled)
+
+        # Type-specific params
+        params = action._get_params()
+        for key, widget in self._param_widgets.items():
+            if key == "keys_str" and "keys" in params:
+                widget.setText("+".join(params["keys"]))
+            elif key in params:
+                val = params[key]
+                if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+                    widget.setValue(val)
+                elif isinstance(widget, QLineEdit):
+                    widget.setText(str(val))
+                elif isinstance(widget, QComboBox):
+                    idx = widget.findText(str(val))
+                    if idx >= 0:
+                        widget.setCurrentIndex(idx)
+
+    def _on_ok(self) -> None:
+        """Build the action from widget values and accept."""
+        atype = self._type_combo.currentData(Qt.ItemDataRole.UserRole)
+        params = self._collect_params()
+
+        # Create action
+        try:
+            cls = get_action_class(atype)
+            action = cls(**params)
+            action.delay_after = self._delay_spin.value()
+            action.repeat_count = self._repeat_spin.value()
+            action.description = self._desc_edit.text()
+            action.enabled = self._enabled_check.isChecked()
+
+            if not self._validate_image_path(action):
+                return
+
+            self._result_action = action
+            self.action_ready.emit(action)  # fire BEFORE accept
+            self.accept()
+            logger.info("Action created: type=%s params=%s", atype, params)
+        except Exception as e:
+            logger.warning("Action creation failed: type=%s error=%s", atype, e)
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, "Thông Số Không Hợp Lệ",
+                f"Vui lòng kiểm tra lại các thông số đã nhập.\n\n"
+                f"Chi tiết: {e}")
+
+    def _collect_params(self) -> dict[str, Any]:
+        """Extract parameter values from widgets."""
+        params: dict[str, Any] = {}
+        for key, widget in self._param_widgets.items():
+            if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+                params[key] = widget.value()
+            elif isinstance(widget, QLineEdit):
+                params[key] = widget.text()
+            elif isinstance(widget, QComboBox):
+                params[key] = widget.currentText()
+
+        # Handle keys_str → keys list
+        if "keys_str" in params:
+            params["keys"] = [k.strip() for k in
+                              params.pop("keys_str").split("+") if k.strip()]
+        return params
+
+    def _validate_image_path(self, action: Action) -> bool:
+        """Warn if image path doesn't exist. Returns False to cancel."""
+        if not hasattr(action, 'image_path') or not action.image_path:
+            return True
+        if os.path.isfile(action.image_path):
+            return True
+        from PyQt6.QtWidgets import QMessageBox
+        r = QMessageBox.warning(
+            self, "Warning",
+            f"Image file not found:\n{action.image_path}\n\nContinue anyway?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        return r == QMessageBox.StandardButton.Yes
+
+    def get_action(self) -> Optional[Action]:
+        return self._result_action

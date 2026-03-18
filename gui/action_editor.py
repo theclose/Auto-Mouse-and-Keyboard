@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal
 
 from gui.coordinate_picker import CoordinatePickerOverlay
+from gui.image_capture import ImageCaptureOverlay
 
 from core.action import Action, get_action_class, get_all_action_types
 
@@ -40,6 +41,7 @@ ACTION_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("wait_for_image", "Wait for Image"),
         ("click_on_image", "Click on Image"),
         ("image_exists", "Image Exists"),
+        ("take_screenshot", "Take Screenshot"),
     ]),
     ("🎨 Pixel", [
         ("check_pixel_color", "Check Pixel Color"),
@@ -205,6 +207,7 @@ class ActionEditorDialog(QDialog):
             "image_exists": lambda: self._build_image_params(atype),
             "check_pixel_color": lambda: self._build_pixel_params(atype),
             "wait_for_color": lambda: self._build_pixel_params(atype),
+            "take_screenshot": self._build_screenshot_params,
         }
         builder = builders.get(atype)
         if builder:
@@ -278,6 +281,45 @@ class ActionEditorDialog(QDialog):
             self._param_widgets["timeout_ms"] = timeout
         if atype == "click_on_image":
             self._add_button_param()
+
+    def _build_screenshot_params(self) -> None:
+        # Save directory
+        dir_layout = QHBoxLayout()
+        dir_edit = QLineEdit("macros/screenshots")
+        dir_edit.setPlaceholderText("Thư mục lưu ảnh...")
+        dir_browse = QPushButton("Browse")
+        dir_browse.clicked.connect(lambda: self._browse_dir(dir_edit))
+        dir_layout.addWidget(dir_edit)
+        dir_layout.addWidget(dir_browse)
+        dir_wrapper = QWidget()
+        dir_wrapper.setLayout(dir_layout)
+        self._params_layout.addRow("Save Folder:", dir_wrapper)
+        self._param_widgets["save_dir"] = dir_edit
+
+        # Filename pattern
+        pattern_edit = QLineEdit("screenshot_%Y%m%d_%H%M%S.png")
+        pattern_edit.setToolTip(
+            "%Y=năm, %m=tháng, %d=ngày, %H=giờ, %M=phút, %S=giây"
+        )
+        self._params_layout.addRow("Filename:", pattern_edit)
+        self._param_widgets["filename_pattern"] = pattern_edit
+
+        # Optional region (0 = full screen)
+        for label, key, default in [
+            ("Region X:", "region_x", 0), ("Region Y:", "region_y", 0),
+            ("Region W:", "region_w", 0), ("Region H:", "region_h", 0),
+        ]:
+            spin = QSpinBox()
+            spin.setRange(0, 9999)
+            spin.setValue(default)
+            spin.setToolTip("0 = chụp toàn màn hình")
+            self._params_layout.addRow(label, spin)
+            self._param_widgets[key] = spin
+
+    def _browse_dir(self, line_edit: QLineEdit) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Select Folder")
+        if path:
+            line_edit.setText(path)
 
     def _build_pixel_params(self, atype: str) -> None:
         self._add_xy_params()
@@ -378,8 +420,18 @@ class ActionEditorDialog(QDialog):
         img_edit.setPlaceholderText("Path to template image...")
         browse_btn = QPushButton("Browse")
         browse_btn.clicked.connect(lambda: self._browse_image(img_edit))
+        capture_btn = QPushButton("📸 Capture")
+        capture_btn.setObjectName("primaryButton")
+        capture_btn.setToolTip(
+            "Chụp vùng màn hình → tự động điền path\n"
+            "Kéo vùng chọn, nhấn Escape để hủy."
+        )
+        capture_btn.clicked.connect(
+            lambda: self._start_image_capture(img_edit)
+        )
         img_layout.addWidget(img_edit)
         img_layout.addWidget(browse_btn)
+        img_layout.addWidget(capture_btn)
 
         wrapper = QWidget()
         wrapper.setLayout(img_layout)
@@ -399,6 +451,39 @@ class ActionEditorDialog(QDialog):
             "Images (*.png *.jpg *.bmp)")
         if path:
             line_edit.setText(path)
+
+    def _start_image_capture(self, target_edit: QLineEdit) -> None:
+        """Launch capture overlay to snip a screen region as template."""
+        import os
+        assets_dir = os.path.join(self._macro_dir, "assets")
+        self._capture_overlay = ImageCaptureOverlay(save_dir=assets_dir)
+        self._capture_target_edit = target_edit
+        self._capture_overlay.image_captured.connect(self._on_image_captured)
+        self._capture_overlay.cancelled.connect(self._on_capture_cancelled)
+        # Hide both dialog and main window
+        self._capture_parent = self.parent()
+        if self._capture_parent:
+            self._capture_parent.hide()
+        self.hide()
+        QTimer.singleShot(300, self._capture_overlay.start)
+
+    def _on_image_captured(self, path: str) -> None:
+        """Handle captured image — fill path into target edit."""
+        self._capture_target_edit.setText(path)
+        if self._capture_parent:
+            self._capture_parent.show()
+            self._capture_parent.activateWindow()
+        self.show()
+        self.activateWindow()
+        logger.info("Image captured for template: %s", path)
+
+    def _on_capture_cancelled(self) -> None:
+        """Restore windows if capture was cancelled."""
+        if self._capture_parent:
+            self._capture_parent.show()
+            self._capture_parent.activateWindow()
+        self.show()
+        self.activateWindow()
 
     def _load_action(self, action: Action) -> None:
         """Pre-fill dialog from an existing action."""

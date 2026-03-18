@@ -23,6 +23,7 @@ class ImageCaptureOverlay(QWidget):
     """
 
     image_captured = pyqtSignal(str)
+    cancelled = pyqtSignal()
 
     def __init__(self, save_dir: str = ".", parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -108,6 +109,7 @@ class ImageCaptureOverlay(QWidget):
     def keyPressEvent(self, event: Optional[QKeyEvent]) -> None:
         if event and event.key() == Qt.Key.Key_Escape:
             self._drawing = False
+            self.cancelled.emit()
             self.close()
 
     def _save_region(self, rect: QRect) -> None:

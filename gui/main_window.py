@@ -697,7 +697,7 @@ class MainWindow(QMainWindow):
         "type_text": "⌨", "hotkey": "⌨",
         "delay": "⏱",
         "wait_for_image": "🖼", "click_on_image": "🖼",
-        "image_exists": "🖼",
+        "image_exists": "🖼", "take_screenshot": "📸",
         "check_pixel_color": "🎨", "wait_for_color": "🎨",
         "loop_block": "🔁", "if_image_found": "❓",
     }

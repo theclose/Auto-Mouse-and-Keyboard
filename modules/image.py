@@ -16,6 +16,7 @@ import numpy as np
 from core.action import Action, register_action
 from modules.screen import (
     capture_full_screen, capture_full_screen_gray, capture_region,
+    save_screenshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -403,3 +404,64 @@ class ImageExists(Action):
     def get_display_name(self) -> str:
         name = Path(self.image_path).name if self.image_path else "?"
         return f"Image exists? '{name}'"
+
+
+@register_action("take_screenshot")
+class TakeScreenshot(Action):
+    """Capture a screenshot during macro execution and save to disk."""
+
+    def __init__(self, save_dir: str = "", filename_pattern: str = "",
+                 region_x: int = 0, region_y: int = 0,
+                 region_w: int = 0, region_h: int = 0,
+                 **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.save_dir = save_dir or "macros/screenshots"
+        self.filename_pattern = filename_pattern or "screenshot_%Y%m%d_%H%M%S.png"
+        self.region_x = region_x
+        self.region_y = region_y
+        self.region_w = region_w
+        self.region_h = region_h
+
+    def execute(self) -> bool:
+        import os
+        os.makedirs(self.save_dir, exist_ok=True)
+        filename = time.strftime(self.filename_pattern)
+        filepath = os.path.join(self.save_dir, filename)
+        # Avoid collision on same-second captures
+        counter = 1
+        base, ext = os.path.splitext(filepath)
+        while os.path.exists(filepath):
+            filepath = f"{base}_{counter}{ext}"
+            counter += 1
+        region = None
+        if self.region_w > 0 and self.region_h > 0:
+            region = (self.region_x, self.region_y,
+                      self.region_w, self.region_h)
+        save_screenshot(filepath, region)
+        logger.info("Screenshot saved: %s", filepath)
+        return True
+
+    def _get_params(self) -> dict[str, Any]:
+        return {
+            "save_dir": self.save_dir,
+            "filename_pattern": self.filename_pattern,
+            "region_x": self.region_x,
+            "region_y": self.region_y,
+            "region_w": self.region_w,
+            "region_h": self.region_h,
+        }
+
+    def _set_params(self, params: dict[str, Any]) -> None:
+        self.save_dir = params.get("save_dir", "macros/screenshots")
+        self.filename_pattern = params.get("filename_pattern",
+                                            "screenshot_%Y%m%d_%H%M%S.png")
+        self.region_x = params.get("region_x", 0)
+        self.region_y = params.get("region_y", 0)
+        self.region_w = params.get("region_w", 0)
+        self.region_h = params.get("region_h", 0)
+
+    def get_display_name(self) -> str:
+        if self.region_w > 0:
+            return f"Screenshot ({self.region_w}×{self.region_h})"
+        return "Screenshot (Full Screen)"
+

@@ -34,20 +34,15 @@ class PixelChecker:
     """
 
     def __init__(self) -> None:
-        self._hdc: int = _user32.GetDC(0)  # Screen DC
-
-    def __del__(self) -> None:
-        self.release()
-
-    def release(self) -> None:
-        """Explicitly release GDI screen DC."""
-        if hasattr(self, "_hdc") and self._hdc:
-            _user32.ReleaseDC(0, self._hdc)
-            self._hdc = 0
+        pass  # No persistent GDI handle (C2 fix: acquire/release per call)
 
     def get_pixel(self, x: int, y: int) -> tuple[int, int, int]:
-        """Get (R, G, B) at screen coordinates."""
-        color = _gdi32.GetPixel(self._hdc, x, y)
+        """Get (R, G, B) at screen coordinates. Acquires/releases DC each call."""
+        hdc = _user32.GetDC(0)
+        try:
+            color = _gdi32.GetPixel(hdc, x, y)
+        finally:
+            _user32.ReleaseDC(0, hdc)
         r = color & 0xFF
         g = (color >> 8) & 0xFF
         b = (color >> 16) & 0xFF
@@ -74,11 +69,14 @@ class PixelChecker:
         poll_ms: int = 100,
         appear: bool = True,
     ) -> bool:
-        """Wait for pixel color to appear or disappear."""
+        """Wait for pixel color to appear or disappear (interruptible)."""
+        from core.engine_context import is_stopped
         deadline = time.perf_counter() + timeout_ms / 1000.0
         interval = poll_ms / 1000.0
 
         while time.perf_counter() < deadline:
+            if is_stopped():
+                return False  # Interrupted
             matches = self.check_color(x, y, r, g, b, tolerance)
             if (appear and matches) or (not appear and not matches):
                 return True
@@ -94,13 +92,6 @@ def get_pixel_checker() -> PixelChecker:
     global _checker
     if _checker is None:
         _checker = PixelChecker()
-        # Register cleanup with MemoryManager for 24/7 safety
-        try:
-            from core.memory_manager import MemoryManager
-            mm = MemoryManager.instance()
-            mm.register_cleanup(_checker.release)
-        except Exception:
-            pass
     return _checker
 
 

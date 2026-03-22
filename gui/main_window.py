@@ -770,8 +770,9 @@ class MainWindow(QMainWindow):
         if total == 0:
             self._stats_label.setText("")
             return
-        est_ms = sum(a.delay_after for a in self._actions)
+        est_ms = 0
         for a in self._actions:
+            est_ms += a.delay_after
             if hasattr(a, 'duration_ms'):
                 est_ms += a.duration_ms
         loops = self._loop_spin.value() or 1

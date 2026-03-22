@@ -7,6 +7,7 @@ progress signals, and fail-safe emergency stop.
 import copy
 import json
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,7 @@ class MacroEngine(QThread):
         self._pause_condition = QWaitCondition()
         self._is_paused = False
         self._is_stopped = False
+        self._stop_event = threading.Event()
 
     # -- public API ----------------------------------------------------------
     def load_actions(self, actions: list[Action]) -> None:
@@ -87,6 +89,7 @@ class MacroEngine(QThread):
         self._mutex.lock()
         self._is_stopped = True
         self._is_paused = False
+        self._stop_event.set()  # Signal all interruptible sleeps
         self._pause_condition.wakeAll()
         self._mutex.unlock()
         logger.info("Engine stop requested")
@@ -104,10 +107,12 @@ class MacroEngine(QThread):
         """Main execution loop – runs in the worker thread."""
         self._is_stopped = False
         self._is_paused = False
+        self._stop_event.clear()
         # Hoist imports for hot loop (OPT-3)
-        from core.engine_context import set_speed, scaled_sleep
+        from core.engine_context import set_speed, scaled_sleep, set_stop_event
         self._scaled_sleep = scaled_sleep
         set_speed(self._speed_factor)
+        set_stop_event(self._stop_event)  # Propagate to all actions
         self.started_signal.emit()
         logger.info("Engine started – %d actions, %s loops",
                     len(self._actions),

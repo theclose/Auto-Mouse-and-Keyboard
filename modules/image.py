@@ -153,6 +153,12 @@ class ImageFinder:
             if timeout_ms <= 0 or time.perf_counter() >= deadline:
                 break
 
+            # Check engine stop event (C1 fix)
+            from core.engine_context import is_stopped
+            if is_stopped():
+                logger.debug("find_on_screen interrupted by stop event")
+                return None
+
             consecutive_misses += 1
             poll_interval = (min(poll_interval * 1.5, 0.5)
                              if consecutive_misses > 5 else 0.1)

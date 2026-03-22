@@ -146,8 +146,7 @@ class AddBatchCommand(QUndoCommand):
         self._insert_pos = len(actions)  # will be appended at end
 
     def redo(self) -> None:
-        for a in self._batch:
-            self._actions.append(a)
+        self._actions.extend(self._batch)
 
     def undo(self) -> None:
         del self._actions[self._insert_pos:]

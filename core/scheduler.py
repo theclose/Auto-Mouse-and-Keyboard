@@ -35,15 +35,16 @@ class LoopBlock(Action):
         self._cancel_event.set()
 
     def execute(self) -> bool:
+        from core.engine_context import is_stopped
         self._cancel_event.clear()
         count = 0
         while True:
-            if self._cancel_event.is_set():
+            if self._cancel_event.is_set() or is_stopped():
                 logger.info("LoopBlock cancelled after %d iterations", count)
                 return True
             count += 1
             for action in self._sub_actions:
-                if self._cancel_event.is_set():
+                if self._cancel_event.is_set() or is_stopped():
                     return True
                 success = action.run()
                 if not success:

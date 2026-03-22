@@ -144,9 +144,29 @@ class ExecutionContext:
 
     # -- Template interpolation ----------------------------------------------
     def interpolate(self, text: str) -> str:
-        """Replace ${var_name} patterns with variable values."""
+        """Replace ${var_name} patterns with variable values.
+        
+        Built-in system vars: __timestamp__, __iteration__, __action_count__,
+        __error_count__, __last_img_x__, __last_img_y__
+        """
         def _replace(m: re.Match) -> str:
             name = m.group(1)
+            # System variables (computed on demand)
+            if name == '__timestamp__':
+                return str(int(time.time()))
+            elif name == '__iteration__':
+                return str(self.iteration_count)
+            elif name == '__action_count__':
+                return str(self.action_count)
+            elif name == '__error_count__':
+                return str(self.error_count)
+            elif name == '__last_img_x__':
+                c = self.get_image_center()
+                return str(c[0]) if c else '0'
+            elif name == '__last_img_y__':
+                c = self.get_image_center()
+                return str(c[1]) if c else '0'
+            # User variables
             val = self.get_var(name)
             return str(val) if val is not None else m.group(0)
         return _VAR_PATTERN.sub(_replace, text)

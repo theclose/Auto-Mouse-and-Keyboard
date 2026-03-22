@@ -59,6 +59,10 @@ class LoopBlock(Action):
             for action in self._sub_actions:
                 if self._cancel_event.is_set() or is_stopped():
                     return True
+                # Check __continue__ → skip rest of iteration
+                if ctx and ctx.get_var('__continue__'):
+                    ctx.set_var('__continue__', False)
+                    break
                 success = action.run()
                 if not success:
                     return False
@@ -393,4 +397,64 @@ class SetVariable(Action):
         elif self.operation == "add":
             return f"${{{self.var_name}}} += {self.value}"
         return f"${{{self.var_name}}} {self.operation} {self.value}"
+
+
+@register_action("split_string")
+class SplitString(Action):
+    """Split a variable by delimiter and store a specific field.
+
+    Example: variable="a,b,c", delimiter=",", field_index=1 → stores "b"
+    """
+
+    def __init__(self, source_var: str = "", delimiter: str = ",",
+                 field_index: int = 0, target_var: str = "",
+                 **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.source_var = source_var
+        self.delimiter = delimiter
+        self.field_index = field_index
+        self.target_var = target_var
+
+    def execute(self) -> bool:
+        from core.engine_context import get_context
+        ctx = get_context()
+        if not ctx:
+            return True
+
+        value = ctx.get_var(self.source_var, "")
+        if not isinstance(value, str):
+            value = str(value)
+
+        parts = value.split(self.delimiter)
+        if 0 <= self.field_index < len(parts):
+            result = parts[self.field_index].strip()
+            ctx.set_var(self.target_var, result)
+            logger.info("Split ${%s}[%d] → ${%s} = '%s'",
+                         self.source_var, self.field_index,
+                         self.target_var, result[:50])
+            return True
+        else:
+            logger.warning("Field %d out of range (%d fields in '%s')",
+                           self.field_index, len(parts), value[:50])
+            ctx.set_var(self.target_var, "")
+            return True  # Don't fail — just empty
+
+    def _get_params(self) -> dict[str, Any]:
+        return {
+            "source_var": self.source_var,
+            "delimiter": self.delimiter,
+            "field_index": self.field_index,
+            "target_var": self.target_var,
+        }
+
+    def _set_params(self, params: dict[str, Any]) -> None:
+        self.source_var = params.get("source_var", "")
+        self.delimiter = params.get("delimiter", ",")
+        self.field_index = params.get("field_index", 0)
+        self.target_var = params.get("target_var", "")
+
+    def get_display_name(self) -> str:
+        return (f"Split ${{{self.source_var}}}[{self.field_index}]"
+                f" → ${{{self.target_var}}}")
+
 

@@ -56,6 +56,7 @@ ACTION_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
     ]),
     ("📊 Variables", [
         ("set_variable", "Set Variable"),
+        ("split_string", "Split String"),
     ]),
     ("🖥 System", [
         ("activate_window", "Activate Window"),
@@ -231,6 +232,7 @@ class ActionEditorDialog(QDialog):
             "if_pixel_color": lambda: self._build_pixel_params(atype),
             "if_variable": self._build_if_variable_params,
             "set_variable": self._build_set_variable_params,
+            "split_string": self._build_split_string_params,
             "activate_window": self._build_activate_window_params,
             "log_to_file": self._build_log_params,
             "read_clipboard": self._build_read_clipboard_params,
@@ -428,6 +430,27 @@ class ActionEditorDialog(QDialog):
         operation.addItems(["set", "increment", "decrement", "add"])
         self._params_layout.addRow("Operation:", operation)
         self._param_widgets["operation"] = operation
+
+    def _build_split_string_params(self) -> None:
+        src = QLineEdit()
+        src.setPlaceholderText("Source variable name")
+        self._params_layout.addRow("Source Var:", src)
+        self._param_widgets["source_var"] = src
+
+        delim = QLineEdit()
+        delim.setText(",")
+        self._params_layout.addRow("Delimiter:", delim)
+        self._param_widgets["delimiter"] = delim
+
+        idx = QSpinBox()
+        idx.setRange(0, 100)
+        self._params_layout.addRow("Field Index:", idx)
+        self._param_widgets["field_index"] = idx
+
+        target = QLineEdit()
+        target.setPlaceholderText("Target variable name")
+        self._params_layout.addRow("Store in:", target)
+        self._param_widgets["target_var"] = target
 
     def _build_activate_window_params(self) -> None:
         title = QLineEdit()

@@ -713,6 +713,7 @@ class MainWindow(QMainWindow):
         "check_pixel_color": "🎨", "wait_for_color": "🎨",
         "loop_block": "🔁", "if_image_found": "❓",
         "if_pixel_color": "🎯", "if_variable": "📏", "set_variable": "📊",
+        "split_string": "✂️",
         "activate_window": "🖥", "log_to_file": "📝",
         "read_clipboard": "📋", "read_file_line": "📂",
         "write_to_file": "💾",

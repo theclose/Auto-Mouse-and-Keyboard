@@ -201,22 +201,39 @@ class Action(ABC):
 # ---------------------------------------------------------------------------
 @register_action("delay")
 class DelayAction(Action):
-    """Wait for a specified number of milliseconds."""
+    """Wait for a specified number of milliseconds. Supports ${var} in duration."""
 
     def __init__(self, duration_ms: int = 1000, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.duration_ms = max(0, duration_ms)
+        self._dynamic_ms: str = ""  # e.g. "${delay_var}"
 
     def execute(self) -> bool:
-        from core.engine_context import scaled_sleep
-        scaled_sleep(self.duration_ms / 1000.0)
+        from core.engine_context import scaled_sleep, get_context
+        ms = self.duration_ms
+        if self._dynamic_ms:
+            ctx = get_context()
+            if ctx:
+                resolved = ctx.interpolate(self._dynamic_ms)
+                try:
+                    ms = int(float(resolved))
+                except (ValueError, TypeError):
+                    ms = self.duration_ms
+        scaled_sleep(ms / 1000.0)
         return True
 
     def _get_params(self) -> dict[str, Any]:
-        return {"duration_ms": self.duration_ms}
+        p = {"duration_ms": self.duration_ms}
+        if self._dynamic_ms:
+            p["dynamic_ms"] = self._dynamic_ms
+        return p
 
     def _set_params(self, params: dict[str, Any]) -> None:
         self.duration_ms = max(0, params.get("duration_ms", 1000))
+        self._dynamic_ms = params.get("dynamic_ms", "")
 
     def get_display_name(self) -> str:
+        if self._dynamic_ms:
+            return f"Delay {self._dynamic_ms}"
         return f"Delay {self.duration_ms} ms"
+

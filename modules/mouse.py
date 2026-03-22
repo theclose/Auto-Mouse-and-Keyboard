@@ -26,12 +26,15 @@ def _resolve_visual(context_image: str, fallback_x: int,
     if not os.path.isfile(context_image):
         return fallback_x, fallback_y
     try:
-        from modules.image import ImageFinder
-        result = ImageFinder.find(context_image, confidence=0.80, timeout=0.5)
-        if result:
+        from modules.image import get_image_finder
+        finder = get_image_finder()
+        bbox = finder.find_on_screen(context_image, confidence=0.80,
+                                      timeout_ms=500, grayscale=True)
+        if bbox:
+            cx, cy = bbox[0] + bbox[2] // 2, bbox[1] + bbox[3] // 2
             logger.debug("Visual match at (%d, %d) for %s",
-                         result[0], result[1], context_image)
-            return result[0], result[1]
+                         cx, cy, context_image)
+            return cx, cy
     except Exception:
         logger.debug("Visual context lookup failed, using coordinates")
     return fallback_x, fallback_y

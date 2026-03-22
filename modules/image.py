@@ -5,6 +5,7 @@ action wrappers for use in macros.
 """
 
 import logging
+import os
 import threading
 import time
 from pathlib import Path
@@ -72,9 +73,40 @@ class ImageFinder:
 
     @classmethod
     def clear_cache(cls) -> None:
-        """Clear screen cache (called by MemoryManager)."""
+        """Clear screen cache AND template cache (called by MemoryManager)."""
         with cls._cache_lock:
             cls._cache.clear()
+        with cls._tpl_lock:
+            cls._tpl_cache.clear()
+
+    # --- Template image cache (disk I/O → RAM, mtime invalidation) ---
+    _tpl_cache: dict[str, tuple[float, Any]] = {}
+    _tpl_lock = threading.Lock()
+
+    @classmethod
+    def _load_template(cls, path: str, grayscale: bool) -> Any:
+        """Load template from cache or disk. Invalidate on file modification."""
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            return None
+        key = f"{path}:{grayscale}"
+        with cls._tpl_lock:
+            if key in cls._tpl_cache:
+                cached_mtime, img = cls._tpl_cache[key]
+                if cached_mtime == mtime:
+                    return img  # Cache hit
+        # Cache miss — read from disk
+        img = cv2.imread(path)
+        if img is None or img.size == 0:
+            return None
+        if grayscale:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        with cls._tpl_lock:
+            if len(cls._tpl_cache) > 100:
+                cls._tpl_cache.clear()  # Prevent unbounded growth
+            cls._tpl_cache[key] = (mtime, img)
+        return img
 
     def __init__(self, method: int = cv2.TM_CCOEFF_NORMED) -> None:
         self.method = method
@@ -102,13 +134,10 @@ class ImageFinder:
         -------
         (x, y, w, h) bounding box of the best match, or None if not found.
         """
-        template = cv2.imread(template_path)
-        if template is None or template.size == 0:
+        template = self._load_template(template_path, grayscale)
+        if template is None:
             logger.error("Cannot read template image: %s", template_path)
             return None
-
-        if grayscale:
-            template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
 
         deadline = time.perf_counter() + (timeout_ms / 1000.0) \
             if timeout_ms > 0 else 0
@@ -206,12 +235,9 @@ class ImageFinder:
         grayscale: bool = True,
     ) -> list[tuple[int, int, int, int]]:
         """Find ALL occurrences of a template on screen."""
-        template = cv2.imread(template_path)
+        template = self._load_template(template_path, grayscale)
         if template is None:
             return []
-
-        if grayscale:
-            template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
 
         t_h, t_w = template.shape[:2]
         screen: Any = capture_region(*region) if region else capture_full_screen()

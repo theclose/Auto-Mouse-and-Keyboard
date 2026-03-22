@@ -15,6 +15,7 @@ Layout:
 """
 
 import datetime as _dt
+import json
 import logging
 import os
 from pathlib import Path
@@ -327,6 +328,16 @@ class MainWindow(QMainWindow):
         self._dup_btn.setToolTip("Duplicate action (Ctrl+D)")
         self._dup_btn.clicked.connect(self._on_duplicate)
         move_layout.addWidget(self._dup_btn)
+        self._copy_btn = QPushButton("📄 Copy")
+        self._copy_btn.setShortcut(QKeySequence("Ctrl+C"))
+        self._copy_btn.setToolTip("Copy selected actions (Ctrl+C)")
+        self._copy_btn.clicked.connect(self._on_copy_actions)
+        move_layout.addWidget(self._copy_btn)
+        self._paste_btn = QPushButton("📥 Paste")
+        self._paste_btn.setShortcut(QKeySequence("Ctrl+V"))
+        self._paste_btn.setToolTip("Paste actions from clipboard (Ctrl+V)")
+        self._paste_btn.clicked.connect(self._on_paste_actions)
+        move_layout.addWidget(self._paste_btn)
         move_layout.addStretch()
 
         # Stats bar
@@ -807,7 +818,13 @@ class MainWindow(QMainWindow):
         dup_act.triggered.connect(self._on_duplicate)
         dup_act.setEnabled(len(rows) == 1)
 
-        menu.addSeparator()
+        copy_act = menu.addAction("📄 Copy (Ctrl+C)")
+        assert copy_act is not None
+        copy_act.triggered.connect(self._on_copy_actions)
+
+        paste_act = menu.addAction("📥 Paste (Ctrl+V)")
+        assert paste_act is not None
+        paste_act.triggered.connect(self._on_paste_actions)
 
         toggle_act = menu.addAction(
             "✗ Disable" if self._actions[rows[0]].enabled else "✓ Enable")
@@ -1016,6 +1033,51 @@ class MainWindow(QMainWindow):
             logger.info("Duplicated action [%d]", row + 1)
         except Exception:
             logger.exception("Failed to duplicate action")
+
+    def _on_copy_actions(self) -> None:
+        """Copy selected actions to clipboard as JSON."""
+        try:
+            rows = self._selected_rows()
+            if not rows:
+                return
+            data = [self._actions[r].to_dict() for r in sorted(rows)]
+            clipboard = QApplication.clipboard()
+            assert clipboard is not None
+            clipboard.setText(json.dumps(
+                {"automacro_actions": data}, indent=2, ensure_ascii=False))
+            self._status_label.setText(
+                f"📄 Copied {len(rows)} action(s) to clipboard")
+            logger.info("Copied %d action(s) to clipboard", len(rows))
+        except Exception:
+            logger.exception("Failed to copy actions")
+
+    def _on_paste_actions(self) -> None:
+        """Paste actions from clipboard JSON."""
+        try:
+            clipboard = QApplication.clipboard()
+            assert clipboard is not None
+            text = clipboard.text()
+            if not text:
+                return
+            data = json.loads(text)
+            if not isinstance(data, dict) or "automacro_actions" not in data:
+                return
+            from core.action import Action as BaseAction
+            from core.undo_commands import AddBatchCommand
+            pasted: list[Action] = []
+            for item in data["automacro_actions"]:
+                pasted.append(BaseAction.from_dict(item))
+            if pasted:
+                cmd = AddBatchCommand(self._actions, pasted)
+                self._undo_stack.push(cmd)
+                self._refresh_table()
+                self._status_label.setText(
+                    f"📥 Pasted {len(pasted)} action(s)")
+                logger.info("Pasted %d action(s) from clipboard", len(pasted))
+        except (json.JSONDecodeError, ValueError, KeyError):
+            self._status_label.setText("⚠ Clipboard does not contain actions")
+        except Exception:
+            logger.exception("Failed to paste actions")
 
     def _on_play(self) -> None:
         if not self._actions:

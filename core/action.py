@@ -137,6 +137,16 @@ class Action(ABC):
         """Execute the action with on_error policy support."""
         if not self.enabled:
             return True
+        # Fast path: on_error='stop' (default, ~95% of actions)
+        if self.on_error == 'stop':
+            for _ in range(self.repeat_count):
+                if not self.execute():
+                    return False
+                if self.delay_after > 0:
+                    from core.engine_context import scaled_sleep
+                    scaled_sleep(self.delay_after / 1000.0)
+            return True
+        # Slow path: skip/retry requires policy handling
         for _ in range(self.repeat_count):
             success = self._run_once_with_policy()
             if not success and self.on_error == "stop":

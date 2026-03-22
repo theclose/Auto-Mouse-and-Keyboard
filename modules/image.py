@@ -327,7 +327,7 @@ class WaitForImage(Action):
         finder = get_image_finder()
         ctx = get_context()
         # Use smart ROI if available
-        region = ctx.suggest_roi(self.image_path) if ctx else None
+        region = ctx.suggest_roi_cached(self.image_path) if ctx else None
         result = finder.find_on_screen(
             self.image_path,
             confidence=self.confidence,
@@ -391,7 +391,7 @@ class ClickOnImage(Action):
             logger.info("Clicked cached image at (%d, %d)", cx, cy)
             return True
         # No cache — search with smart ROI
-        region = ctx.suggest_roi(self.image_path) if ctx else None
+        region = ctx.suggest_roi_cached(self.image_path) if ctx else None
         result = finder.find_on_screen(
             self.image_path,
             confidence=self.confidence,

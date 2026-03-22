@@ -6,11 +6,14 @@ so actions can communicate with each other.
 """
 
 import logging
+import re
 import threading
 import time
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+_VAR_PATTERN = re.compile(r'\$\{(\w+)\}')
 
 
 class ExecutionContext:
@@ -95,6 +98,18 @@ class ExecutionContext:
             roi_h = avg_h + margin * 2
             return (roi_x, roi_y, roi_w, roi_h)
 
+    def suggest_roi_cached(self, template_path: str,
+                           margin: int = 150) -> Optional[tuple[int, int, int, int]]:
+        """Cached version — uses last result if template hasn't changed."""
+        cached_key = getattr(self, '_roi_cache_key', None)
+        cached_val = getattr(self, '_roi_cache_val', None)
+        if cached_key == template_path and cached_val is not None:
+            return cached_val
+        result = self.suggest_roi(template_path, margin)
+        self._roi_cache_key = template_path
+        self._roi_cache_val = result
+        return result
+
     # -- Pixel result --------------------------------------------------------
     def set_pixel_color(self, x: int, y: int, r: int, g: int, b: int) -> None:
         with self._lock:
@@ -111,7 +126,9 @@ class ExecutionContext:
             self.error_count += 1
 
     def get_elapsed_seconds(self) -> float:
-        return time.perf_counter() - self.start_time if self.start_time else 0
+        if self.start_time:
+            return time.perf_counter() - self.start_time
+        return 0.0
 
     # -- Reset ---------------------------------------------------------------
     def reset(self) -> None:
@@ -128,10 +145,9 @@ class ExecutionContext:
     # -- Template interpolation ----------------------------------------------
     def interpolate(self, text: str) -> str:
         """Replace ${var_name} patterns with variable values."""
-        import re
         def _replace(m: re.Match) -> str:
             name = m.group(1)
             val = self.get_var(name)
             return str(val) if val is not None else m.group(0)
-        return re.sub(r'\$\{(\w+)\}', _replace, text)
+        return _VAR_PATTERN.sub(_replace, text)
 

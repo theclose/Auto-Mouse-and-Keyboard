@@ -124,4 +124,14 @@ class ExecutionContext:
         self.action_count = 0
         self.error_count = 0
         self.start_time = time.perf_counter()
-"""Execution Context — shared state between actions during a macro run."""
+
+    # -- Template interpolation ----------------------------------------------
+    def interpolate(self, text: str) -> str:
+        """Replace ${var_name} patterns with variable values."""
+        import re
+        def _replace(m: re.Match) -> str:
+            name = m.group(1)
+            val = self.get_var(name)
+            return str(val) if val is not None else m.group(0)
+        return re.sub(r'\$\{(\w+)\}', _replace, text)
+

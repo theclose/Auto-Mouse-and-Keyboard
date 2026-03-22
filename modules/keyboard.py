@@ -149,13 +149,17 @@ class TypeText(Action):
         self.interval = interval  # seconds between each character
 
     def execute(self) -> bool:
-        if self.text.isascii():
-            pyautogui.typewrite(self.text, interval=self.interval)
+        from core.engine_context import get_context
+        text = self.text
+        # Template interpolation: ${var_name} → value
+        ctx = get_context()
+        if ctx and '${' in text:
+            text = ctx.interpolate(text)
+        if text.isascii():
+            pyautogui.typewrite(text, interval=self.interval)
         else:
-            # Use Win32 SendInput with VK_PACKET for Unicode
-            # Much better than clipboard paste: no interference, direct input
-            _send_unicode_string(self.text, self.interval)
-        logger.debug("Typed text: '%s'", self.text[:50])
+            _send_unicode_string(text, self.interval)
+        logger.debug("Typed text: '%s'", text[:50])
         return True
 
     def _get_params(self) -> dict[str, Any]:

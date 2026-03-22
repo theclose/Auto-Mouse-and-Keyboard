@@ -57,6 +57,13 @@ ACTION_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
     ("📊 Variables", [
         ("set_variable", "Set Variable"),
     ]),
+    ("🖥 System", [
+        ("activate_window", "Activate Window"),
+        ("log_to_file", "Log to File"),
+        ("read_clipboard", "Read Clipboard"),
+        ("read_file_line", "Read File Line"),
+        ("write_to_file", "Write to File"),
+    ]),
 ]
 
 
@@ -221,6 +228,11 @@ class ActionEditorDialog(QDialog):
             "if_pixel_color": lambda: self._build_pixel_params(atype),
             "if_variable": self._build_if_variable_params,
             "set_variable": self._build_set_variable_params,
+            "activate_window": self._build_activate_window_params,
+            "log_to_file": self._build_log_params,
+            "read_clipboard": self._build_read_clipboard_params,
+            "read_file_line": self._build_read_file_line_params,
+            "write_to_file": self._build_write_file_params,
         }
         builder = builders.get(atype)
         if builder:
@@ -407,9 +419,70 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["value"] = value
 
         operation = QComboBox()
-        operation.addItems(["set", "increment", "decrement"])
+        operation.addItems(["set", "increment", "decrement", "add"])
         self._params_layout.addRow("Operation:", operation)
         self._param_widgets["operation"] = operation
+
+    def _build_activate_window_params(self) -> None:
+        title = QLineEdit()
+        title.setPlaceholderText("Window title (partial match)")
+        self._params_layout.addRow("Window Title:", title)
+        self._param_widgets["window_title"] = title
+
+        exact = QCheckBox("Exact Match")
+        self._params_layout.addRow("", exact)
+        self._param_widgets["exact_match"] = exact
+
+    def _build_log_params(self) -> None:
+        msg = QLineEdit()
+        msg.setPlaceholderText("Message (supports ${var})")
+        self._params_layout.addRow("Message:", msg)
+        self._param_widgets["message"] = msg
+
+        path = QLineEdit()
+        path.setPlaceholderText("macros/macro_log.txt")
+        self._params_layout.addRow("Log File:", path)
+        self._param_widgets["file_path"] = path
+
+    def _build_read_clipboard_params(self) -> None:
+        var_name = QLineEdit()
+        var_name.setPlaceholderText("Variable name to store clipboard")
+        var_name.setText("clipboard")
+        self._params_layout.addRow("Store in:", var_name)
+        self._param_widgets["var_name"] = var_name
+
+    def _build_read_file_line_params(self) -> None:
+        path = QLineEdit()
+        path.setPlaceholderText("Path to file")
+        self._params_layout.addRow("File Path:", path)
+        self._param_widgets["file_path"] = path
+
+        line = QLineEdit()
+        line.setPlaceholderText("Line number (or ${var})")
+        line.setText("1")
+        self._params_layout.addRow("Line #:", line)
+        self._param_widgets["line_number"] = line
+
+        var_name = QLineEdit()
+        var_name.setText("line")
+        self._params_layout.addRow("Store in:", var_name)
+        self._param_widgets["var_name"] = var_name
+
+    def _build_write_file_params(self) -> None:
+        path = QLineEdit()
+        path.setPlaceholderText("Output file path")
+        self._params_layout.addRow("File Path:", path)
+        self._param_widgets["file_path"] = path
+
+        text = QLineEdit()
+        text.setPlaceholderText("Text to write (supports ${var})")
+        self._params_layout.addRow("Text:", text)
+        self._param_widgets["text"] = text
+
+        mode = QComboBox()
+        mode.addItems(["append", "overwrite"])
+        self._params_layout.addRow("Mode:", mode)
+        self._param_widgets["mode"] = mode
 
     def _start_coordinate_picker(self, x_spin: QSpinBox, y_spin: QSpinBox) -> None:
         """Launch coordinate picker overlay after hiding the dialog."""

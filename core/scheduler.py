@@ -35,14 +35,27 @@ class LoopBlock(Action):
         self._cancel_event.set()
 
     def execute(self) -> bool:
-        from core.engine_context import is_stopped
+        from core.engine_context import is_stopped, get_context
         self._cancel_event.clear()
         count = 0
         while True:
-            if self._cancel_event.is_set() or is_stopped():
+            if self._cancel_event.is_set():
                 logger.info("LoopBlock cancelled after %d iterations", count)
                 return True
+            if is_stopped():
+                logger.info("LoopBlock stopped after %d iterations", count)
+                return True
+
             count += 1
+            ctx = get_context()
+            if ctx:
+                ctx.iteration_count = count
+                # Check __break__ variable for programmatic break
+                if ctx.get_var('__break__'):
+                    ctx.set_var('__break__', False)
+                    logger.info("LoopBlock: break at iteration %d", count)
+                    break
+
             for action in self._sub_actions:
                 if self._cancel_event.is_set() or is_stopped():
                     return True
@@ -301,14 +314,14 @@ class IfVariable(Action):
 
 @register_action("set_variable")
 class SetVariable(Action):
-    """Set or modify a context variable. Operations: set, increment, decrement."""
+    """Set or modify a context variable. Operations: set, increment, decrement, add."""
 
     def __init__(self, var_name: str = "", value: str = "",
                  operation: str = "set", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.var_name = var_name
         self.value = value
-        self.operation = operation  # "set" | "increment" | "decrement"
+        self.operation = operation  # "set" | "increment" | "decrement" | "add"
 
     def execute(self) -> bool:
         from core.engine_context import get_context
@@ -340,6 +353,16 @@ class SetVariable(Action):
             except ValueError:
                 step = 1
             ctx.set_var(self.var_name, int(current) - step)
+        elif self.operation == "add":
+            # Add arbitrary value (from var or literal)
+            current = ctx.get_var(self.var_name, 0)
+            add_val = self.value
+            if '${' in add_val:
+                add_val = ctx.interpolate(add_val)
+            try:
+                ctx.set_var(self.var_name, float(current) + float(add_val))
+            except (ValueError, TypeError):
+                logger.warning("Cannot add '%s' to '%s'", add_val, current)
         else:
             logger.warning("Unknown operation '%s'", self.operation)
 
@@ -367,5 +390,7 @@ class SetVariable(Action):
             return f"${{{self.var_name}}} += {self.value or 1}"
         elif self.operation == "decrement":
             return f"${{{self.var_name}}} -= {self.value or 1}"
+        elif self.operation == "add":
+            return f"${{{self.var_name}}} += {self.value}"
         return f"${{{self.var_name}}} {self.operation} {self.value}"
 

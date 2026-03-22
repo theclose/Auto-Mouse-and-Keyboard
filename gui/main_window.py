@@ -50,6 +50,7 @@ import modules.mouse       # noqa: F401
 import modules.keyboard    # noqa: F401
 import modules.image       # noqa: F401
 import modules.pixel       # noqa: F401
+import modules.system      # noqa: F401
 import core.scheduler       # noqa: F401
 from core.autosave import AutoSaveManager
 
@@ -712,6 +713,9 @@ class MainWindow(QMainWindow):
         "check_pixel_color": "🎨", "wait_for_color": "🎨",
         "loop_block": "🔁", "if_image_found": "❓",
         "if_pixel_color": "🎯", "if_variable": "📏", "set_variable": "📊",
+        "activate_window": "🖥", "log_to_file": "📝",
+        "read_clipboard": "📋", "read_file_line": "📂",
+        "write_to_file": "💾",
     }
 
     def _refresh_table(self) -> None:

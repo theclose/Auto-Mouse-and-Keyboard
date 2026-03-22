@@ -323,15 +323,29 @@ class WaitForImage(Action):
         self.timeout_ms = timeout_ms
 
     def execute(self) -> bool:
+        from core.engine_context import get_context
         finder = get_image_finder()
+        ctx = get_context()
+        # Use smart ROI if available
+        region = ctx.suggest_roi(self.image_path) if ctx else None
         result = finder.find_on_screen(
             self.image_path,
             confidence=self.confidence,
             timeout_ms=self.timeout_ms,
+            region=region,
         )
+        if result is None and region is not None:
+            # Fallback: full-screen search if ROI missed
+            result = finder.find_on_screen(
+                self.image_path,
+                confidence=self.confidence,
+                timeout_ms=0,
+            )
         if result is None:
             logger.warning("WaitForImage timed out: %s", self.image_path)
             return False
+        if ctx:
+            ctx.set_image_match(self.image_path, result)
         return True
 
     def _get_params(self) -> dict[str, Any]:
@@ -365,17 +379,34 @@ class ClickOnImage(Action):
 
     def execute(self) -> bool:
         import pyautogui
+        from core.engine_context import get_context
         finder = get_image_finder()
+        ctx = get_context()
+        # Try cached result from context first (Breakthrough 5)
+        cached = ctx.get_image_match(self.image_path) if ctx else None
+        if cached is not None:
+            cx = cached[0] + cached[2] // 2
+            cy = cached[1] + cached[3] // 2
+            pyautogui.click(cx, cy, button=self.button)
+            logger.info("Clicked cached image at (%d, %d)", cx, cy)
+            return True
+        # No cache — search with smart ROI
+        region = ctx.suggest_roi(self.image_path) if ctx else None
         result = finder.find_on_screen(
             self.image_path,
             confidence=self.confidence,
             timeout_ms=self.timeout_ms,
+            region=region,
         )
+        if result is None and region is not None:
+            result = finder.find_on_screen(
+                self.image_path, confidence=self.confidence, timeout_ms=0)
         if result is None:
             logger.warning("ClickOnImage: image not found: %s",
                            self.image_path)
             return False
-
+        if ctx:
+            ctx.set_image_match(self.image_path, result)
         cx, cy = finder.get_center(result)
         pyautogui.click(cx, cy, button=self.button)
         logger.info("Clicked on image at (%d, %d)", cx, cy)

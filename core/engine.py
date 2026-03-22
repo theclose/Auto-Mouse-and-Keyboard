@@ -15,6 +15,7 @@ from typing import Any
 from PyQt6.QtCore import QThread, QObject, pyqtSignal, QMutex, QWaitCondition
 
 from core.action import Action
+from core.execution_context import ExecutionContext
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +110,14 @@ class MacroEngine(QThread):
         self._is_paused = False
         self._stop_event.clear()
         # Hoist imports for hot loop (OPT-3)
-        from core.engine_context import set_speed, scaled_sleep, set_stop_event
+        from core.engine_context import set_speed, scaled_sleep, set_stop_event, set_context
         self._scaled_sleep = scaled_sleep
         set_speed(self._speed_factor)
-        set_stop_event(self._stop_event)  # Propagate to all actions
+        set_stop_event(self._stop_event)
+        # Create execution context for result chaining
+        self._exec_ctx = ExecutionContext()
+        self._exec_ctx.reset()
+        set_context(self._exec_ctx)
         self.started_signal.emit()
         logger.info("Engine started – %d actions, %s loops",
                     len(self._actions),
@@ -161,6 +166,8 @@ class MacroEngine(QThread):
 
         try:
             success = action.run()
+            if self._exec_ctx:
+                self._exec_ctx.record_action(success)
             if not success:
                 self.error_signal.emit(
                     f"Action failed: {action.get_display_name()}")

@@ -116,10 +116,17 @@ class CheckPixelColor(Action):
         self._result = False
 
     def execute(self) -> bool:
+        from core.engine_context import get_context
         pc = get_pixel_checker()
         self._result = pc.check_color(
             self.x, self.y, self.r, self.g, self.b, self.tolerance
         )
+        # Store in context for downstream actions
+        ctx = get_context()
+        if ctx:
+            pr, pg, pb = pc.get_pixel(self.x, self.y)
+            ctx.set_pixel_color(self.x, self.y, pr, pg, pb)
+            ctx.set_var('pixel_matched', self._result)
         logger.info(
             "Pixel(%d,%d) check RGB(%d,%d,%d) tol=%d → %s",
             self.x, self.y, self.r, self.g, self.b,

@@ -8,6 +8,10 @@ DelayAction.execute() read via scaled_sleep() which auto-checks stop.
 
 import threading
 import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.execution_context import ExecutionContext
 
 _ctx = threading.local()
 
@@ -36,6 +40,16 @@ def is_stopped() -> bool:
     """Check if engine has requested stop."""
     ev = get_stop_event()
     return ev is not None and ev.is_set()
+
+
+def set_context(ctx: 'ExecutionContext') -> None:
+    """Set execution context for the current thread."""
+    _ctx.exec_context = ctx
+
+
+def get_context() -> 'ExecutionContext | None':
+    """Get execution context (None if not set)."""
+    return getattr(_ctx, 'exec_context', None)
 
 
 def scaled_sleep(seconds: float) -> None:

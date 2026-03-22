@@ -51,6 +51,11 @@ ACTION_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("delay", "Delay"),
         ("loop_block", "Loop Block"),
         ("if_image_found", "If Image Found"),
+        ("if_pixel_color", "If Pixel Color"),
+        ("if_variable", "If Variable"),
+    ]),
+    ("📊 Variables", [
+        ("set_variable", "Set Variable"),
     ]),
 ]
 
@@ -213,6 +218,9 @@ class ActionEditorDialog(QDialog):
             "check_pixel_color": lambda: self._build_pixel_params(atype),
             "wait_for_color": lambda: self._build_pixel_params(atype),
             "take_screenshot": self._build_screenshot_params,
+            "if_pixel_color": lambda: self._build_pixel_params(atype),
+            "if_variable": self._build_if_variable_params,
+            "set_variable": self._build_set_variable_params,
         }
         builder = builders.get(atype)
         if builder:
@@ -370,6 +378,38 @@ class ActionEditorDialog(QDialog):
             lambda: self._start_coordinate_picker(x_spin, y_spin)
         )
         self._params_layout.addRow("", pick_btn)
+
+    def _build_if_variable_params(self) -> None:
+        var_name = QLineEdit()
+        var_name.setPlaceholderText("e.g. counter, row")
+        self._params_layout.addRow("Variable:", var_name)
+        self._param_widgets["var_name"] = var_name
+
+        operator = QComboBox()
+        operator.addItems(["==", "!=", ">", "<", ">=", "<="])
+        self._params_layout.addRow("Operator:", operator)
+        self._param_widgets["operator"] = operator
+
+        compare_value = QLineEdit()
+        compare_value.setPlaceholderText("e.g. 10, hello")
+        self._params_layout.addRow("Compare Value:", compare_value)
+        self._param_widgets["compare_value"] = compare_value
+
+    def _build_set_variable_params(self) -> None:
+        var_name = QLineEdit()
+        var_name.setPlaceholderText("e.g. counter, row")
+        self._params_layout.addRow("Variable:", var_name)
+        self._param_widgets["var_name"] = var_name
+
+        value = QLineEdit()
+        value.setPlaceholderText("e.g. 0, 1, hello")
+        self._params_layout.addRow("Value:", value)
+        self._param_widgets["value"] = value
+
+        operation = QComboBox()
+        operation.addItems(["set", "increment", "decrement"])
+        self._params_layout.addRow("Operation:", operation)
+        self._param_widgets["operation"] = operation
 
     def _start_coordinate_picker(self, x_spin: QSpinBox, y_spin: QSpinBox) -> None:
         """Launch coordinate picker overlay after hiding the dialog."""

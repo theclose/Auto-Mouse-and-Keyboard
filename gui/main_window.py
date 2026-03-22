@@ -711,6 +711,7 @@ class MainWindow(QMainWindow):
         "image_exists": "🖼", "take_screenshot": "📸",
         "check_pixel_color": "🎨", "wait_for_color": "🎨",
         "loop_block": "🔁", "if_image_found": "❓",
+        "if_pixel_color": "🎯", "if_variable": "📏", "set_variable": "📊",
     }
 
     def _refresh_table(self) -> None:

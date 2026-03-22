@@ -716,6 +716,7 @@ class MainWindow(QMainWindow):
         "activate_window": "🖥", "log_to_file": "📝",
         "read_clipboard": "📋", "read_file_line": "📂",
         "write_to_file": "💾",
+        "secure_type_text": "🔒", "run_macro": "▶️", "capture_text": "🔍",
     }
 
     def _refresh_table(self) -> None:

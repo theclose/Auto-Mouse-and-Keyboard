@@ -63,6 +63,9 @@ ACTION_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("read_clipboard", "Read Clipboard"),
         ("read_file_line", "Read File Line"),
         ("write_to_file", "Write to File"),
+        ("secure_type_text", "Secure Type Text"),
+        ("run_macro", "Run Sub-Macro"),
+        ("capture_text", "Capture Text (OCR)"),
     ]),
 ]
 
@@ -233,6 +236,9 @@ class ActionEditorDialog(QDialog):
             "read_clipboard": self._build_read_clipboard_params,
             "read_file_line": self._build_read_file_line_params,
             "write_to_file": self._build_write_file_params,
+            "secure_type_text": self._build_secure_text_params,
+            "run_macro": self._build_run_macro_params,
+            "capture_text": self._build_capture_text_params,
         }
         builder = builders.get(atype)
         if builder:
@@ -483,6 +489,66 @@ class ActionEditorDialog(QDialog):
         mode.addItems(["append", "overwrite"])
         self._params_layout.addRow("Mode:", mode)
         self._param_widgets["mode"] = mode
+
+    def _build_secure_text_params(self) -> None:
+        text_edit = QLineEdit()
+        text_edit.setPlaceholderText("Enter sensitive text (will be encrypted)")
+        text_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self._params_layout.addRow("Text:", text_edit)
+        self._param_widgets["encrypted_text"] = text_edit
+
+        encrypt_btn = QPushButton("🔒 Encrypt Now")
+        encrypt_btn.setToolTip("Encrypt the text using Windows DPAPI")
+        def _do_encrypt():
+            from core.secure import encrypt
+            raw = text_edit.text()
+            if raw and not raw.startswith("DPAPI:"):
+                text_edit.setText(encrypt(raw))
+        encrypt_btn.clicked.connect(_do_encrypt)
+        self._params_layout.addRow("", encrypt_btn)
+
+    def _build_run_macro_params(self) -> None:
+        path = QLineEdit()
+        path.setPlaceholderText("Path to macro .json file")
+        self._params_layout.addRow("Macro File:", path)
+        self._param_widgets["macro_path"] = path
+
+        browse_btn = QPushButton("📂 Browse...")
+        def _browse():
+            from PyQt6.QtWidgets import QFileDialog
+            fpath, _ = QFileDialog.getOpenFileName(
+                self, "Select Macro", "macros",
+                "JSON Macros (*.json)")
+            if fpath:
+                path.setText(fpath)
+        browse_btn.clicked.connect(_browse)
+        self._params_layout.addRow("", browse_btn)
+
+    def _build_capture_text_params(self) -> None:
+        self._add_xy_params()
+
+        w_spin = QSpinBox()
+        w_spin.setRange(10, 9999)
+        w_spin.setValue(200)
+        self._params_layout.addRow("Width:", w_spin)
+        self._param_widgets["width"] = w_spin
+
+        h_spin = QSpinBox()
+        h_spin.setRange(10, 9999)
+        h_spin.setValue(50)
+        self._params_layout.addRow("Height:", h_spin)
+        self._param_widgets["height"] = h_spin
+
+        var_name = QLineEdit()
+        var_name.setText("ocr_text")
+        self._params_layout.addRow("Store in:", var_name)
+        self._param_widgets["var_name"] = var_name
+
+        lang = QLineEdit()
+        lang.setText("eng")
+        lang.setPlaceholderText("OCR language (eng, vie, etc.)")
+        self._params_layout.addRow("Language:", lang)
+        self._param_widgets["lang"] = lang
 
     def _start_coordinate_picker(self, x_spin: QSpinBox, y_spin: QSpinBox) -> None:
         """Launch coordinate picker overlay after hiding the dialog."""

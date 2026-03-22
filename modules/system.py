@@ -282,3 +282,174 @@ class WriteToFile(Action):
     def get_display_name(self) -> str:
         name = os.path.basename(self.file_path) if self.file_path else "?"
         return f"Write to '{name}'"
+
+
+# ---------------------------------------------------------------------------
+# Secure Text Input (G2) — DPAPI encrypted
+# ---------------------------------------------------------------------------
+
+@register_action("secure_type_text")
+class SecureTypeText(Action):
+    """Type text that is stored encrypted in the macro file.
+    Uses Windows DPAPI for encryption — tied to machine + user account.
+    """
+
+    def __init__(self, encrypted_text: str = "", interval: float = 0.02,
+                 **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.encrypted_text = encrypted_text
+        self.interval = interval
+
+    def execute(self) -> bool:
+        import pyautogui
+        from core.secure import decrypt, is_encrypted
+        # Decrypt at runtime
+        text = decrypt(self.encrypted_text) if is_encrypted(self.encrypted_text) else self.encrypted_text
+        if text.isascii():
+            pyautogui.typewrite(text, interval=self.interval)
+        else:
+            from modules.keyboard import _send_unicode_string
+            _send_unicode_string(text, self.interval)
+        logger.debug("Typed secure text (len=%d)", len(text))
+        return True
+
+    def _get_params(self) -> dict[str, Any]:
+        return {
+            "encrypted_text": self.encrypted_text,
+            "interval": self.interval,
+        }
+
+    def _set_params(self, params: dict[str, Any]) -> None:
+        self.encrypted_text = params.get("encrypted_text", "")
+        self.interval = params.get("interval", 0.02)
+
+    def get_display_name(self) -> str:
+        return "Type ●●●●●● (secure)"
+
+
+# ---------------------------------------------------------------------------
+# Run Sub-Macro (G3)
+# ---------------------------------------------------------------------------
+
+@register_action("run_macro")
+class RunMacro(Action):
+    """Execute another macro file as a sub-routine."""
+
+    def __init__(self, macro_path: str = "", **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.macro_path = macro_path
+
+    def execute(self) -> bool:
+        from core.engine_context import get_context, is_stopped
+        from core.engine import MacroEngine
+
+        ctx = get_context()
+        path = self.macro_path
+        if ctx and '${' in path:
+            path = ctx.interpolate(path)
+
+        try:
+            actions, settings = MacroEngine.load_macro(path)
+        except (ValueError, FileNotFoundError) as e:
+            logger.error("RunMacro failed to load '%s': %s", path, e)
+            return False
+
+        logger.info("RunMacro: executing '%s' (%d actions)",
+                     path, len(actions))
+
+        for action in actions:
+            if is_stopped():
+                return True
+            success = action.run()
+            if ctx:
+                ctx.record_action(success)
+            if not success:
+                logger.warning("RunMacro: sub-action failed in '%s'", path)
+                return False
+
+        logger.info("RunMacro: completed '%s'", path)
+        return True
+
+    def _get_params(self) -> dict[str, Any]:
+        return {"macro_path": self.macro_path}
+
+    def _set_params(self, params: dict[str, Any]) -> None:
+        self.macro_path = params.get("macro_path", "")
+
+    def get_display_name(self) -> str:
+        name = os.path.basename(self.macro_path) if self.macro_path else "?"
+        return f"Run macro '{name}'"
+
+
+# ---------------------------------------------------------------------------
+# OCR Text Capture (G16)
+# ---------------------------------------------------------------------------
+
+@register_action("capture_text")
+class CaptureText(Action):
+    """Capture text from a screen region using OCR (pytesseract).
+    Stores the result in a context variable.
+    """
+
+    def __init__(self, x: int = 0, y: int = 0, width: int = 200,
+                 height: int = 50, var_name: str = "ocr_text",
+                 lang: str = "eng", **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.var_name = var_name
+        self.lang = lang
+
+    def execute(self) -> bool:
+        try:
+            import pytesseract
+            from PIL import ImageGrab
+        except ImportError:
+            logger.error("CaptureText requires pytesseract and Pillow")
+            return False
+
+        from core.engine_context import get_context
+
+        # Capture screen region
+        bbox = (self.x, self.y, self.x + self.width, self.y + self.height)
+        screenshot = ImageGrab.grab(bbox)
+
+        # OCR
+        try:
+            text = pytesseract.image_to_string(
+                screenshot, lang=self.lang
+            ).strip()
+        except Exception as e:
+            logger.error("OCR failed: %s", e)
+            return False
+
+        ctx = get_context()
+        if ctx:
+            ctx.set_var(self.var_name, text)
+
+        logger.info("OCR(%d,%d,%dx%d) → ${%s} = '%s'",
+                     self.x, self.y, self.width, self.height,
+                     self.var_name, text[:50])
+        return True
+
+    def _get_params(self) -> dict[str, Any]:
+        return {
+            "x": self.x, "y": self.y,
+            "width": self.width, "height": self.height,
+            "var_name": self.var_name, "lang": self.lang,
+        }
+
+    def _set_params(self, params: dict[str, Any]) -> None:
+        self.x = params.get("x", 0)
+        self.y = params.get("y", 0)
+        self.width = params.get("width", 200)
+        self.height = params.get("height", 50)
+        self.var_name = params.get("var_name", "ocr_text")
+        self.lang = params.get("lang", "eng")
+
+    def get_display_name(self) -> str:
+        return (f"OCR({self.x},{self.y} {self.width}×{self.height})"
+                f" → ${{{self.var_name}}}")
+

@@ -61,12 +61,14 @@ class Action(ABC):
     ACTION_TYPE: str = ""  # Set by @register_action
 
     def __init__(self, delay_after: int = 0, repeat_count: int = 1,
-                 description: str = "", enabled: bool = True):
+                 description: str = "", enabled: bool = True,
+                 on_error: str = "stop"):
         self.id = _next_id()
         self.delay_after = delay_after        # ms to wait after execution
         self.repeat_count = max(1, repeat_count)
         self.description = description
         self.enabled = enabled
+        self.on_error = on_error              # "stop" | "skip" | "retry:N"
 
     # -- abstract interface --------------------------------------------------
     @abstractmethod
@@ -99,6 +101,7 @@ class Action(ABC):
             "repeat_count": self.repeat_count,
             "description": self.description,
             "enabled": self.enabled,
+            "on_error": self.on_error,
         }
 
     @classmethod
@@ -115,23 +118,69 @@ class Action(ABC):
             repeat_count=data.get("repeat_count", 1),
             description=data.get("description", ""),
             enabled=data.get("enabled", True),
+            on_error=data.get("on_error", "stop"),
         )
         action._set_params(data.get("params", {}))
         return action
 
     # -- helpers -------------------------------------------------------------
+    def _parse_retry_count(self) -> int:
+        """Parse retry count from on_error='retry:N'. Returns 0 if not retry."""
+        if self.on_error.startswith("retry:"):
+            try:
+                return max(1, int(self.on_error.split(":")[1]))
+            except (IndexError, ValueError):
+                return 3  # default retry count
+        return 0
+
     def run(self) -> bool:
-        """Execute the action repeat_count times with delay_after."""
+        """Execute the action with on_error policy support."""
         if not self.enabled:
             return True
         for _ in range(self.repeat_count):
-            success = self.execute()
-            if not success:
+            success = self._run_once_with_policy()
+            if not success and self.on_error == "stop":
                 return False
             if self.delay_after > 0:
                 from core.engine_context import scaled_sleep
                 scaled_sleep(self.delay_after / 1000.0)
         return True
+
+    def _run_once_with_policy(self) -> bool:
+        """Execute once, applying on_error policy."""
+        retries = self._parse_retry_count()
+        attempts = max(1, retries + 1) if retries > 0 else 1
+
+        for attempt in range(attempts):
+            try:
+                success = self.execute()
+                if success:
+                    return True
+                if self.on_error == "skip":
+                    logger.warning("Action failed (skip): %s",
+                                   self.get_display_name())
+                    return True  # skip = treat as success
+                if retries > 0 and attempt < attempts - 1:
+                    logger.warning("Action failed, retry %d/%d: %s",
+                                   attempt + 1, retries,
+                                   self.get_display_name())
+                    from core.engine_context import scaled_sleep
+                    scaled_sleep(1.0)  # 1s between retries
+                    continue
+                return False  # stop
+            except Exception as exc:
+                logger.error("Action error: %s — %s",
+                             self.get_display_name(), exc)
+                if self.on_error == "skip":
+                    return True
+                if retries > 0 and attempt < attempts - 1:
+                    logger.warning("Retry %d/%d after error",
+                                   attempt + 1, retries)
+                    from core.engine_context import scaled_sleep
+                    scaled_sleep(1.0)
+                    continue
+                return False
+        return False
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} {self.get_display_name()}>"

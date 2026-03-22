@@ -93,8 +93,9 @@ class IfImageFound(Action):
         self._else_actions.append(action)
 
     def execute(self) -> bool:
-        from modules.image import ImageFinder
-        finder = ImageFinder()
+        from modules.image import get_image_finder
+        from core.engine_context import is_stopped
+        finder = get_image_finder()
         result = finder.find_on_screen(
             self.image_path,
             confidence=self.confidence,
@@ -103,11 +104,15 @@ class IfImageFound(Action):
         if result is not None:
             logger.info("Image found at %s – running THEN branch", result)
             for action in self._then_actions:
+                if is_stopped():
+                    return True
                 if not action.run():
                     return False
         else:
             logger.info("Image NOT found – running ELSE branch")
             for action in self._else_actions:
+                if is_stopped():
+                    return True
                 if not action.run():
                     return False
         return True

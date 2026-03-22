@@ -123,6 +123,11 @@ class ActionEditorDialog(QDialog):
         self._enabled_check.setChecked(True)
         common_layout.addRow("", self._enabled_check)
 
+        self._error_combo = QComboBox()
+        self._error_combo.addItems(["stop", "skip", "retry:3", "retry:5"])
+        self._error_combo.setToolTip("What to do when this action fails")
+        common_layout.addRow("On Error:", self._error_combo)
+
         layout.addWidget(common_group)
 
         # OK / Cancel
@@ -498,6 +503,11 @@ class ActionEditorDialog(QDialog):
         self._repeat_spin.setValue(action.repeat_count)
         self._desc_edit.setText(action.description)
         self._enabled_check.setChecked(action.enabled)
+        idx = self._error_combo.findText(action.on_error)
+        if idx >= 0:
+            self._error_combo.setCurrentIndex(idx)
+        else:
+            self._error_combo.setEditText(action.on_error)
 
         # Type-specific params
         params = action._get_params()
@@ -528,6 +538,7 @@ class ActionEditorDialog(QDialog):
             action.repeat_count = self._repeat_spin.value()
             action.description = self._desc_edit.text()
             action.enabled = self._enabled_check.isChecked()
+            action.on_error = self._error_combo.currentText()
 
             if not self._validate_image_path(action):
                 return

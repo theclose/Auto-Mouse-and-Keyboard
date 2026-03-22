@@ -5,8 +5,15 @@ executed, and composed into macro sequences.
 """
 
 import time
-import uuid
 from abc import ABC, abstractmethod
+
+_id_counter = 0
+
+def _next_id() -> str:
+    """Fast lightweight ID (no cryptographic overhead)."""
+    global _id_counter
+    _id_counter += 1
+    return f"{_id_counter:06x}"
 from typing import Any
 
 
@@ -55,7 +62,7 @@ class Action(ABC):
 
     def __init__(self, delay_after: int = 0, repeat_count: int = 1,
                  description: str = "", enabled: bool = True):
-        self.id = str(uuid.uuid4())[:8]
+        self.id = _next_id()
         self.delay_after = delay_after        # ms to wait after execution
         self.repeat_count = max(1, repeat_count)
         self.description = description

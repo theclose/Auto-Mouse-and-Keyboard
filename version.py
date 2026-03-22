@@ -10,9 +10,9 @@ Follows Semantic Versioning (https://semver.org/):
 Update this file before each release/commit.
 """
 
-__version__ = "1.1.1"
+__version__ = "1.2.0"
 __app_name__ = "AutoMacro"
 __author__ = "TungDo"
 
 # Build metadata (auto-populated by CI or manually)
-__build_date__ = "2026-03-18"
+__build_date__ = "2026-03-22"

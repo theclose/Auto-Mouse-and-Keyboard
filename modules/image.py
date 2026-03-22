@@ -16,7 +16,7 @@ import numpy as np
 from core.action import Action, register_action
 from modules.screen import (
     capture_full_screen, capture_full_screen_gray, capture_region,
-    save_screenshot,
+    capture_region_gray, save_screenshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,9 +55,10 @@ class ImageFinder:
 
         # Capture fresh — use direct grayscale path when possible
         if region:
-            screen: Any = capture_region(*region)
             if grayscale:
-                screen = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
+                screen = capture_region_gray(*region)
+            else:
+                screen: Any = capture_region(*region)
         elif grayscale:
             screen = capture_full_screen_gray()  # BGRA→GRAY direct
         else:

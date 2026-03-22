@@ -4,6 +4,7 @@ Runs a list of Actions in a worker thread with pause/resume/stop support,
 progress signals, and fail-safe emergency stop.
 """
 
+import copy
 import json
 import logging
 import time
@@ -56,13 +57,7 @@ class MacroEngine(QThread):
     # -- public API ----------------------------------------------------------
     def load_actions(self, actions: list[Action]) -> None:
         """Set the action list to execute (deep copy for thread safety)."""
-        copied: list[Action] = []
-        for a in actions:
-            try:
-                copied.append(Action.from_dict(a.to_dict()))
-            except Exception:
-                copied.append(a)          # fallback: shallow ref
-        self._actions = copied
+        self._actions = copy.deepcopy(actions)
 
     def set_loop(self, count: int = 1, delay_ms: int = 0,
                  stop_on_error: bool = False) -> None:
@@ -109,8 +104,9 @@ class MacroEngine(QThread):
         """Main execution loop – runs in the worker thread."""
         self._is_stopped = False
         self._is_paused = False
-        # Set speed factor for this worker thread
-        from core.engine_context import set_speed
+        # Hoist imports for hot loop (OPT-3)
+        from core.engine_context import set_speed, scaled_sleep
+        self._scaled_sleep = scaled_sleep
         set_speed(self._speed_factor)
         self.started_signal.emit()
         logger.info("Engine started – %d actions, %s loops",
@@ -191,8 +187,7 @@ class MacroEngine(QThread):
         while time.perf_counter() < sleep_end:
             if self._is_stopped:
                 return False
-            from core.engine_context import scaled_sleep
-            scaled_sleep(min(0.1, sleep_end - time.perf_counter()))
+            self._scaled_sleep(min(0.1, sleep_end - time.perf_counter()))
         return True
 
     # -- macro file I/O -------------------------------------------------------

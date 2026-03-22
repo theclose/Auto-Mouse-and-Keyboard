@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Safety: pyautogui fail-safe (move mouse to top-left corner to abort)
 pyautogui.FAILSAFE = True
-pyautogui.PAUSE = 0.03  # small default pause between pyautogui calls
+pyautogui.PAUSE = 0.005  # 5ms — minimal safe pause (was 30ms)
 
 import os
 
@@ -21,7 +21,9 @@ import os
 def _resolve_visual(context_image: str, fallback_x: int,
                     fallback_y: int) -> tuple[int, int]:
     """Try to find context image on screen; return match center or fallback."""
-    if not context_image or not os.path.isfile(context_image):
+    if not context_image:
+        return fallback_x, fallback_y
+    if not os.path.isfile(context_image):
         return fallback_x, fallback_y
     try:
         from modules.image import ImageFinder

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FTError
 from typing import Any, Optional, cast
 
 import cv2
@@ -46,22 +45,13 @@ def _reset_sct() -> Any:
         return _sct
 
 
-_GRAB_TIMEOUT = 5.0  # seconds – guards against GPU driver hangs
-_grab_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mss")
-
-
 def _safe_grab(region: dict[str, int]) -> NDArray[np.uint8]:
-    """Grab with timeout guard and auto-recovery on mss errors."""
-
-    def _do_grab(sct_instance: Any) -> NDArray[np.uint8]:
-        with _sct_lock:
-            return np.array(sct_instance.grab(region))
-
+    """Grab with auto-recovery on mss errors (OPT-5: no ThreadPool overhead)."""
     try:
         sct = _get_sct()
-        future = _grab_pool.submit(_do_grab, sct)
-        return future.result(timeout=_GRAB_TIMEOUT)
-    except (FTError, Exception) as e:
+        with _sct_lock:
+            return np.array(sct.grab(region))
+    except Exception as e:
         logger.warning("mss grab failed (%s), recreating...", e)
         sct = _reset_sct()
         with _sct_lock:
@@ -115,6 +105,21 @@ def capture_region(x: int, y: int, width: int, height: int) -> NDArray[np.uint8]
     region = {"left": x, "top": y, "width": width, "height": height}
     img = _safe_grab(region)
     return cast(NDArray[np.uint8], cv2.cvtColor(img, cv2.COLOR_BGRA2BGR))
+
+
+def capture_region_gray(x: int, y: int, width: int, height: int) -> NDArray[np.uint8]:
+    """Capture region directly as grayscale (OPT-6: skip BGR intermediate)."""
+    x, y = max(0, x), max(0, y)
+    width, height = max(1, width), max(1, height)
+    sct = _get_sct()
+    mon = sct.monitors[1]
+    x = min(x, mon["width"] - 1)
+    y = min(y, mon["height"] - 1)
+    width = min(width, mon["width"] - x)
+    height = min(height, mon["height"] - y)
+    region = {"left": x, "top": y, "width": width, "height": height}
+    img = _safe_grab(region)
+    return cast(NDArray[np.uint8], cv2.cvtColor(img, cv2.COLOR_BGRA2GRAY))
 
 
 def get_screen_size() -> tuple[int, int]:

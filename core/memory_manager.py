@@ -124,6 +124,7 @@ class MemoryManager:
         logger.info("Stopped (cleanups=%d)", self._cleanup_count)
 
     def _monitor_loop(self) -> None:
+        interval = self._check_interval
         while self._running:
             try:
                 mem = self._get_memory()
@@ -136,9 +137,12 @@ class MemoryManager:
                         self._threshold_bytes // (1024 * 1024),
                     )
                     self._do_cleanup()
+                    interval = max(15, self._check_interval // 2)
+                else:
+                    interval = self._check_interval
             except Exception as e:
                 logger.error("Monitor error: %s", e)
-            time.sleep(self._check_interval)
+            time.sleep(interval)
 
     def _get_memory(self) -> int:
         """Get current process RSS (WorkingSetSize) in bytes."""

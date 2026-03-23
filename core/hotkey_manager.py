@@ -1,11 +1,9 @@
 """
 Win32 Hotkey Manager – Native Windows RegisterHotKey for global hotkeys.
 
-Replaces the `keyboard` library with Windows API for:
-- More reliable hotkey registration (no hooks)
-- No external dependency needed
-- Won't conflict with other applications
-- Lower CPU overhead
+IMPORTANT: RegisterHotKey(NULL, ...) is thread-affine – WM_HOTKEY messages
+are posted to the registering thread's message queue. Therefore all
+registration/unregistration MUST happen inside the listener thread.
 """
 
 import ctypes
@@ -18,6 +16,9 @@ logger = logging.getLogger("HotkeyManager")
 
 # Windows constants
 WM_HOTKEY = 0x0312
+WM_QUIT = 0x0012
+WM_APP = 0x8000
+WM_APP_REGISTER = WM_APP + 1   # custom: trigger pending registration
 MOD_ALT = 0x0001
 MOD_CONTROL = 0x0002
 MOD_SHIFT = 0x0004
@@ -72,48 +73,46 @@ class HotkeyManager:
     """
     Global hotkey manager using Windows RegisterHotKey.
 
+    All RegisterHotKey/UnregisterHotKey calls happen inside the listener
+    thread to ensure WM_HOTKEY messages are delivered to the correct
+    thread message queue.
+
     Usage:
         hk = HotkeyManager()
         hk.register("F6", on_play)
         hk.register("F7", on_pause)
-        hk.start()
+        hk.start()   # registrations happen here, in the listener thread
         ...
         hk.stop()
     """
 
     def __init__(self) -> None:
         self._hotkeys: dict[int, Callable[[], None]] = {}
+        self._pending: list[tuple[str, int, int, Callable[[], None]]] = []
         self._next_id = 1
         self._thread: threading.Thread | None = None
+        self._thread_id: int | None = None
         self._running = False
+        self._lock = threading.Lock()
 
     def register(self, hotkey: str, callback: Callable[[], None]) -> int:
-        """Register a global hotkey. Returns hotkey ID."""
+        """Queue a global hotkey for registration. Returns hotkey ID.
+
+        Actual Win32 registration happens in the listener thread.
+        """
         modifiers, vk_code = parse_hotkey(hotkey)
         hid = self._next_id
         self._next_id += 1
-
-        if not ctypes.windll.user32.RegisterHotKey(
-            None, hid, modifiers, vk_code
-        ):
-            logger.error("Failed to register hotkey: %s", hotkey)
-            return -1
-
-        self._hotkeys[hid] = callback
-        logger.info("Registered: %s (id=%d)", hotkey, hid)
+        with self._lock:
+            self._pending.append((hotkey, modifiers, vk_code, callback, hid))
+        # If already running, wake the listener thread to process pending
+        if self._running and self._thread_id:
+            ctypes.windll.user32.PostThreadMessageW(
+                self._thread_id, WM_APP_REGISTER, 0, 0)
         return hid
 
-    def unregister(self, hotkey_id: int) -> None:
-        if hotkey_id in self._hotkeys:
-            ctypes.windll.user32.UnregisterHotKey(None, hotkey_id)
-            del self._hotkeys[hotkey_id]
-
-    def unregister_all(self) -> None:
-        for hid in list(self._hotkeys.keys()):
-            self.unregister(hid)
-
     def start(self) -> None:
-        """Start hotkey listener thread."""
+        """Start hotkey listener thread (also performs pending registrations)."""
         if self._running:
             return
         self._running = True
@@ -121,19 +120,52 @@ class HotkeyManager:
             target=self._message_loop, daemon=True, name="HotkeyListener"
         )
         self._thread.start()
-        logger.info("Hotkey listener started")
 
     def stop(self) -> None:
-        """Stop listener and unregister all."""
+        """Stop listener and unregister all hotkeys."""
         self._running = False
-        self.unregister_all()
+        # Post WM_QUIT to wake the listener thread so it can exit
+        if self._thread_id:
+            ctypes.windll.user32.PostThreadMessageW(
+                self._thread_id, WM_QUIT, 0, 0)
         if self._thread:
-            self._thread.join(timeout=1.0)
+            self._thread.join(timeout=2.0)
             self._thread = None
+        self._thread_id = None
         logger.info("Hotkey listener stopped")
 
+    def _process_pending(self) -> None:
+        """Register all pending hotkeys (must be called from listener thread)."""
+        with self._lock:
+            pending = list(self._pending)
+            self._pending.clear()
+        for hotkey, modifiers, vk_code, callback, hid in pending:
+            if ctypes.windll.user32.RegisterHotKey(
+                None, hid, modifiers, vk_code
+            ):
+                self._hotkeys[hid] = callback
+                logger.info("Registered: %s (id=%d)", hotkey, hid)
+            else:
+                logger.error("Failed to register hotkey: %s", hotkey)
+
+    def _unregister_all(self) -> None:
+        """Unregister all hotkeys (must be called from listener thread)."""
+        for hid in list(self._hotkeys.keys()):
+            ctypes.windll.user32.UnregisterHotKey(None, hid)
+        self._hotkeys.clear()
+
     def _message_loop(self) -> None:
-        """Windows message loop for hotkey events."""
+        """Windows message loop for hotkey events.
+
+        Runs entirely in the listener thread — registration, message
+        processing, and unregistration all happen here.
+        """
+        self._thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
+
+        # Register all pending hotkeys from THIS thread
+        self._process_pending()
+        logger.info("Hotkey listener started")
+
         msg = wintypes.MSG()
         while self._running:
             if ctypes.windll.user32.PeekMessageW(
@@ -146,5 +178,14 @@ class HotkeyManager:
                             self._hotkeys[hid]()
                         except Exception as e:
                             logger.error("Hotkey callback error: %s", e)
+                elif msg.message == WM_APP_REGISTER:
+                    # New hotkeys queued — register them
+                    self._process_pending()
+                elif msg.message == WM_QUIT:
+                    break
             else:
                 ctypes.windll.kernel32.Sleep(10)  # Avoid busy-wait
+
+        # Unregister from this thread before exiting
+        self._unregister_all()
+

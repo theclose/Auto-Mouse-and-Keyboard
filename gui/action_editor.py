@@ -417,6 +417,13 @@ class ActionEditorDialog(QDialog):
         self._params_layout.addRow("Compare Value:", compare_value)
         self._param_widgets["compare_value"] = compare_value
 
+        # 3.1: ELSE action (optional)
+        else_action = QLineEdit()
+        else_action.setPlaceholderText('Optional JSON: {"type":"set_variable","params":{"var_name":"x","value":"0","operation":"set"}}')
+        else_action.setToolTip("Define an action to execute when condition is FALSE (JSON format)")
+        self._params_layout.addRow("Else Action:", else_action)
+        self._param_widgets["else_action_json"] = else_action
+
     def _build_set_variable_params(self) -> None:
         var_name = QLineEdit()
         var_name.setPlaceholderText("e.g. counter, row")

@@ -145,7 +145,7 @@ class Recorder:
             path = ctx_dir / filename
             screenshot.save(str(path))
             return str(path)
-        except Exception:
+        except (OSError, TypeError, ValueError):
             logger.debug("Context capture failed, using coordinate only")
             return None
 
@@ -170,8 +170,8 @@ class Recorder:
                 self._actions.append(action)
             logger.debug("Recorded %s at (%d, %d)%s", action_type, x, y,
                          f" [ctx: {ctx_path}]" if ctx_path else "")
-        except Exception:
-            logger.warning("Failed to record %s", action_type, exc_info=True)
+        except (TypeError, ValueError, KeyError) as exc:
+            logger.warning("Failed to record %s: %s", action_type, exc)
 
     def _on_scroll(self, x: int, y: int, dx: int, dy: int) -> None:
         if not self._is_recording:
@@ -184,7 +184,7 @@ class Recorder:
             action = cls(x=int(x), y=int(y), clicks=int(dy))  # type: ignore[call-arg]
             with self._actions_lock:
                 self._actions.append(action)
-        except Exception:
+        except (TypeError, ValueError, KeyError):
             logger.warning("Failed to record scroll", exc_info=True)
 
     # -- keyboard callbacks --------------------------------------------------
@@ -215,7 +215,7 @@ class Recorder:
             with self._actions_lock:
                 self._actions.append(action)
             logger.debug("Recorded key_press: %s", key_name)
-        except Exception:
+        except (TypeError, ValueError, KeyError):
             logger.warning("Failed to record key: %s", key_name, exc_info=True)
 
     def _flush_key_buffer(self) -> None:

@@ -140,7 +140,7 @@ class MemoryManager:
                     interval = max(15, self._check_interval // 2)
                 else:
                     interval = self._check_interval
-            except Exception as e:
+            except (OSError, ctypes.ArgumentError, MemoryError) as e:
                 logger.error("Monitor error: %s", e)
             time.sleep(interval)
 
@@ -155,7 +155,7 @@ class MemoryManager:
             ):
                 return int(counters.WorkingSetSize)
             return 0
-        except Exception:
+        except (OSError, ctypes.ArgumentError):
             return 0
 
     def _do_cleanup(self) -> None:

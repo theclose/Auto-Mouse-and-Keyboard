@@ -385,6 +385,20 @@ class MainWindow(QMainWindow):
         ctrl_row.addWidget(self._stop_btn)
         play_vbox.addLayout(ctrl_row)
 
+        # Step debug controls (2.1)
+        step_row = QHBoxLayout()
+        self._step_toggle = QCheckBox("🐛 Step Mode")
+        self._step_toggle.setToolTip("Enable step-by-step execution")
+        self._step_toggle.toggled.connect(self._on_step_toggle)
+        step_row.addWidget(self._step_toggle)
+
+        self._step_next_btn = QPushButton("⏭ Step")
+        self._step_next_btn.setEnabled(False)
+        self._step_next_btn.setToolTip("Execute next action")
+        self._step_next_btn.clicked.connect(self._on_step_next)
+        step_row.addWidget(self._step_next_btn)
+        play_vbox.addLayout(step_row)
+
         right_layout.addWidget(play_group)
 
         # ── 2. Loop settings ──────────────────────────────────
@@ -447,6 +461,23 @@ class MainWindow(QMainWindow):
         exec_layout.addWidget(self._exec_log)
 
         right_layout.addWidget(exec_group)
+
+        # ── 5. Variable Inspector (2.1) ────────────────────────
+        var_group = QGroupBox("🔍 Variables")
+        var_layout = QVBoxLayout(var_group)
+        self._var_table = QTableWidget(0, 3)
+        self._var_table.setHorizontalHeaderLabels(["Name", "Value", "Type"])
+        self._var_table.horizontalHeader().setStretchLastSection(True)
+        self._var_table.setMaximumHeight(120)
+        self._var_table.setAlternatingRowColors(True)
+        self._var_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        var_layout.addWidget(self._var_table)
+        right_layout.addWidget(var_group)
+
+        # Variable refresh timer
+        self._var_timer = QTimer(self)
+        self._var_timer.timeout.connect(self._refresh_variables)
+        self._var_timer.setInterval(500)
 
         right_layout.addStretch()
 
@@ -627,6 +658,7 @@ class MainWindow(QMainWindow):
         self._engine.progress_signal.connect(self._on_engine_progress)
         self._engine.action_signal.connect(self._on_engine_action)
         self._engine.loop_signal.connect(self._on_engine_loop)
+        self._engine.step_signal.connect(self._on_engine_step)
 
     def _set_ui_locked(self, locked: bool) -> None:
         """Disable/enable all editing controls when engine is running."""
@@ -653,6 +685,8 @@ class MainWindow(QMainWindow):
         self._status_label.setText("▶ Running")
         self.setWindowTitle("▶ Running... — AutoMacro (by TungDo)")
         self._tray.update_state(True, False)
+        self._var_timer.start()  # 2.1: start variable inspector
+        self._step_next_btn.setEnabled(self._step_toggle.isChecked())
         logger.info("Engine started (%d actions, loop=%s)",
                     len(self._actions),
                     self._loop_spin.value() or '∞')
@@ -664,6 +698,8 @@ class MainWindow(QMainWindow):
         self._loop_label.setText("")
         self._progress_bar.reset()
         self._tray.update_state(False, False)
+        self._var_timer.stop()  # 2.1: stop variable inspector
+        self._step_next_btn.setEnabled(False)
         # Reset window title
         name = Path(self._current_file).stem if self._current_file else "New Macro"
         self.setWindowTitle(f"AutoMacro (by TungDo) – {name}")
@@ -1172,6 +1208,49 @@ class MainWindow(QMainWindow):
     def _on_stop(self) -> None:
         logger.info("Stop requested by user")
         self._engine.stop()
+
+    # ------------------------------------------------------------------ #
+    # Step Debug & Variable Inspector (2.1)
+    # ------------------------------------------------------------------ #
+    def _on_step_toggle(self, checked: bool) -> None:
+        """Toggle step-by-step execution mode."""
+        if hasattr(self, '_engine'):
+            self._engine.set_step_mode(checked)
+        self._step_next_btn.setEnabled(checked and self._engine.is_running)
+        logger.info("Step mode: %s", "ON" if checked else "OFF")
+
+    def _on_step_next(self) -> None:
+        """Advance one action in step mode."""
+        if hasattr(self, '_engine'):
+            self._engine.step_next()
+
+    def _on_engine_step(self, idx: int, name: str) -> None:
+        """Called when engine pauses in step mode after executing an action."""
+        self._status_label.setText(f"🐛 Step {idx + 1}: {name[:40]}")
+        self._step_next_btn.setEnabled(True)
+        # Highlight the executed action row
+        if 0 <= idx < self._table.rowCount():
+            self._table.selectRow(idx)
+        self._refresh_variables()
+
+    def _refresh_variables(self) -> None:
+        """Update the variable inspector table from execution context."""
+        try:
+            ctx = getattr(self._engine, '_exec_ctx', None)
+            if not ctx:
+                return
+            snapshot = ctx.snapshot()
+            variables = snapshot.get("variables", {})
+
+            self._var_table.setRowCount(len(variables))
+            for i, (name, value) in enumerate(sorted(variables.items())):
+                self._var_table.setItem(i, 0, QTableWidgetItem(str(name)))
+                val_str = str(value)[:100]
+                self._var_table.setItem(i, 1, QTableWidgetItem(val_str))
+                type_str = type(value).__name__
+                self._var_table.setItem(i, 2, QTableWidgetItem(type_str))
+        except (RuntimeError, AttributeError):
+            pass  # Engine may be destroyed
 
     def _on_capture(self) -> None:
         assets_dir = os.path.join(self._macro_dir, "assets")

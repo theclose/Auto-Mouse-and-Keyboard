@@ -1484,7 +1484,9 @@ class MainWindow(QMainWindow):
         )
 
     def _on_quit(self) -> None:
+        self._rec_panel.cleanup()
         self._engine.stop()
+        self._engine.wait(3000)  # Wait up to 3s for thread to finish
         self._tray.hide()
         QApplication.quit()
 

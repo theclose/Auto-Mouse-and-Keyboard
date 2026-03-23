@@ -195,3 +195,11 @@ class RecordingPanel(QWidget):
             self._preview_list.scrollToBottom()
             self._status_label.setText(
                 f"🔴 Đang ghi... {count} hành động")
+
+    def cleanup(self) -> None:
+        """Stop all timers and recorder — call before destroy."""
+        self._update_timer.stop()
+        if hasattr(self, '_countdown_timer'):
+            self._countdown_timer.stop()
+        if self._recorder.is_recording:
+            self._recorder.stop()

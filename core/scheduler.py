@@ -77,7 +77,7 @@ class LoopBlock(Action):
         self._cancel_event.set()
 
     def execute(self) -> bool:
-        from core.engine_context import is_stopped, get_context
+        from core.engine_context import is_stopped, get_context, emit_nested_step
         self._cancel_event.clear()
         count = 0
         while True:
@@ -98,7 +98,7 @@ class LoopBlock(Action):
                     logger.info("LoopBlock: break at iteration %d", count)
                     break
 
-            for action in self._sub_actions:
+            for i, action in enumerate(self._sub_actions):
                 if self._cancel_event.is_set() or is_stopped():
                     return True
                 # Check __continue__ → skip rest of iteration
@@ -106,6 +106,7 @@ class LoopBlock(Action):
                     ctx.set_var('__continue__', False)
                     break
                 success = action.run()
+                emit_nested_step([i], action.get_display_name())
                 if not success:
                     return False
             if self.iterations > 0 and count >= self.iterations:
@@ -175,7 +176,7 @@ class IfImageFound(Action):
 
     def execute(self) -> bool:
         from modules.image import get_image_finder
-        from core.engine_context import is_stopped, get_context
+        from core.engine_context import is_stopped, get_context, emit_nested_step
         finder = get_image_finder()
 
         # Support ${var} in image_path (e.g. "screens/${screen_id}.png")
@@ -191,16 +192,18 @@ class IfImageFound(Action):
         )
         if result is not None:
             logger.info("Image found at %s – running THEN branch", result)
-            for action in self._then_actions:
+            for i, action in enumerate(self._then_actions):
                 if is_stopped():
                     return True
+                emit_nested_step([i], action.get_display_name())
                 if not action.run():
                     return False
         else:
             logger.info("Image NOT found – running ELSE branch")
-            for action in self._else_actions:
+            for i, action in enumerate(self._else_actions):
                 if is_stopped():
                     return True
+                emit_nested_step([i], action.get_display_name())
                 if not action.run():
                     return False
         return True
@@ -301,7 +304,7 @@ class IfPixelColor(Action):
 
     def execute(self) -> bool:
         from modules.pixel import get_pixel_checker
-        from core.engine_context import is_stopped
+        from core.engine_context import is_stopped, emit_nested_step
         pc = get_pixel_checker()
         matched = pc.check_color(self.x, self.y, self.r, self.g, self.b,
                                  self.tolerance)
@@ -310,9 +313,10 @@ class IfPixelColor(Action):
         logger.info("IfPixelColor(%d,%d) RGB(%d,%d,%d) → %s (%d actions)",
                      self.x, self.y, self.r, self.g, self.b,
                      label, len(branch))
-        for action in branch:
+        for i, action in enumerate(branch):
             if is_stopped():
                 return True
+            emit_nested_step([i], action.get_display_name())
             if not action.run():
                 return False
         return True
@@ -401,7 +405,7 @@ class IfVariable(Action):
         self._else_actions.append(action)
 
     def execute(self) -> bool:
-        from core.engine_context import get_context, is_stopped
+        from core.engine_context import get_context, is_stopped, emit_nested_step
         ctx = get_context()
         var_val = ctx.get_var(self.var_name) if ctx else None
 
@@ -435,9 +439,10 @@ class IfVariable(Action):
         logger.info("IfVariable ${%s} %s %s → %s → %d actions",
                      self.var_name, op, self.compare_value, label, len(branch))
 
-        for action in branch:
+        for i, action in enumerate(branch):
             if is_stopped():
                 return True
+            emit_nested_step([i], action.get_display_name())
             if not action.run():
                 return False
         return True

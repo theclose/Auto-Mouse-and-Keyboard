@@ -41,6 +41,7 @@ class MacroEngine(QThread):
     action_signal = pyqtSignal(str)
     loop_signal = pyqtSignal(int, int)
     step_signal = pyqtSignal(int, str)  # L6: (action_index, display_name)
+    nested_step_signal = pyqtSignal(list, str)  # v3.0: ([path_indices], display_name)
 
     def __init__(self, parent: 'QObject | None' = None) -> None:
         super().__init__(parent)
@@ -151,6 +152,9 @@ class MacroEngine(QThread):
         set_context(self._exec_ctx)
         self._last_checkpoint: dict | None = None
         self._resume_from_idx: int = 0
+        # v3.0: register nested callback for composite actions
+        from core.engine_context import set_nested_callback
+        set_nested_callback(self._on_nested_step)
         self.started_signal.emit()
         logger.info("Engine started – %d actions, %s loops",
                     len(self._actions),
@@ -251,6 +255,15 @@ class MacroEngine(QThread):
                 return False
             self._scaled_sleep(min(0.1, sleep_end - time.perf_counter()))
         return True
+
+    def _on_nested_step(self, path: list[int], display_name: str) -> None:
+        """v3.0: Called by composite actions when executing a child.
+
+        Args:
+            path: List of indices showing nesting, e.g. [2, 0] = parent#2 → child#0
+            display_name: Human-readable name of the child action
+        """
+        self.nested_step_signal.emit(path, display_name)
 
     # -- macro file I/O -------------------------------------------------------
     MACRO_VERSION = "1.1"

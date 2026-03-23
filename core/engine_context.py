@@ -63,3 +63,21 @@ def scaled_sleep(seconds: float) -> None:
         if ev is not None and ev.is_set():
             return  # Interrupted by stop
         time.sleep(min(0.05, end - time.perf_counter()))
+
+
+# -- v3.0: nested step callback for composite actions ----------------------
+def set_nested_callback(fn) -> None:
+    """Set callback for nested action progress (called by MacroEngine.run)."""
+    _ctx.nested_callback = fn
+
+
+def emit_nested_step(path: list[int], display_name: str) -> None:
+    """Called by composite actions to signal child execution.
+
+    Args:
+        path: Index path, e.g. [2, 0] = parent action #2 → child #0
+        display_name: Human-readable name of the child action
+    """
+    fn = getattr(_ctx, 'nested_callback', None)
+    if fn is not None:
+        fn(path, display_name)

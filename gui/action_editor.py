@@ -107,6 +107,432 @@ _ACTION_DESCRIPTIONS: dict[str, str] = {
     "capture_text": "Nhận dạng chữ trên màn hình (OCR) và lưu vào biến",
 }
 
+# Rich HTML help content shown when user clicks ❓ button
+_ACTION_HELP: dict[str, str] = {
+    "mouse_click": (
+        "<b>🖱 Click — Click chuột trái</b><br><br>"
+        "<b>Ý nghĩa:</b> Giả lập click chuột trái tại tọa độ (X, Y) "
+        "trên màn hình, hoặc tại vị trí ảnh mẫu nếu có.<br><br>"
+        "<b>Khi nào dùng:</b> Nhấn nút, chọn menu, chọn file, mở app.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Click nút <i>Đăng nhập</i><br>"
+        "→ X=500, Y=300 (tọa độ cố định)<br><br>"
+        "<b>📌 Ví dụ 2:</b> Click icon app trên desktop<br>"
+        "→ Dùng Image Match: chọn ảnh icon → click vào vị trí tìm thấy<br><br>"
+        "<b>📌 Ví dụ 3:</b> Click ô checkbox trong form<br>"
+        "→ X=120, Y=450, Duration=0.1s (click nhanh)<br><br>"
+        "<b>📌 Ví dụ 4:</b> Click nút trong game (vị trí thay đổi)<br>"
+        "→ Kết hợp Image Match thay vì tọa độ cố định"
+    ),
+    "mouse_double_click": (
+        "<b>🖱 Double Click — Nhấp đúp chuột</b><br><br>"
+        "<b>Ý nghĩa:</b> Giả lập nhấp đúp chuột trái (2 click liên tiếp) "
+        "để mở file, chọn từ, hoặc kích hoạt item.<br><br>"
+        "<b>Khi nào dùng:</b> Mở file/folder, chọn từ trong văn bản.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Mở file Excel trên desktop<br>"
+        "→ X=200, Y=350 (vị trí file icon)<br><br>"
+        "<b>📌 Ví dụ 2:</b> Chọn 1 từ trong trình soạn thảo<br>"
+        "→ Double-click tại vị trí từ cần chọn<br><br>"
+        "<b>📌 Ví dụ 3:</b> Mở folder trong File Explorer<br>"
+        "→ Dùng Image Match nếu folder nằm ở vị trí không cố định"
+    ),
+    "mouse_right_click": (
+        "<b>🖱 Right Click — Click chuột phải</b><br><br>"
+        "<b>Ý nghĩa:</b> Giả lập click chuột phải để mở context menu.<br><br>"
+        "<b>Khi nào dùng:</b> Mở menu ngữ cảnh, copy/paste, xem properties.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Click phải file → chọn Delete<br>"
+        "→ Right-click file, sau đó Key Press 'D'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Copy text đã chọn<br>"
+        "→ Right-click → chọn Copy (hoặc dùng Ctrl+C)<br><br>"
+        "<b>📌 Ví dụ 3:</b> Mở Properties của 1 shortcut<br>"
+        "→ Right-click icon → click 'Properties'"
+    ),
+    "mouse_move": (
+        "<b>🖱 Move — Di chuyển chuột</b><br><br>"
+        "<b>Ý nghĩa:</b> Di chuyển con trỏ chuột đến vị trí chỉ định "
+        "mà không click.<br><br>"
+        "<b>Khi nào dùng:</b> Hover để hiện tooltip, kéo scrollbar, "
+        "di chuột để trigger sự kiện hover.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Hover menu để hiện submenu<br>"
+        "→ Move đến vị trí menu item, sau đó delay 500ms<br><br>"
+        "<b>📌 Ví dụ 2:</b> Di chuột ra giữa màn hình<br>"
+        "→ X=960, Y=540 (giữa màn 1920×1080)<br><br>"
+        "<b>📌 Ví dụ 3:</b> Chuẩn bị trước khi drag<br>"
+        "→ Move đến vị trí bắt đầu drag"
+    ),
+    "mouse_drag": (
+        "<b>🖱 Drag — Kéo thả chuột</b><br><br>"
+        "<b>Ý nghĩa:</b> Kéo chuột từ vị trí hiện tại đến tọa độ đích "
+        "(giữ nút chuột trong khi di chuyển).<br><br>"
+        "<b>Khi nào dùng:</b> Kéo file, resize cửa sổ, chọn vùng text, "
+        "vẽ trong paint.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Kéo file vào thư mục<br>"
+        "→ Move đến file → Drag đến folder (X=400, Y=300)<br><br>"
+        "<b>📌 Ví dụ 2:</b> Chọn vùng text bằng chuột<br>"
+        "→ Drag từ đầu đến cuối đoạn text<br><br>"
+        "<b>📌 Ví dụ 3:</b> Resize cửa sổ<br>"
+        "→ Drag góc cửa sổ đến kích thước mong muốn"
+    ),
+    "mouse_scroll": (
+        "<b>🖱 Scroll — Cuộn chuột</b><br><br>"
+        "<b>Ý nghĩa:</b> Cuộn chuột lên/xuống tại vị trí chỉ định.<br><br>"
+        "<b>Khi nào dùng:</b> Cuộn trang web, cuộn danh sách, zoom in/out.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Cuộn xuống cuối trang web<br>"
+        "→ Clicks=-5 (cuộn xuống 5 dòng), lặp 10 lần<br><br>"
+        "<b>📌 Ví dụ 2:</b> Cuộn danh sách lên đầu<br>"
+        "→ Clicks=10 (cuộn lên 10 dòng)<br><br>"
+        "<b>📌 Ví dụ 3:</b> Cuộn tại vị trí cụ thể<br>"
+        "→ X=500, Y=400, Clicks=-3 (cuộn xuống panel bên phải)"
+    ),
+    "key_press": (
+        "<b>⌨ Key Press — Nhấn phím</b><br><br>"
+        "<b>Ý nghĩa:</b> Nhấn 1 phím đơn (chữ, số, hoặc phím đặc biệt "
+        "như Enter, Tab, Escape).<br><br>"
+        "<b>Khi nào dùng:</b> Nhấn Enter để xác nhận, Tab để chuyển ô, "
+        "Escape để đóng dialog.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Nhấn Enter sau khi nhập xong<br>"
+        "→ Key = 'enter'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Nhấn Tab để chuyển sang ô tiếp theo<br>"
+        "→ Key = 'tab'<br><br>"
+        "<b>📌 Ví dụ 3:</b> Nhấn Escape để đóng popup<br>"
+        "→ Key = 'esc'<br><br>"
+        "<b>📌 Ví dụ 4:</b> Nhấn F5 để refresh trang<br>"
+        "→ Key = 'f5'"
+    ),
+    "key_combo": (
+        "<b>⌨ Key Combo — Tổ hợp phím</b><br><br>"
+        "<b>Ý nghĩa:</b> Nhấn tổ hợp phím đồng thời (modifier + key).<br><br>"
+        "<b>Khi nào dùng:</b> Copy/Paste, Save, Undo, Select All, "
+        "chuyển tab...<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Copy text<br>"
+        "→ Keys = 'ctrl+c'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Paste text<br>"
+        "→ Keys = 'ctrl+v'<br><br>"
+        "<b>📌 Ví dụ 3:</b> Select All<br>"
+        "→ Keys = 'ctrl+a'<br><br>"
+        "<b>📌 Ví dụ 4:</b> Đóng tab trình duyệt<br>"
+        "→ Keys = 'ctrl+w'"
+    ),
+    "type_text": (
+        "<b>⌨ Type Text — Gõ văn bản</b><br><br>"
+        "<b>Ý nghĩa:</b> Gõ chuỗi ký tự vào ô nhập liệu đang focus, "
+        "từng ký tự một (giả lập gõ phím thật).<br><br>"
+        "<b>Khi nào dùng:</b> Điền form, nhập username, gõ nội dung email.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Nhập username<br>"
+        "→ Text = 'admin@company.com'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Nhập nội dung tìm kiếm<br>"
+        "→ Text = 'báo cáo tháng 3'<br><br>"
+        "<b>📌 Ví dụ 3:</b> Nhập giá trị vào Excel<br>"
+        "→ Text = '12500', sau đó Key Press 'tab' để chuyển ô"
+    ),
+    "hotkey": (
+        "<b>⌨ Hotkey — Phím nóng</b><br><br>"
+        "<b>Ý nghĩa:</b> Tương tự Key Combo, hỗ trợ nhiều phím "
+        "modifier cùng lúc.<br><br>"
+        "<b>Khi nào dùng:</b> Tổ hợp 3+ phím, phím tắt hệ thống.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Mở Task Manager<br>"
+        "→ Keys = 'ctrl+shift+esc'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Save As trong Office<br>"
+        "→ Keys = 'ctrl+shift+s'<br><br>"
+        "<b>📌 Ví dụ 3:</b> Chuyển desktop ảo<br>"
+        "→ Keys = 'ctrl+win+right'"
+    ),
+    "wait_for_image": (
+        "<b>🖼 Wait for Image — Đợi ảnh xuất hiện</b><br><br>"
+        "<b>Ý nghĩa:</b> Tạm dừng macro cho đến khi ảnh mẫu được "
+        "tìm thấy trên màn hình (hoặc hết timeout).<br><br>"
+        "<b>Khi nào dùng:</b> Đợi trang load xong, đợi dialog xuất hiện, "
+        "đợi download hoàn tất.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Đợi trang web load xong<br>"
+        "→ Ảnh mẫu = logo trang, Timeout = 30s<br><br>"
+        "<b>📌 Ví dụ 2:</b> Đợi hộp thoại 'Save' xuất hiện<br>"
+        "→ Ảnh mẫu = nút Save, Timeout = 10s<br><br>"
+        "<b>📌 Ví dụ 3:</b> Đợi download file xong<br>"
+        "→ Ảnh mẫu = thông báo 'completed', Timeout = 60s"
+    ),
+    "click_on_image": (
+        "<b>🖼 Click on Image — Click vào ảnh tìm thấy</b><br><br>"
+        "<b>Ý nghĩa:</b> Tìm ảnh mẫu trên màn hình, nếu tìm thấy "
+        "→ click vào giữa vị trí ảnh.<br><br>"
+        "<b>Khi nào dùng:</b> Click nút có vị trí thay đổi, click icon "
+        "trong game, click phần tử UI động.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Click nút 'OK' trong dialog<br>"
+        "→ Ảnh mẫu = ảnh chụp nút OK<br><br>"
+        "<b>📌 Ví dụ 2:</b> Click icon trong system tray<br>"
+        "→ Ảnh mẫu = ảnh icon app<br><br>"
+        "<b>📌 Ví dụ 3:</b> Click enemy trong game<br>"
+        "→ Ảnh mẫu = sprite enemy, Confidence = 0.8"
+    ),
+    "image_exists": (
+        "<b>🖼 Image Exists — Kiểm tra ảnh có tồn tại</b><br><br>"
+        "<b>Ý nghĩa:</b> Kiểm tra xem ảnh mẫu có xuất hiện trên màn hình "
+        "hay không (trả về True/False, không click).<br><br>"
+        "<b>Khi nào dùng:</b> Kiểm tra trạng thái UI trước khi hành động.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Kiểm tra đã đăng nhập chưa<br>"
+        "→ Ảnh = avatar user, nếu có → đã login<br><br>"
+        "<b>📌 Ví dụ 2:</b> Kiểm tra popup error có xuất hiện<br>"
+        "→ Kết hợp If Image Found để xử lý<br><br>"
+        "<b>📌 Ví dụ 3:</b> Kiểm tra app đã mở chưa<br>"
+        "→ Ảnh = title bar của app"
+    ),
+    "take_screenshot": (
+        "<b>🖼 Take Screenshot — Chụp màn hình</b><br><br>"
+        "<b>Ý nghĩa:</b> Chụp toàn bộ màn hình và lưu thành file ảnh.<br><br>"
+        "<b>Khi nào dùng:</b> Lưu bằng chứng, debug, báo cáo lỗi.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Chụp kết quả sau khi chạy xong<br>"
+        "→ Lưu vào folder 'screenshots/'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Chụp lỗi khi macro gặp sự cố<br>"
+        "→ Đặt sau action On Error để ghi lại trạng thái<br><br>"
+        "<b>📌 Ví dụ 3:</b> Chụp hàng loạt trang báo cáo<br>"
+        "→ Loop: scroll → screenshot → lặp lại"
+    ),
+    "check_pixel_color": (
+        "<b>🎨 Check Pixel Color — Kiểm tra màu pixel</b><br><br>"
+        "<b>Ý nghĩa:</b> Lấy màu pixel tại tọa độ (X, Y) và so sánh "
+        "với màu chỉ định.<br><br>"
+        "<b>Khi nào dùng:</b> Kiểm tra trạng thái UI theo màu sắc.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Kiểm tra nút có active không<br>"
+        "→ Nút active = xanh (#00FF00), inactive = xám<br><br>"
+        "<b>📌 Ví dụ 2:</b> Kiểm tra checkbox đã tick chưa<br>"
+        "→ Pixel tại vị trí tick = xanh → đã check<br><br>"
+        "<b>📌 Ví dụ 3:</b> Phát hiện thanh loading đã đầy<br>"
+        "→ Pixel cuối thanh = xanh → loading xong"
+    ),
+    "wait_for_color": (
+        "<b>🎨 Wait for Color — Đợi pixel đổi màu</b><br><br>"
+        "<b>Ý nghĩa:</b> Tạm dừng cho đến khi pixel tại tọa độ "
+        "chuyển sang màu chỉ định.<br><br>"
+        "<b>Khi nào dùng:</b> Đợi loading bar, đợi nút enable.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Đợi loading bar hoàn tất<br>"
+        "→ Tọa độ cuối bar, màu = xanh, Timeout = 30s<br><br>"
+        "<b>📌 Ví dụ 2:</b> Đợi nút từ xám chuyển sang xanh<br>"
+        "→ Màu mục tiêu = #4CAF50, Tolerance = 10<br><br>"
+        "<b>📌 Ví dụ 3:</b> Đợi popup biến mất<br>"
+        "→ Pixel trên popup → đợi chuyển về màu nền"
+    ),
+    "delay": (
+        "<b>⏱ Delay — Chờ đợi</b><br><br>"
+        "<b>Ý nghĩa:</b> Tạm dừng macro trong khoảng thời gian chỉ định "
+        "(ms).<br><br>"
+        "<b>Khi nào dùng:</b> Đợi animation, đợi network, tránh rate-limit.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Đợi trang load sau click<br>"
+        "→ Duration = 2000ms (2 giây)<br><br>"
+        "<b>📌 Ví dụ 2:</b> Đợi animation hoàn tất<br>"
+        "→ Duration = 500ms<br><br>"
+        "<b>📌 Ví dụ 3:</b> Tránh rate-limit API<br>"
+        "→ Duration = 1000ms giữa các request"
+    ),
+    "loop_block": (
+        "<b>⏱ Loop Block — Vòng lặp</b><br><br>"
+        "<b>Ý nghĩa:</b> Lặp lại nhóm action bên trong số lần chỉ định "
+        "(hoặc vô hạn).<br><br>"
+        "<b>Khi nào dùng:</b> Xử lý hàng loạt, lặp thao tác, auto-farm.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Gửi 50 email giống nhau<br>"
+        "→ Loop 50: click Compose → type → send<br><br>"
+        "<b>📌 Ví dụ 2:</b> Auto-click quảng cáo<br>"
+        "→ Loop ∞: click → delay 5s → lặp<br><br>"
+        "<b>📌 Ví dụ 3:</b> Đọc 100 dòng từ file<br>"
+        "→ Loop 100: read_file_line → type_text → tab"
+    ),
+    "if_image_found": (
+        "<b>⏱ If Image Found — Rẽ nhánh theo ảnh</b><br><br>"
+        "<b>Ý nghĩa:</b> Kiểm tra ảnh mẫu có trên màn hình → "
+        "thực hiện action khác nhau tùy kết quả.<br><br>"
+        "<b>Khi nào dùng:</b> Xử lý popup bất ngờ, kiểm tra trạng thái.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Xử lý popup 'Are you sure?'<br>"
+        "→ Nếu popup xuất hiện → click Yes, nếu không → bỏ qua<br><br>"
+        "<b>📌 Ví dụ 2:</b> Kiểm tra CAPTCHA<br>"
+        "→ Nếu thấy CAPTCHA → dừng, nếu không → tiếp tục<br><br>"
+        "<b>📌 Ví dụ 3:</b> Auto-retry khi lỗi<br>"
+        "→ Nếu thấy 'Error' → click Retry, lặp lại"
+    ),
+    "if_pixel_color": (
+        "<b>⏱ If Pixel Color — Rẽ nhánh theo màu</b><br><br>"
+        "<b>Ý nghĩa:</b> Kiểm tra màu pixel tại tọa độ → rẽ nhánh.<br><br>"
+        "<b>Khi nào dùng:</b> Tương tự If Image nhưng nhanh hơn.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Nút xanh → click, nút xám → đợi<br>"
+        "→ Check pixel tại vị trí nút<br><br>"
+        "<b>📌 Ví dụ 2:</b> HP bar > 50% → attack, < 50% → heal<br>"
+        "→ Check pixel giữa HP bar<br><br>"
+        "<b>📌 Ví dụ 3:</b> Phát hiện ngày/đêm trong game<br>"
+        "→ Check pixel trời: sáng → farm, tối → nghỉ"
+    ),
+    "if_variable": (
+        "<b>⏱ If Variable — Rẽ nhánh theo biến</b><br><br>"
+        "<b>Ý nghĩa:</b> So sánh giá trị biến với giá trị chỉ định "
+        "→ thực hiện action tương ứng.<br><br>"
+        "<b>Khi nào dùng:</b> Logic phức tạp, đếm lần lặp, kiểm tra input.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Nếu counter > 10 → dừng<br>"
+        "→ Variable = 'counter', Operator = '>', Value = '10'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Nếu username rỗng → bỏ qua<br>"
+        "→ Variable = 'username', Operator = '==', Value = ''<br><br>"
+        "<b>📌 Ví dụ 3:</b> Kiểm tra OCR result<br>"
+        "→ Variable = 'ocr_text', Operator = 'contains', Value = 'success'"
+    ),
+    "set_variable": (
+        "<b>📊 Set Variable — Gán giá trị biến</b><br><br>"
+        "<b>Ý nghĩa:</b> Tạo mới hoặc cập nhật giá trị biến. "
+        "Hỗ trợ: số, chuỗi, biểu thức toán.<br><br>"
+        "<b>Khi nào dùng:</b> Đếm, lưu trạng thái, tính toán.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Đếm lần lặp<br>"
+        "→ Name = 'counter', Value = '{counter} + 1'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Lưu URL cần truy cập<br>"
+        "→ Name = 'url', Value = 'https://example.com'<br><br>"
+        "<b>📌 Ví dụ 3:</b> Tạo timestamp<br>"
+        "→ Name = 'filename', Value = 'report_{counter}.pdf'"
+    ),
+    "split_string": (
+        "<b>📊 Split String — Tách chuỗi</b><br><br>"
+        "<b>Ý nghĩa:</b> Tách chuỗi thành mảng theo dấu phân cách, "
+        "lấy phần tử theo index.<br><br>"
+        "<b>Khi nào dùng:</b> Xử lý CSV, tách dữ liệu OCR, parse text.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Tách dòng CSV<br>"
+        "→ Input = 'Tên,Email,SĐT', Separator = ','<br><br>"
+        "<b>📌 Ví dụ 2:</b> Lấy tên file từ đường dẫn<br>"
+        "→ Input = path, Separator = '\\', Index = -1<br><br>"
+        "<b>📌 Ví dụ 3:</b> Tách username từ email<br>"
+        "→ Input = 'user@company.com', Separator = '@', Index = 0"
+    ),
+    "comment": (
+        "<b>📊 Comment — Ghi chú</b><br><br>"
+        "<b>Ý nghĩa:</b> Nhãn/ghi chú không thực thi. "
+        "Dùng để đánh dấu các phần trong macro.<br><br>"
+        "<b>Khi nào dùng:</b> Luôn luôn! Giúp macro dễ đọc, dễ bảo trì.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Đánh dấu phần đầu<br>"
+        "→ Text = '=== PHẦN 1: ĐĂNG NHẬP ==='<br><br>"
+        "<b>📌 Ví dụ 2:</b> Ghi chú cảnh báo<br>"
+        "→ Text = '⚠ Đợi 5s vì server chậm'<br><br>"
+        "<b>📌 Ví dụ 3:</b> Note cho bản thân<br>"
+        "→ Text = 'TODO: thêm xử lý lỗi ở đây'"
+    ),
+    "activate_window": (
+        "<b>🖥 Activate Window — Kích hoạt cửa sổ</b><br><br>"
+        "<b>Ý nghĩa:</b> Tìm và đưa cửa sổ ứng dụng lên foreground "
+        "theo tiêu đề (hoặc một phần tiêu đề).<br><br>"
+        "<b>Khi nào dùng:</b> Chuyển giữa các app, đảm bảo focus đúng app.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Chuyển sang Chrome<br>"
+        "→ Title = 'Chrome' (tìm cửa sổ chứa 'Chrome')<br><br>"
+        "<b>📌 Ví dụ 2:</b> Chuyển sang Excel file cụ thể<br>"
+        "→ Title = 'BaoCao.xlsx'<br><br>"
+        "<b>📌 Ví dụ 3:</b> Focus CMD/Terminal<br>"
+        "→ Title = 'Command Prompt'"
+    ),
+    "log_to_file": (
+        "<b>🖥 Log to File — Ghi log</b><br><br>"
+        "<b>Ý nghĩa:</b> Ghi nội dung vào file log (text). "
+        "Hỗ trợ biến trong nội dung.<br><br>"
+        "<b>Khi nào dùng:</b> Debug macro, ghi kết quả, audit trail.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Ghi kết quả mỗi vòng lặp<br>"
+        "→ File = 'log.txt', Text = 'Vòng {counter}: OK'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Ghi timestamp<br>"
+        "→ Text = '{timestamp}: Đã xử lý xong'<br><br>"
+        "<b>📌 Ví dụ 3:</b> Ghi lỗi OCR<br>"
+        "→ Text = 'OCR result: {ocr_text}'"
+    ),
+    "read_clipboard": (
+        "<b>🖥 Read Clipboard — Đọc clipboard</b><br><br>"
+        "<b>Ý nghĩa:</b> Đọc nội dung clipboard (sau Ctrl+C) vào biến.<br><br>"
+        "<b>Khi nào dùng:</b> Lấy text đã copy, lấy URL, lấy dữ liệu.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Copy → lấy text → paste elsewhere<br>"
+        "→ Ctrl+C → Read Clipboard → biến 'copied_text'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Lấy URL từ thanh địa chỉ<br>"
+        "→ Click address bar → Ctrl+A → Ctrl+C → Read Clipboard<br><br>"
+        "<b>📌 Ví dụ 3:</b> Copy giá trị từ Excel<br>"
+        "→ Click cell → Ctrl+C → Read Clipboard → Log to File"
+    ),
+    "read_file_line": (
+        "<b>🖥 Read File Line — Đọc dòng từ file</b><br><br>"
+        "<b>Ý nghĩa:</b> Đọc 1 dòng cụ thể từ file text vào biến. "
+        "Dùng line_number hoặc tự động tăng.<br><br>"
+        "<b>Khi nào dùng:</b> Đọc danh sách URL, email, dữ liệu từ CSV.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Đọc danh sách URL<br>"
+        "→ File = 'urls.txt', Line = {counter}, Var = 'url'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Đọc email từ danh sách<br>"
+        "→ File = 'emails.txt', Auto-increment = On<br><br>"
+        "<b>📌 Ví dụ 3:</b> Đọc mật khẩu từ file bảo mật<br>"
+        "→ File = 'creds.txt', Line = 2 (dòng 2 = password)"
+    ),
+    "write_to_file": (
+        "<b>🖥 Write to File — Ghi vào file</b><br><br>"
+        "<b>Ý nghĩa:</b> Ghi nội dung vào file (tạo mới hoặc append). "
+        "Hỗ trợ biến trong nội dung.<br><br>"
+        "<b>Khi nào dùng:</b> Xuất kết quả, ghi CSV, tạo report.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Ghi kết quả ra CSV<br>"
+        "→ File = 'result.csv', Text = '{name},{email},{phone}'<br><br>"
+        "<b>📌 Ví dụ 2:</b> Tạo file báo cáo<br>"
+        "→ File = 'report.txt', Mode = Append<br><br>"
+        "<b>📌 Ví dụ 3:</b> Backup dữ liệu<br>"
+        "→ File = 'backup_{date}.txt', Text = clipboard content"
+    ),
+    "secure_type_text": (
+        "<b>🖥 Secure Type Text — Gõ bảo mật</b><br><br>"
+        "<b>Ý nghĩa:</b> Gõ text mà không hiển thị nội dung trong log/preview. "
+        "Dùng cho mật khẩu, token.<br><br>"
+        "<b>Khi nào dùng:</b> Nhập password, API key, thông tin nhạy cảm.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Nhập mật khẩu đăng nhập<br>"
+        "→ Text = 'P@ssw0rd!' (hiển thị ****)<br><br>"
+        "<b>📌 Ví dụ 2:</b> Nhập API key<br>"
+        "→ Text = 'sk-xxx...' (không lộ trong log)<br><br>"
+        "<b>📌 Ví dụ 3:</b> Nhập mã OTP<br>"
+        "→ Kết hợp Read Clipboard → Secure Type"
+    ),
+    "run_macro": (
+        "<b>🖥 Run Sub-Macro — Chạy macro con</b><br><br>"
+        "<b>Ý nghĩa:</b> Chạy 1 file macro khác như subroutine. "
+        "Macro con chạy xong → quay lại macro chính.<br><br>"
+        "<b>Khi nào dùng:</b> Tái sử dụng macro, chia nhỏ logic phức tạp.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Gọi macro 'login.json'<br>"
+        "→ Macro = 'login.json' (đăng nhập → quay lại)<br><br>"
+        "<b>📌 Ví dụ 2:</b> Chia macro lớn thành phần<br>"
+        "→ Main: run 'step1.json' → run 'step2.json' → ...<br><br>"
+        "<b>📌 Ví dụ 3:</b> Error recovery<br>"
+        "→ On Error: run 'recovery.json' → retry"
+    ),
+    "capture_text": (
+        "<b>🖥 Capture Text (OCR) — Nhận dạng chữ</b><br><br>"
+        "<b>Ý nghĩa:</b> Chụp vùng màn hình và nhận dạng text bằng "
+        "Tesseract OCR, lưu kết quả vào biến.<br><br>"
+        "<b>Khi nào dùng:</b> Đọc text từ ảnh, lấy giá trị từ UI không copy được.<br>"
+        "<hr>"
+        "<b>📌 Ví dụ 1:</b> Đọc số dư tài khoản<br>"
+        "→ Vùng chụp = khu vực hiển thị số dư<br><br>"
+        "<b>📌 Ví dụ 2:</b> Đọc mã CAPTCHA<br>"
+        "→ OCR vùng CAPTCHA → nhập kết quả<br><br>"
+        "<b>📌 Ví dụ 3:</b> Đọc thông báo lỗi<br>"
+        "→ OCR popup → If Variable contains 'error' → xử lý"
+    ),
+}
+
 class ActionEditorDialog(QDialog):
     """
     Modal dialog for creating or editing a single action.
@@ -141,10 +567,21 @@ class ActionEditorDialog(QDialog):
         # Action type selector — grouped with category headers
         type_group = QGroupBox("Loại Action")
         type_layout = QVBoxLayout(type_group)
+
+        # Combo + Help button in same row
+        combo_row = QHBoxLayout()
         self._type_combo = QComboBox()
         self._build_grouped_combo()
         self._type_combo.currentIndexChanged.connect(self._on_type_changed)
-        type_layout.addWidget(self._type_combo)
+        combo_row.addWidget(self._type_combo, stretch=1)
+
+        self._help_btn = QPushButton("❓")
+        self._help_btn.setFixedSize(28, 28)
+        self._help_btn.setToolTip("Xem hướng dẫn & ví dụ")
+        self._help_btn.setAccessibleName("Hướng dẫn action")
+        self._help_btn.clicked.connect(self._show_action_help)
+        combo_row.addWidget(self._help_btn)
+        type_layout.addLayout(combo_row)
 
         # Action type description (P2 #8)
         self._type_desc_label = QLabel("")
@@ -306,6 +743,26 @@ class ActionEditorDialog(QDialog):
                 w = self._param_widgets[key]
                 if isinstance(w, QSpinBox):
                     w.setValue(self._param_cache[key])
+
+    def _show_action_help(self) -> None:
+        """Show rich HTML help tooltip for the selected action type."""
+        from PyQt6.QtWidgets import QToolTip
+        atype = self._type_combo.currentData(Qt.ItemDataRole.UserRole)
+        if not atype:
+            return
+        html = _ACTION_HELP.get(atype)
+        if not html:
+            display_name = self._type_combo.currentText()
+            desc = _ACTION_DESCRIPTIONS.get(atype, "")
+            html = (
+                f"<b>{display_name}</b><br><br>"
+                f"{desc}<br><br>"
+                "<i>Chưa có hướng dẫn chi tiết cho action này.</i>"
+            )
+        # Show tooltip at button position, with max width
+        pos = self._help_btn.mapToGlobal(self._help_btn.rect().bottomLeft())
+        QToolTip.showText(pos, f"<div style='max-width:380px'>{html}</div>",
+                          self._help_btn)
 
     def _build_mouse_params(self, atype: str) -> None:
         self._add_xy_params()

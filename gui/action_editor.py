@@ -11,8 +11,10 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit, QPushButton,
     QGroupBox, QCheckBox, QFileDialog, QWidget, QLabel,
+    QTextBrowser, QFrame, QSizePolicy,
 )
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal
+from PyQt6.QtGui import QKeySequence, QShortcut
 
 from gui.coordinate_picker import CoordinatePickerOverlay
 from gui.image_capture import ImageCaptureOverlay
@@ -108,430 +110,451 @@ _ACTION_DESCRIPTIONS: dict[str, str] = {
 }
 
 # Rich HTML help content shown when user clicks ❓ button
+# Each entry: meaning + when to use + 3-4 scenario-based examples with explanations
 _ACTION_HELP: dict[str, str] = {
     "mouse_click": (
         "<b>🖱 Click — Click chuột trái</b><br><br>"
-        "<b>Ý nghĩa:</b> Giả lập click chuột trái tại tọa độ (X, Y) "
-        "trên màn hình, hoặc tại vị trí ảnh mẫu nếu có.<br><br>"
-        "<b>Khi nào dùng:</b> Nhấn nút, chọn menu, chọn file, mở app.<br>"
+        "<b>Ý nghĩa:</b> Giả lập 1 lần nhấn chuột trái tại tọa độ (X, Y) cố định, "
+        "hoặc tại vị trí ảnh mẫu nếu sử dụng Image Match. Dùng cho mọi thao tác "
+        "nhấn nút, chọn item, mở link.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Click nút <i>Đăng nhập</i><br>"
-        "→ X=500, Y=300 (tọa độ cố định)<br><br>"
-        "<b>📌 Ví dụ 2:</b> Click icon app trên desktop<br>"
-        "→ Dùng Image Match: chọn ảnh icon → click vào vị trí tìm thấy<br><br>"
-        "<b>📌 Ví dụ 3:</b> Click ô checkbox trong form<br>"
-        "→ X=120, Y=450, Duration=0.1s (click nhanh)<br><br>"
-        "<b>📌 Ví dụ 4:</b> Click nút trong game (vị trí thay đổi)<br>"
-        "→ Kết hợp Image Match thay vì tọa độ cố định"
+        "<b>📌 Kịch bản 1: Tự động đăng nhập website</b><br>"
+        "Bạn muốn click vào ô 'Username' trên trang login.<br>"
+        "→ <b>X=500, Y=300</b> (tọa độ ô input trên màn hình)<br>"
+        "→ <b>Duration=0.1s</b> (click nhanh, không cần giữ)<br>"
+        "<i>Giải thích:</i> Dùng tọa độ cố định khi vị trí ô input không thay đổi "
+        "(cửa sổ trình duyệt luôn maximize).<br><br>"
+        "<b>📌 Kịch bản 2: Click nút 'Gửi' trong phần mềm kế toán</b><br>"
+        "Nút 'Gửi' có thể ở vị trí khác tùy kích thước cửa sổ.<br>"
+        "→ Chọn <b>Image Match</b>: chụp ảnh nút 'Gửi' làm mẫu<br>"
+        "→ AutoMacro tự tìm nút trên màn hình → click vào giữa<br>"
+        "<i>Giải thích:</i> Image Match an toàn hơn tọa độ khi cửa sổ hay thay đổi kích thước.<br><br>"
+        "<b>📌 Kịch bản 3: Click hàng loạt checkbox trong danh sách</b><br>"
+        "Bạn cần tick 20 checkbox liên tiếp, mỗi cái cách nhau 30px.<br>"
+        "→ <b>X=120, Y=200</b> (checkbox đầu tiên)<br>"
+        "→ Kết hợp <b>Loop Block</b>: lặp 20 lần, mỗi lần <b>Y += 30</b><br>"
+        "<i>Giải thích:</i> Dùng biến Set Variable để tăng Y mỗi vòng lặp."
     ),
     "mouse_double_click": (
         "<b>🖱 Double Click — Nhấp đúp chuột</b><br><br>"
-        "<b>Ý nghĩa:</b> Giả lập nhấp đúp chuột trái (2 click liên tiếp) "
-        "để mở file, chọn từ, hoặc kích hoạt item.<br><br>"
-        "<b>Khi nào dùng:</b> Mở file/folder, chọn từ trong văn bản.<br>"
+        "<b>Ý nghĩa:</b> Nhấp đúp chuột trái (2 click nhanh liên tiếp). "
+        "Hệ điều hành xử lý double-click khác single-click — dùng để mở file, "
+        "chọn từ trong văn bản, kích hoạt item.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Mở file Excel trên desktop<br>"
-        "→ X=200, Y=350 (vị trí file icon)<br><br>"
-        "<b>📌 Ví dụ 2:</b> Chọn 1 từ trong trình soạn thảo<br>"
-        "→ Double-click tại vị trí từ cần chọn<br><br>"
-        "<b>📌 Ví dụ 3:</b> Mở folder trong File Explorer<br>"
-        "→ Dùng Image Match nếu folder nằm ở vị trí không cố định"
+        "<b>📌 Kịch bản 1: Tự động mở file báo cáo Excel hàng ngày</b><br>"
+        "Mỗi sáng cần mở file 'BaoCao.xlsx' trên Desktop.<br>"
+        "→ <b>X=200, Y=350</b> (vị trí file icon trên Desktop)<br>"
+        "<i>Giải thích:</i> Một click chỉ chọn file, double-click mới mở. "
+        "Nếu dùng single click → file chỉ được highlight, không mở.<br><br>"
+        "<b>📌 Kịch bản 2: Chọn 1 từ trong email để copy</b><br>"
+        "Cần chọn từ 'Approved' trong email để kiểm tra trạng thái.<br>"
+        "→ Double-click tại vị trí từ → từ được bôi đen<br>"
+        "→ Sau đó: Key Combo 'ctrl+c' → Read Clipboard<br>"
+        "<i>Giải thích:</i> Double-click trong text editor/browser sẽ tự động chọn cả từ.<br><br>"
+        "<b>📌 Kịch bản 3: Kích hoạt ô nhập liệu trong bảng</b><br>"
+        "Trong Excel/Google Sheets, single-click chọn cell, double-click mới vào chế độ edit.<br>"
+        "→ Double-click cell đích → sau đó Type Text để nhập giá trị"
     ),
     "mouse_right_click": (
         "<b>🖱 Right Click — Click chuột phải</b><br><br>"
-        "<b>Ý nghĩa:</b> Giả lập click chuột phải để mở context menu.<br><br>"
-        "<b>Khi nào dùng:</b> Mở menu ngữ cảnh, copy/paste, xem properties.<br>"
+        "<b>Ý nghĩa:</b> Mở context menu (menu chuột phải) tại vị trí chỉ định. "
+        "Menu sẽ hiện các tùy chọn tùy thuộc vào ứng dụng đang focus.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Click phải file → chọn Delete<br>"
-        "→ Right-click file, sau đó Key Press 'D'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Copy text đã chọn<br>"
-        "→ Right-click → chọn Copy (hoặc dùng Ctrl+C)<br><br>"
-        "<b>📌 Ví dụ 3:</b> Mở Properties của 1 shortcut<br>"
-        "→ Right-click icon → click 'Properties'"
+        "<b>📌 Kịch bản 1: Xóa file tự động</b><br>"
+        "Cần xóa file rác trong thư mục Downloads mỗi tuần.<br>"
+        "→ Right-click file → chờ menu hiện (Delay 300ms)<br>"
+        "→ Key Press 'D' (phím tắt Delete trong context menu)<br>"
+        "<i>Giải thích:</i> Sau right-click cần delay nhỏ để menu hiện ra trước khi nhấn phím.<br><br>"
+        "<b>📌 Kịch bản 2: Copy đường dẫn ảnh trên web</b><br>"
+        "→ Right-click ảnh → click 'Copy image address'<br>"
+        "→ Read Clipboard → Write to File (lưu URL)<br>"
+        "<i>Giải thích:</i> Context menu trình duyệt có option copy URL mà Ctrl+C không làm được."
     ),
     "mouse_move": (
         "<b>🖱 Move — Di chuyển chuột</b><br><br>"
-        "<b>Ý nghĩa:</b> Di chuyển con trỏ chuột đến vị trí chỉ định "
-        "mà không click.<br><br>"
-        "<b>Khi nào dùng:</b> Hover để hiện tooltip, kéo scrollbar, "
-        "di chuột để trigger sự kiện hover.<br>"
+        "<b>Ý nghĩa:</b> Di chuyển con trỏ chuột đến vị trí (X, Y) mà không click. "
+        "Dùng khi cần hover để kích hoạt tooltip, submenu, hoặc chuẩn bị cho thao tác tiếp.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Hover menu để hiện submenu<br>"
-        "→ Move đến vị trí menu item, sau đó delay 500ms<br><br>"
-        "<b>📌 Ví dụ 2:</b> Di chuột ra giữa màn hình<br>"
-        "→ X=960, Y=540 (giữa màn 1920×1080)<br><br>"
-        "<b>📌 Ví dụ 3:</b> Chuẩn bị trước khi drag<br>"
-        "→ Move đến vị trí bắt đầu drag"
+        "<b>📌 Kịch bản 1: Mở submenu của thanh menu</b><br>"
+        "Trong Excel, hover vào 'Format' → submenu hiện ra.<br>"
+        "→ Move đến 'Format' (X=200, Y=30) → Delay 500ms → Click submenu item<br>"
+        "<i>Giải thích:</i> Nếu click thẳng vào submenu item mà chưa hover parent → menu chưa hiện."
     ),
     "mouse_drag": (
         "<b>🖱 Drag — Kéo thả chuột</b><br><br>"
-        "<b>Ý nghĩa:</b> Kéo chuột từ vị trí hiện tại đến tọa độ đích "
-        "(giữ nút chuột trong khi di chuyển).<br><br>"
-        "<b>Khi nào dùng:</b> Kéo file, resize cửa sổ, chọn vùng text, "
-        "vẽ trong paint.<br>"
+        "<b>Ý nghĩa:</b> Nhấn giữ chuột trái tại vị trí hiện tại, "
+        "kéo đến tọa độ đích (X, Y), rồi thả. Mô phỏng thao tác drag-and-drop.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Kéo file vào thư mục<br>"
-        "→ Move đến file → Drag đến folder (X=400, Y=300)<br><br>"
-        "<b>📌 Ví dụ 2:</b> Chọn vùng text bằng chuột<br>"
-        "→ Drag từ đầu đến cuối đoạn text<br><br>"
-        "<b>📌 Ví dụ 3:</b> Resize cửa sổ<br>"
-        "→ Drag góc cửa sổ đến kích thước mong muốn"
+        "<b>📌 Kịch bản 1: Kéo file vào ứng dụng</b><br>"
+        "Kéo file ảnh từ Desktop vào cửa sổ Photoshop.<br>"
+        "→ Mouse Move đến file icon → Drag đến vùng canvas (X=800, Y=400)<br>"
+        "→ Duration=0.5s (kéo chậm để app kịp phản hồi)<br>"
+        "<i>Giải thích:</i> Duration quá nhanh (<0.1s) có thể khiến app không nhận drag.<br><br>"
+        "<b>📌 Kịch bản 2: Chọn vùng text bằng kéo chuột</b><br>"
+        "→ Move đến đầu dòng 1 → Drag đến cuối dòng 3 → Ctrl+C<br>"
+        "<i>Giải thích:</i> Khác Ctrl+A (chọn tất cả), drag cho phép chọn chính xác vùng muốn."
     ),
     "mouse_scroll": (
         "<b>🖱 Scroll — Cuộn chuột</b><br><br>"
-        "<b>Ý nghĩa:</b> Cuộn chuột lên/xuống tại vị trí chỉ định.<br><br>"
-        "<b>Khi nào dùng:</b> Cuộn trang web, cuộn danh sách, zoom in/out.<br>"
+        "<b>Ý nghĩa:</b> Cuộn chuột lên/xuống. Clicks dương = cuộn lên, âm = cuộn xuống.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Cuộn xuống cuối trang web<br>"
-        "→ Clicks=-5 (cuộn xuống 5 dòng), lặp 10 lần<br><br>"
-        "<b>📌 Ví dụ 2:</b> Cuộn danh sách lên đầu<br>"
-        "→ Clicks=10 (cuộn lên 10 dòng)<br><br>"
-        "<b>📌 Ví dụ 3:</b> Cuộn tại vị trí cụ thể<br>"
-        "→ X=500, Y=400, Clicks=-3 (cuộn xuống panel bên phải)"
+        "<b>📌 Kịch bản 1: Cuộn xuống cuối trang web để chụp ảnh</b><br>"
+        "→ Loop: Scroll Clicks=-5 → Delay 1s → Take Screenshot → lặp lại<br>"
+        "<i>Giải thích:</i> Clicks=-5 cuộn xuống khoảng 5 dòng. Delay cho trang load lazy content."
     ),
     "key_press": (
-        "<b>⌨ Key Press — Nhấn phím</b><br><br>"
-        "<b>Ý nghĩa:</b> Nhấn 1 phím đơn (chữ, số, hoặc phím đặc biệt "
-        "như Enter, Tab, Escape).<br><br>"
-        "<b>Khi nào dùng:</b> Nhấn Enter để xác nhận, Tab để chuyển ô, "
-        "Escape để đóng dialog.<br>"
+        "<b>⌨ Key Press — Nhấn 1 phím</b><br><br>"
+        "<b>Ý nghĩa:</b> Nhấn và thả 1 phím đơn: chữ cái, số, hoặc phím đặc biệt "
+        "(Enter, Tab, Escape, F1-F12, Home, End, Delete...).<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Nhấn Enter sau khi nhập xong<br>"
-        "→ Key = 'enter'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Nhấn Tab để chuyển sang ô tiếp theo<br>"
-        "→ Key = 'tab'<br><br>"
-        "<b>📌 Ví dụ 3:</b> Nhấn Escape để đóng popup<br>"
-        "→ Key = 'esc'<br><br>"
-        "<b>📌 Ví dụ 4:</b> Nhấn F5 để refresh trang<br>"
-        "→ Key = 'f5'"
+        "<b>📌 Kịch bản 1: Xác nhận form sau khi điền xong</b><br>"
+        "→ Key = <b>'enter'</b><br>"
+        "<i>Giải thích:</i> Nhiều form web chấp nhận Enter để submit, nhanh hơn click nút Submit.<br><br>"
+        "<b>📌 Kịch bản 2: Di chuyển giữa các ô trong bảng tính</b><br>"
+        "Điền 10 ô liên tiếp: nhập giá trị → Tab → nhập → Tab...<br>"
+        "→ Loop: Type Text '{giá_trị}' → Key Press <b>'tab'</b> → lặp<br>"
+        "<i>Giải thích:</i> Tab = sang phải, Enter = xuống dưới.<br><br>"
+        "<b>📌 Kịch bản 3: Đóng popup phiền toái tự động</b><br>"
+        "→ Wait for Image (ảnh popup) → Key Press <b>'esc'</b><br>"
+        "<i>Giải thích:</i> Hầu hết dialog/popup đều đóng khi nhấn Escape."
     ),
     "key_combo": (
         "<b>⌨ Key Combo — Tổ hợp phím</b><br><br>"
-        "<b>Ý nghĩa:</b> Nhấn tổ hợp phím đồng thời (modifier + key).<br><br>"
-        "<b>Khi nào dùng:</b> Copy/Paste, Save, Undo, Select All, "
-        "chuyển tab...<br>"
+        "<b>Ý nghĩa:</b> Nhấn đồng thời modifier (Ctrl/Alt/Shift/Win) + phím khác. "
+        "Đây là cách gọi shortcut ứng dụng — nhanh hơn click menu.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Copy text<br>"
-        "→ Keys = 'ctrl+c'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Paste text<br>"
-        "→ Keys = 'ctrl+v'<br><br>"
-        "<b>📌 Ví dụ 3:</b> Select All<br>"
-        "→ Keys = 'ctrl+a'<br><br>"
-        "<b>📌 Ví dụ 4:</b> Đóng tab trình duyệt<br>"
-        "→ Keys = 'ctrl+w'"
+        "<b>📌 Kịch bản 1: Copy dữ liệu từ app A sang app B</b><br>"
+        "→ Ctrl+A (chọn tất cả) → Ctrl+C → Activate Window 'App B' → Ctrl+V<br>"
+        "<i>Giải thích:</i> Key Combo đảm bảo 2 phím nhấn đồng thời. Nếu dùng 2 Key Press riêng → sẽ nhấn tuần tự, không phải combo.<br><br>"
+        "<b>📌 Kịch bản 2: Auto-save mỗi 5 phút</b><br>"
+        "→ Loop: Delay 300000ms → Key Combo <b>'ctrl+s'</b><br>"
+        "<i>Giải thích:</i> Ctrl+S hoạt động trong hầu hết mọi app.<br><br>"
+        "<b>📌 Kịch bản 3: Undo 5 bước</b><br>"
+        "→ Loop 5: Key Combo <b>'ctrl+z'</b> → Delay 200ms<br>"
+        "<i>Giải thích:</i> Delay giữa các Undo để app kịp xử lý mỗi bước."
     ),
     "type_text": (
         "<b>⌨ Type Text — Gõ văn bản</b><br><br>"
-        "<b>Ý nghĩa:</b> Gõ chuỗi ký tự vào ô nhập liệu đang focus, "
-        "từng ký tự một (giả lập gõ phím thật).<br><br>"
-        "<b>Khi nào dùng:</b> Điền form, nhập username, gõ nội dung email.<br>"
+        "<b>Ý nghĩa:</b> Gõ chuỗi ký tự vào ô đang focus, từng ký tự một. "
+        "Hỗ trợ chữ có dấu tiếng Việt.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Nhập username<br>"
-        "→ Text = 'admin@company.com'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Nhập nội dung tìm kiếm<br>"
-        "→ Text = 'báo cáo tháng 3'<br><br>"
-        "<b>📌 Ví dụ 3:</b> Nhập giá trị vào Excel<br>"
-        "→ Text = '12500', sau đó Key Press 'tab' để chuyển ô"
+        "<b>📌 Kịch bản 1: Tự động điền 50 email từ file</b><br>"
+        "File 'emails.txt', mỗi dòng 1 email.<br>"
+        "→ Loop 50: Read File Line → Type Text '{email}' → Tab → lặp<br>"
+        "<i>Giải thích:</i> Biến {email} sẽ được thay bằng giá trị đọc từ file.<br><br>"
+        "<b>📌 Kịch bản 2: Nhập công thức Excel</b><br>"
+        "→ Click cell A1 → Type Text '=SUM(B1:B10)' → Enter<br>"
+        "<i>Giải thích:</i> Type Text gõ chính xác từng ký tự, kể cả '=' để Excel nhận diện công thức.<br><br>"
+        "<b>📌 Kịch bản 3: Điền form đăng ký</b><br>"
+        "→ Click ô Họ tên → Type Text 'Nguyễn Văn A' → Tab → Type Text '0912345678' → Tab → Type Text 'email@gmail.com' → Enter"
     ),
     "hotkey": (
-        "<b>⌨ Hotkey — Phím nóng</b><br><br>"
-        "<b>Ý nghĩa:</b> Tương tự Key Combo, hỗ trợ nhiều phím "
-        "modifier cùng lúc.<br><br>"
-        "<b>Khi nào dùng:</b> Tổ hợp 3+ phím, phím tắt hệ thống.<br>"
+        "<b>⌨ Hotkey — Tổ hợp 3+ phím</b><br><br>"
+        "<b>Ý nghĩa:</b> Tương tự Key Combo nhưng hỗ trợ 3 phím trở lên (ví dụ: Ctrl+Shift+S).<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Mở Task Manager<br>"
-        "→ Keys = 'ctrl+shift+esc'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Save As trong Office<br>"
-        "→ Keys = 'ctrl+shift+s'<br><br>"
-        "<b>📌 Ví dụ 3:</b> Chuyển desktop ảo<br>"
-        "→ Keys = 'ctrl+win+right'"
+        "<b>📌 Kịch bản 1: Mở Task Manager khi app bị đơ</b><br>"
+        "→ Hotkey <b>'ctrl+shift+esc'</b><br>"
+        "<i>Giải thích:</i> Phím tắt mở trực tiếp Task Manager, không cần qua Ctrl+Alt+Del.<br><br>"
+        "<b>📌 Kịch bản 2: Save As file với tên mới</b><br>"
+        "→ Hotkey <b>'ctrl+shift+s'</b> → Type Text tên mới → Enter<br>"
+        "<i>Giải thích:</i> Ctrl+S lưu đè, Ctrl+Shift+S mở 'Save As' để lưu file mới."
     ),
     "wait_for_image": (
         "<b>🖼 Wait for Image — Đợi ảnh xuất hiện</b><br><br>"
-        "<b>Ý nghĩa:</b> Tạm dừng macro cho đến khi ảnh mẫu được "
-        "tìm thấy trên màn hình (hoặc hết timeout).<br><br>"
-        "<b>Khi nào dùng:</b> Đợi trang load xong, đợi dialog xuất hiện, "
-        "đợi download hoàn tất.<br>"
+        "<b>Ý nghĩa:</b> Tạm dừng macro và liên tục quét màn hình cho đến khi tìm thấy ảnh mẫu "
+        "hoặc hết timeout. Đây là cách <b>đồng bộ hóa</b> macro với ứng dụng.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Đợi trang web load xong<br>"
-        "→ Ảnh mẫu = logo trang, Timeout = 30s<br><br>"
-        "<b>📌 Ví dụ 2:</b> Đợi hộp thoại 'Save' xuất hiện<br>"
-        "→ Ảnh mẫu = nút Save, Timeout = 10s<br><br>"
-        "<b>📌 Ví dụ 3:</b> Đợi download file xong<br>"
-        "→ Ảnh mẫu = thông báo 'completed', Timeout = 60s"
+        "<b>📌 Kịch bản 1: Đợi trang web load xong sau khi đăng nhập</b><br>"
+        "Sau khi nhấn 'Login', trang cần 2-10s load tùy mạng.<br>"
+        "→ Ảnh mẫu = <b>logo trang dashboard</b>, Timeout = <b>30s</b><br>"
+        "<i>Giải thích:</i> Nếu dùng Delay cố định (5s), mạng chậm → macro click trang chưa load. "
+        "Wait for Image tự adjust: mạng nhanh → chuyển ngay, mạng chậm → đợi thêm.<br><br>"
+        "<b>📌 Kịch bản 2: Đợi file download xong</b><br>"
+        "→ Ảnh mẫu = <b>'Download complete'</b>, Timeout = <b>120s</b><br>"
+        "<i>Giải thích:</i> Dùng Timeout lớn cho file lớn. Nếu quá timeout → on_error xử lý."
     ),
     "click_on_image": (
-        "<b>🖼 Click on Image — Click vào ảnh tìm thấy</b><br><br>"
-        "<b>Ý nghĩa:</b> Tìm ảnh mẫu trên màn hình, nếu tìm thấy "
-        "→ click vào giữa vị trí ảnh.<br><br>"
-        "<b>Khi nào dùng:</b> Click nút có vị trí thay đổi, click icon "
-        "trong game, click phần tử UI động.<br>"
+        "<b>🖼 Click on Image — Tìm ảnh rồi click</b><br><br>"
+        "<b>Ý nghĩa:</b> Quét toàn bộ màn hình tìm ảnh mẫu, rồi click vào giữa vùng tìm thấy. "
+        "Giải quyết vấn đề nút ở vị trí thay đổi.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Click nút 'OK' trong dialog<br>"
-        "→ Ảnh mẫu = ảnh chụp nút OK<br><br>"
-        "<b>📌 Ví dụ 2:</b> Click icon trong system tray<br>"
-        "→ Ảnh mẫu = ảnh icon app<br><br>"
-        "<b>📌 Ví dụ 3:</b> Click enemy trong game<br>"
-        "→ Ảnh mẫu = sprite enemy, Confidence = 0.8"
+        "<b>📌 Kịch bản 1: Auto-click nút 'OK' trong mọi popup</b><br>"
+        "Nút OK nằm ở vị trí khác nhau mỗi lần popup hiện.<br>"
+        "→ Ảnh mẫu = <b>ảnh nút OK</b>, Confidence = <b>0.8</b><br>"
+        "<i>Giải thích:</i> Confidence 0.8 = chấp nhận khớp 80%. "
+        "Thấp quá (0.5) → click nhầm. Cao quá (0.99) → không tìm thấy khi font hơi khác.<br><br>"
+        "<b>📌 Kịch bản 2: Click icon trong System Tray</b><br>"
+        "Icon system tray rất nhỏ (16×16px), tọa độ thay đổi tùy số app chạy.<br>"
+        "→ Ảnh mẫu = ảnh icon app (chụp từ tray)<br>"
+        "<i>Giải thích:</i> Tọa độ cố định sẽ sai khi có app khác mở/đóng."
     ),
     "image_exists": (
-        "<b>🖼 Image Exists — Kiểm tra ảnh có tồn tại</b><br><br>"
-        "<b>Ý nghĩa:</b> Kiểm tra xem ảnh mẫu có xuất hiện trên màn hình "
-        "hay không (trả về True/False, không click).<br><br>"
-        "<b>Khi nào dùng:</b> Kiểm tra trạng thái UI trước khi hành động.<br>"
+        "<b>🖼 Image Exists — Kiểm tra ảnh tồn tại</b><br><br>"
+        "<b>Ý nghĩa:</b> Check 1 lần duy nhất xem ảnh mẫu có trên màn hình không (True/False). "
+        "Khác Wait for Image: không đợi, chỉ check ngay lúc đó.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Kiểm tra đã đăng nhập chưa<br>"
-        "→ Ảnh = avatar user, nếu có → đã login<br><br>"
-        "<b>📌 Ví dụ 2:</b> Kiểm tra popup error có xuất hiện<br>"
-        "→ Kết hợp If Image Found để xử lý<br><br>"
-        "<b>📌 Ví dụ 3:</b> Kiểm tra app đã mở chưa<br>"
-        "→ Ảnh = title bar của app"
+        "<b>📌 Kịch bản: Kiểm tra đã login chưa trước khi làm việc</b><br>"
+        "→ Image Exists: ảnh = <b>avatar user</b><br>"
+        "→ Nếu có → tiếp tục. Nếu không → run macro 'login.json'<br>"
+        "<i>Giải thích:</i> Kết hợp với If Image Found để rẽ nhánh tự động."
     ),
     "take_screenshot": (
         "<b>🖼 Take Screenshot — Chụp màn hình</b><br><br>"
-        "<b>Ý nghĩa:</b> Chụp toàn bộ màn hình và lưu thành file ảnh.<br><br>"
-        "<b>Khi nào dùng:</b> Lưu bằng chứng, debug, báo cáo lỗi.<br>"
+        "<b>Ý nghĩa:</b> Chụp toàn bộ màn hình lưu thành file .png. File đặt tên theo timestamp.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Chụp kết quả sau khi chạy xong<br>"
-        "→ Lưu vào folder 'screenshots/'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Chụp lỗi khi macro gặp sự cố<br>"
-        "→ Đặt sau action On Error để ghi lại trạng thái<br><br>"
-        "<b>📌 Ví dụ 3:</b> Chụp hàng loạt trang báo cáo<br>"
-        "→ Loop: scroll → screenshot → lặp lại"
+        "<b>📌 Kịch bản: Chụp xác nhận sau mỗi đơn hàng</b><br>"
+        "Macro xử lý 50 đơn hàng, mỗi đơn cần chụp ảnh xác nhận.<br>"
+        "→ Loop 50: xử lý đơn → <b>Take Screenshot</b> → lặp<br>"
+        "<i>Giải thích:</i> File ảnh tự đặt tên theo timestamp → không bao giờ ghi đè."
     ),
     "check_pixel_color": (
         "<b>🎨 Check Pixel Color — Kiểm tra màu pixel</b><br><br>"
-        "<b>Ý nghĩa:</b> Lấy màu pixel tại tọa độ (X, Y) và so sánh "
-        "với màu chỉ định.<br><br>"
-        "<b>Khi nào dùng:</b> Kiểm tra trạng thái UI theo màu sắc.<br>"
+        "<b>Ý nghĩa:</b> Lấy màu RGB tại tọa độ (X, Y) và so sánh. "
+        "<b>Nhanh gấp 100x</b> so với Image Match — chỉ kiểm tra 1 điểm.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Kiểm tra nút có active không<br>"
-        "→ Nút active = xanh (#00FF00), inactive = xám<br><br>"
-        "<b>📌 Ví dụ 2:</b> Kiểm tra checkbox đã tick chưa<br>"
-        "→ Pixel tại vị trí tick = xanh → đã check<br><br>"
-        "<b>📌 Ví dụ 3:</b> Phát hiện thanh loading đã đầy<br>"
-        "→ Pixel cuối thanh = xanh → loading xong"
+        "<b>📌 Kịch bản: Kiểm tra nút Submit có active không</b><br>"
+        "Nút active = xanh #4CAF50, disabled = xám #999.<br>"
+        "→ Check pixel giữa nút (X=400, Y=500)<br>"
+        "→ Xanh → click. Xám → đợi thêm<br>"
+        "<i>Giải thích:</i> Nhanh hơn nhiều so với Image Match vì chỉ 1 pixel."
     ),
     "wait_for_color": (
         "<b>🎨 Wait for Color — Đợi pixel đổi màu</b><br><br>"
-        "<b>Ý nghĩa:</b> Tạm dừng cho đến khi pixel tại tọa độ "
-        "chuyển sang màu chỉ định.<br><br>"
-        "<b>Khi nào dùng:</b> Đợi loading bar, đợi nút enable.<br>"
+        "<b>Ý nghĩa:</b> Liên tục check pixel tại (X, Y) cho đến khi đúng màu hoặc hết timeout.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Đợi loading bar hoàn tất<br>"
-        "→ Tọa độ cuối bar, màu = xanh, Timeout = 30s<br><br>"
-        "<b>📌 Ví dụ 2:</b> Đợi nút từ xám chuyển sang xanh<br>"
-        "→ Màu mục tiêu = #4CAF50, Tolerance = 10<br><br>"
-        "<b>📌 Ví dụ 3:</b> Đợi popup biến mất<br>"
-        "→ Pixel trên popup → đợi chuyển về màu nền"
+        "<b>📌 Kịch bản: Đợi progress bar đầy rồi tiếp tục</b><br>"
+        "Thanh loading khi full = xanh #00FF00.<br>"
+        "→ Tọa độ = cuối thanh (X=700, Y=580), Màu = #00FF00, Timeout = 60s<br>"
+        "<i>Giải thích:</i> Check pixel cuối thanh: khi chuyển xanh → thanh đã full."
     ),
     "delay": (
-        "<b>⏱ Delay — Chờ đợi</b><br><br>"
-        "<b>Ý nghĩa:</b> Tạm dừng macro trong khoảng thời gian chỉ định "
-        "(ms).<br><br>"
-        "<b>Khi nào dùng:</b> Đợi animation, đợi network, tránh rate-limit.<br>"
+        "<b>⏱ Delay — Tạm dừng</b><br><br>"
+        "<b>Ý nghĩa:</b> Dừng macro trong thời gian chỉ định (millisecond). 1000ms = 1 giây.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Đợi trang load sau click<br>"
-        "→ Duration = 2000ms (2 giây)<br><br>"
-        "<b>📌 Ví dụ 2:</b> Đợi animation hoàn tất<br>"
-        "→ Duration = 500ms<br><br>"
-        "<b>📌 Ví dụ 3:</b> Tránh rate-limit API<br>"
-        "→ Duration = 1000ms giữa các request"
+        "<b>📌 Kịch bản 1: Đợi animation menu rồi mới click</b><br>"
+        "Menu dropdown có animation 300ms.<br>"
+        "→ Click menu → <b>Delay 500ms</b> → Click item<br>"
+        "<i>Giải thích:</i> 500ms > 300ms animation → menu chắc chắn đã hiện hết.<br><br>"
+        "<b>📌 Kịch bản 2: Chống rate-limit khi gửi email hàng loạt</b><br>"
+        "→ Loop: soạn email → gửi → <b>Delay 3000ms</b> → lặp<br>"
+        "<i>Giải thích:</i> 3s giữa các email ≈ 20 email/phút, an toàn cho hầu hết hệ thống.<br><br>"
+        "<b>💡 Tip:</b> Nếu không biết trước thời gian cần chờ, dùng <b>Wait for Image</b> thay vì Delay cố định — linh hoạt hơn."
     ),
     "loop_block": (
-        "<b>⏱ Loop Block — Vòng lặp</b><br><br>"
-        "<b>Ý nghĩa:</b> Lặp lại nhóm action bên trong số lần chỉ định "
-        "(hoặc vô hạn).<br><br>"
-        "<b>Khi nào dùng:</b> Xử lý hàng loạt, lặp thao tác, auto-farm.<br>"
+        "<b>🔁 Loop Block — Vòng lặp</b><br><br>"
+        "<b>Ý nghĩa:</b> Lặp lại nhóm action N lần hoặc vô hạn. "
+        "Nền tảng cho mọi xử lý hàng loạt (batch).<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Gửi 50 email giống nhau<br>"
-        "→ Loop 50: click Compose → type → send<br><br>"
-        "<b>📌 Ví dụ 2:</b> Auto-click quảng cáo<br>"
-        "→ Loop ∞: click → delay 5s → lặp<br><br>"
-        "<b>📌 Ví dụ 3:</b> Đọc 100 dòng từ file<br>"
-        "→ Loop 100: read_file_line → type_text → tab"
+        "<b>📌 Kịch bản 1: Gửi 100 email từ danh sách</b><br>"
+        "→ Loop 100: Read File Line → Click 'To:' → Type Text '{email}' → soạn → Gửi → Delay 3s<br>"
+        "<i>Giải thích:</i> Mỗi vòng Read File Line tự động đọc dòng tiếp theo."
     ),
     "if_image_found": (
-        "<b>⏱ If Image Found — Rẽ nhánh theo ảnh</b><br><br>"
-        "<b>Ý nghĩa:</b> Kiểm tra ảnh mẫu có trên màn hình → "
-        "thực hiện action khác nhau tùy kết quả.<br><br>"
-        "<b>Khi nào dùng:</b> Xử lý popup bất ngờ, kiểm tra trạng thái.<br>"
+        "<b>🔀 If Image Found — Rẽ nhánh theo ảnh</b><br><br>"
+        "<b>Ý nghĩa:</b> Kiểm tra ảnh có trên màn hình → thực hiện hành động khác nhau. "
+        "Đây là <b>logic điều kiện</b> quan trọng nhất.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Xử lý popup 'Are you sure?'<br>"
-        "→ Nếu popup xuất hiện → click Yes, nếu không → bỏ qua<br><br>"
-        "<b>📌 Ví dụ 2:</b> Kiểm tra CAPTCHA<br>"
-        "→ Nếu thấy CAPTCHA → dừng, nếu không → tiếp tục<br><br>"
-        "<b>📌 Ví dụ 3:</b> Auto-retry khi lỗi<br>"
-        "→ Nếu thấy 'Error' → click Retry, lặp lại"
+        "<b>📌 Kịch bản 1: Tự động xử lý popup bất ngờ</b><br>"
+        "Macro chạy, popup 'Are you sure?' bất ngờ hiện.<br>"
+        "→ If Image Found: ảnh nút 'Yes'<br>"
+        "→ Có → Click on Image 'Yes'. Không → bỏ qua, tiếp tục<br>"
+        "<i>Giải thích:</i> Đặt trong loop → tự xử lý popup bất cứ lúc nào hiện ra.<br><br>"
+        "<b>📌 Kịch bản 2: Kiểm tra login thành công</b><br>"
+        "→ If Image Found: ảnh 'Dashboard'<br>"
+        "→ Có → tiếp. Không → Take Screenshot lỗi → dừng"
     ),
     "if_pixel_color": (
-        "<b>⏱ If Pixel Color — Rẽ nhánh theo màu</b><br><br>"
-        "<b>Ý nghĩa:</b> Kiểm tra màu pixel tại tọa độ → rẽ nhánh.<br><br>"
-        "<b>Khi nào dùng:</b> Tương tự If Image nhưng nhanh hơn.<br>"
+        "<b>🔀 If Pixel Color — Rẽ nhánh theo màu</b><br><br>"
+        "<b>Ý nghĩa:</b> Kiểm tra màu pixel → rẽ nhánh. Nhanh gấp 100x so với If Image.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Nút xanh → click, nút xám → đợi<br>"
-        "→ Check pixel tại vị trí nút<br><br>"
-        "<b>📌 Ví dụ 2:</b> HP bar > 50% → attack, < 50% → heal<br>"
-        "→ Check pixel giữa HP bar<br><br>"
-        "<b>📌 Ví dụ 3:</b> Phát hiện ngày/đêm trong game<br>"
-        "→ Check pixel trời: sáng → farm, tối → nghỉ"
+        "<b>📌 Kịch bản: Kiểm tra HP trong game</b><br>"
+        "HP bar: đỏ = full, đen = hết.<br>"
+        "→ Check pixel giữa HP bar<br>"
+        "→ Đỏ → tiếp tục attack. Đen → dùng potion heal<br>"
+        "<i>Giải thích:</i> Check pixel mỗi 100ms — rất nhanh, phù hợp game loop."
     ),
     "if_variable": (
-        "<b>⏱ If Variable — Rẽ nhánh theo biến</b><br><br>"
-        "<b>Ý nghĩa:</b> So sánh giá trị biến với giá trị chỉ định "
-        "→ thực hiện action tương ứng.<br><br>"
-        "<b>Khi nào dùng:</b> Logic phức tạp, đếm lần lặp, kiểm tra input.<br>"
+        "<b>🔀 If Variable — Rẽ nhánh theo biến</b><br><br>"
+        "<b>Ý nghĩa:</b> So sánh giá trị biến (==, !=, >, <, contains).<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Nếu counter > 10 → dừng<br>"
-        "→ Variable = 'counter', Operator = '>', Value = '10'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Nếu username rỗng → bỏ qua<br>"
-        "→ Variable = 'username', Operator = '==', Value = ''<br><br>"
-        "<b>📌 Ví dụ 3:</b> Kiểm tra OCR result<br>"
-        "→ Variable = 'ocr_text', Operator = 'contains', Value = 'success'"
+        "<b>📌 Kịch bản 1: Dừng sau N lần lặp</b><br>"
+        "→ Set Variable 'count' = '{count} + 1'<br>"
+        "→ If Variable: count > 50 → Dừng macro<br>"
+        "<i>Giải thích:</i> Kiểm soát chính xác hơn Loop Block thông thường.<br><br>"
+        "<b>📌 Kịch bản 2: Kiểm tra kết quả OCR</b><br>"
+        "→ Capture Text → biến 'result'<br>"
+        "→ If Variable: result contains 'thành công' → tiếp. Không → Log lỗi<br>"
+        "<i>Giải thích:</i> Dùng 'contains' thay '==' vì OCR có thể trả thêm khoảng trắng thừa."
     ),
     "set_variable": (
         "<b>📊 Set Variable — Gán giá trị biến</b><br><br>"
-        "<b>Ý nghĩa:</b> Tạo mới hoặc cập nhật giá trị biến. "
-        "Hỗ trợ: số, chuỗi, biểu thức toán.<br><br>"
-        "<b>Khi nào dùng:</b> Đếm, lưu trạng thái, tính toán.<br>"
+        "<b>Ý nghĩa:</b> Tạo hoặc cập nhật biến. Hỗ trợ số, chuỗi, và tham chiếu {tên_biến}.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Đếm lần lặp<br>"
-        "→ Name = 'counter', Value = '{counter} + 1'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Lưu URL cần truy cập<br>"
-        "→ Name = 'url', Value = 'https://example.com'<br><br>"
-        "<b>📌 Ví dụ 3:</b> Tạo timestamp<br>"
-        "→ Name = 'filename', Value = 'report_{counter}.pdf'"
+        "<b>📌 Kịch bản 1: Tạo bộ đếm</b><br>"
+        "→ Set Variable: Name = 'counter', Value = '0' (trước loop)<br>"
+        "→ Trong loop: Value = '{counter} + 1'<br>"
+        "<i>Giải thích:</i> {counter} thay bằng giá trị hiện tại, +1 → tự tăng mỗi vòng.<br><br>"
+        "<b>📌 Kịch bản 2: Tên file động</b><br>"
+        "→ Value = 'report_{counter}.pdf'<br>"
+        "<i>Giải thích:</i> Mỗi vòng tạo tên file khác: report_1.pdf, report_2.pdf..."
     ),
     "split_string": (
         "<b>📊 Split String — Tách chuỗi</b><br><br>"
-        "<b>Ý nghĩa:</b> Tách chuỗi thành mảng theo dấu phân cách, "
-        "lấy phần tử theo index.<br><br>"
-        "<b>Khi nào dùng:</b> Xử lý CSV, tách dữ liệu OCR, parse text.<br>"
+        "<b>Ý nghĩa:</b> Tách chuỗi theo ký tự phân cách, lấy phần tử theo index (0 = đầu, -1 = cuối).<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Tách dòng CSV<br>"
-        "→ Input = 'Tên,Email,SĐT', Separator = ','<br><br>"
-        "<b>📌 Ví dụ 2:</b> Lấy tên file từ đường dẫn<br>"
-        "→ Input = path, Separator = '\\', Index = -1<br><br>"
-        "<b>📌 Ví dụ 3:</b> Tách username từ email<br>"
-        "→ Input = 'user@company.com', Separator = '@', Index = 0"
+        "<b>📌 Kịch bản: Xử lý file CSV</b><br>"
+        "Dòng CSV: 'Nguyễn Văn A,email@gmail.com,0912345678'<br>"
+        "→ Split: Separator = ',' → Index 0 = tên, Index 1 = email, Index 2 = SĐT<br>"
+        "<i>Giải thích:</i> Sau Split, mỗi phần tử lưu vào biến riêng → Type Text từng ô."
     ),
     "comment": (
-        "<b>📊 Comment — Ghi chú</b><br><br>"
-        "<b>Ý nghĩa:</b> Nhãn/ghi chú không thực thi. "
-        "Dùng để đánh dấu các phần trong macro.<br><br>"
-        "<b>Khi nào dùng:</b> Luôn luôn! Giúp macro dễ đọc, dễ bảo trì.<br>"
+        "<b>📝 Comment — Ghi chú</b><br><br>"
+        "<b>Ý nghĩa:</b> Nhãn ghi chú không thực thi. Engine bỏ qua hoàn toàn khi chạy.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Đánh dấu phần đầu<br>"
-        "→ Text = '=== PHẦN 1: ĐĂNG NHẬP ==='<br><br>"
-        "<b>📌 Ví dụ 2:</b> Ghi chú cảnh báo<br>"
-        "→ Text = '⚠ Đợi 5s vì server chậm'<br><br>"
-        "<b>📌 Ví dụ 3:</b> Note cho bản thân<br>"
-        "→ Text = 'TODO: thêm xử lý lỗi ở đây'"
+        "<b>📌 Kịch bản: Đánh dấu phần trong macro dài</b><br>"
+        "Macro 50 action khó theo dõi → thêm Comment phân section:<br>"
+        "→ <b>'=== PHẦN 1: ĐĂNG NHẬP ==='</b><br>"
+        "→ <b>'⚠ LƯU Ý: Server chậm, cần đợi 5s'</b><br>"
+        "<i>Giải thích:</i> Giúp macro 'self-documenting' — đọc lại sau 1 tháng vẫn hiểu."
     ),
     "activate_window": (
-        "<b>🖥 Activate Window — Kích hoạt cửa sổ</b><br><br>"
-        "<b>Ý nghĩa:</b> Tìm và đưa cửa sổ ứng dụng lên foreground "
-        "theo tiêu đề (hoặc một phần tiêu đề).<br><br>"
-        "<b>Khi nào dùng:</b> Chuyển giữa các app, đảm bảo focus đúng app.<br>"
+        "<b>🖥 Activate Window — Chuyển cửa sổ</b><br><br>"
+        "<b>Ý nghĩa:</b> Tìm cửa sổ theo tiêu đề (hoặc 1 phần) và đưa lên foreground.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Chuyển sang Chrome<br>"
-        "→ Title = 'Chrome' (tìm cửa sổ chứa 'Chrome')<br><br>"
-        "<b>📌 Ví dụ 2:</b> Chuyển sang Excel file cụ thể<br>"
-        "→ Title = 'BaoCao.xlsx'<br><br>"
-        "<b>📌 Ví dụ 3:</b> Focus CMD/Terminal<br>"
-        "→ Title = 'Command Prompt'"
+        "<b>📌 Kịch bản: Macro thao tác giữa Chrome và Excel</b><br>"
+        "→ Activate Window <b>'Chrome'</b> → copy dữ liệu<br>"
+        "→ Activate Window <b>'BaoCao.xlsx'</b> → paste vào Excel<br>"
+        "<i>Giải thích:</i> Chỉ cần 1 phần tiêu đề: 'Chrome' sẽ match 'Báo cáo - Google Chrome'."
     ),
     "log_to_file": (
-        "<b>🖥 Log to File — Ghi log</b><br><br>"
-        "<b>Ý nghĩa:</b> Ghi nội dung vào file log (text). "
-        "Hỗ trợ biến trong nội dung.<br><br>"
-        "<b>Khi nào dùng:</b> Debug macro, ghi kết quả, audit trail.<br>"
+        "<b>📝 Log to File — Ghi log</b><br><br>"
+        "<b>Ý nghĩa:</b> Nối (append) 1 dòng text vào file log. Hỗ trợ biến {counter}, {timestamp}.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Ghi kết quả mỗi vòng lặp<br>"
-        "→ File = 'log.txt', Text = 'Vòng {counter}: OK'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Ghi timestamp<br>"
-        "→ Text = '{timestamp}: Đã xử lý xong'<br><br>"
-        "<b>📌 Ví dụ 3:</b> Ghi lỗi OCR<br>"
-        "→ Text = 'OCR result: {ocr_text}'"
+        "<b>📌 Kịch bản: Ghi nhật ký chạy macro</b><br>"
+        "→ Mỗi vòng: Log to File <b>'Vòng {counter}: xử lý {email} — OK'</b><br>"
+        "<i>Giải thích:</i> Sau khi chạy xong, mở file log → biết rõ đã xử lý bao nhiêu item."
     ),
     "read_clipboard": (
-        "<b>🖥 Read Clipboard — Đọc clipboard</b><br><br>"
-        "<b>Ý nghĩa:</b> Đọc nội dung clipboard (sau Ctrl+C) vào biến.<br><br>"
-        "<b>Khi nào dùng:</b> Lấy text đã copy, lấy URL, lấy dữ liệu.<br>"
+        "<b>📋 Read Clipboard — Đọc clipboard</b><br><br>"
+        "<b>Ý nghĩa:</b> Lấy text trong clipboard (sau Ctrl+C) vào biến để xử lý tiếp.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Copy → lấy text → paste elsewhere<br>"
-        "→ Ctrl+C → Read Clipboard → biến 'copied_text'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Lấy URL từ thanh địa chỉ<br>"
-        "→ Click address bar → Ctrl+A → Ctrl+C → Read Clipboard<br><br>"
-        "<b>📌 Ví dụ 3:</b> Copy giá trị từ Excel<br>"
-        "→ Click cell → Ctrl+C → Read Clipboard → Log to File"
+        "<b>📌 Kịch bản: Lấy URL từ thanh địa chỉ trình duyệt</b><br>"
+        "→ Click thanh địa chỉ → Ctrl+A → Ctrl+C<br>"
+        "→ <b>Read Clipboard</b> → biến 'url' → Write to File<br>"
+        "<i>Giải thích:</i> Ctrl+C copy vào clipboard, Read Clipboard lấy ra để macro sử dụng."
     ),
     "read_file_line": (
-        "<b>🖥 Read File Line — Đọc dòng từ file</b><br><br>"
-        "<b>Ý nghĩa:</b> Đọc 1 dòng cụ thể từ file text vào biến. "
-        "Dùng line_number hoặc tự động tăng.<br><br>"
-        "<b>Khi nào dùng:</b> Đọc danh sách URL, email, dữ liệu từ CSV.<br>"
+        "<b>📄 Read File Line — Đọc dòng từ file</b><br><br>"
+        "<b>Ý nghĩa:</b> Đọc dòng thứ N từ file text vào biến. "
+        "Trong loop, tự động đọc dòng tiếp theo mỗi vòng.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Đọc danh sách URL<br>"
-        "→ File = 'urls.txt', Line = {counter}, Var = 'url'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Đọc email từ danh sách<br>"
-        "→ File = 'emails.txt', Auto-increment = On<br><br>"
-        "<b>📌 Ví dụ 3:</b> Đọc mật khẩu từ file bảo mật<br>"
-        "→ File = 'creds.txt', Line = 2 (dòng 2 = password)"
+        "<b>📌 Kịch bản: Nhập 100 tài khoản từ file</b><br>"
+        "File 'accounts.txt' mỗi dòng: username,password<br>"
+        "→ Loop 100: Read File Line → Split ',' → Type Text user → Tab → Secure Type pass → Enter<br>"
+        "<i>Giải thích:</i> Kết hợp Read File Line + Split String = đọc CSV cơ bản."
     ),
     "write_to_file": (
-        "<b>🖥 Write to File — Ghi vào file</b><br><br>"
-        "<b>Ý nghĩa:</b> Ghi nội dung vào file (tạo mới hoặc append). "
-        "Hỗ trợ biến trong nội dung.<br><br>"
-        "<b>Khi nào dùng:</b> Xuất kết quả, ghi CSV, tạo report.<br>"
+        "<b>📄 Write to File — Ghi vào file</b><br><br>"
+        "<b>Ý nghĩa:</b> Ghi text vào file (tạo mới hoặc nối thêm). Hỗ trợ biến.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Ghi kết quả ra CSV<br>"
-        "→ File = 'result.csv', Text = '{name},{email},{phone}'<br><br>"
-        "<b>📌 Ví dụ 2:</b> Tạo file báo cáo<br>"
-        "→ File = 'report.txt', Mode = Append<br><br>"
-        "<b>📌 Ví dụ 3:</b> Backup dữ liệu<br>"
-        "→ File = 'backup_{date}.txt', Text = clipboard content"
+        "<b>📌 Kịch bản: Xuất kết quả ra CSV</b><br>"
+        "→ File = 'result.csv', Text = '{name},{email},{phone}'<br>"
+        "→ Mode = Append (nối thêm, không ghi đè)<br>"
+        "<i>Giải thích:</i> Chế độ Append thêm dòng mới mỗi lần → tạo file CSV nhiều dòng."
     ),
     "secure_type_text": (
-        "<b>🖥 Secure Type Text — Gõ bảo mật</b><br><br>"
-        "<b>Ý nghĩa:</b> Gõ text mà không hiển thị nội dung trong log/preview. "
-        "Dùng cho mật khẩu, token.<br><br>"
-        "<b>Khi nào dùng:</b> Nhập password, API key, thông tin nhạy cảm.<br>"
+        "<b>🔒 Secure Type Text — Gõ bảo mật</b><br><br>"
+        "<b>Ý nghĩa:</b> Gõ text nhưng <b>không hiển thị</b> trong log/preview. Chỉ hiện '****'.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Nhập mật khẩu đăng nhập<br>"
-        "→ Text = 'P@ssw0rd!' (hiển thị ****)<br><br>"
-        "<b>📌 Ví dụ 2:</b> Nhập API key<br>"
-        "→ Text = 'sk-xxx...' (không lộ trong log)<br><br>"
-        "<b>📌 Ví dụ 3:</b> Nhập mã OTP<br>"
-        "→ Kết hợp Read Clipboard → Secure Type"
+        "<b>📌 Kịch bản: Tự động đăng nhập hệ thống</b><br>"
+        "→ Click ô Password → <b>Secure Type Text</b> 'P@ssw0rd!'<br>"
+        "→ Trong log chỉ hiện: 'type_text: ****'<br>"
+        "<i>Giải thích:</i> Type Text thường → password hiện rõ trong log → rủi ro bảo mật."
     ),
     "run_macro": (
-        "<b>🖥 Run Sub-Macro — Chạy macro con</b><br><br>"
-        "<b>Ý nghĩa:</b> Chạy 1 file macro khác như subroutine. "
-        "Macro con chạy xong → quay lại macro chính.<br><br>"
-        "<b>Khi nào dùng:</b> Tái sử dụng macro, chia nhỏ logic phức tạp.<br>"
+        "<b>📦 Run Sub-Macro — Chạy macro con</b><br><br>"
+        "<b>Ý nghĩa:</b> Chạy file macro khác (.json) như subroutine. Xong → quay lại macro chính.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Gọi macro 'login.json'<br>"
-        "→ Macro = 'login.json' (đăng nhập → quay lại)<br><br>"
-        "<b>📌 Ví dụ 2:</b> Chia macro lớn thành phần<br>"
-        "→ Main: run 'step1.json' → run 'step2.json' → ...<br><br>"
-        "<b>📌 Ví dụ 3:</b> Error recovery<br>"
-        "→ On Error: run 'recovery.json' → retry"
+        "<b>📌 Kịch bản: Tái sử dụng flow đăng nhập</b><br>"
+        "Nhiều macro đều cần login → tạo 'login.json' riêng.<br>"
+        "→ Macro A: <b>Run 'login.json'</b> → xử lý A<br>"
+        "→ Macro B: <b>Run 'login.json'</b> → xử lý B<br>"
+        "<i>Giải thích:</i> Thay đổi flow login → chỉ sửa 1 file thay vì sửa tất cả macro."
     ),
     "capture_text": (
-        "<b>🖥 Capture Text (OCR) — Nhận dạng chữ</b><br><br>"
-        "<b>Ý nghĩa:</b> Chụp vùng màn hình và nhận dạng text bằng "
-        "Tesseract OCR, lưu kết quả vào biến.<br><br>"
-        "<b>Khi nào dùng:</b> Đọc text từ ảnh, lấy giá trị từ UI không copy được.<br>"
+        "<b>🔎 Capture Text (OCR) — Nhận dạng chữ</b><br><br>"
+        "<b>Ý nghĩa:</b> Chụp vùng màn hình, nhận dạng text bằng Tesseract OCR, lưu vào biến. "
+        "Cho phép macro 'đọc' text trên UI.<br>"
         "<hr>"
-        "<b>📌 Ví dụ 1:</b> Đọc số dư tài khoản<br>"
-        "→ Vùng chụp = khu vực hiển thị số dư<br><br>"
-        "<b>📌 Ví dụ 2:</b> Đọc mã CAPTCHA<br>"
-        "→ OCR vùng CAPTCHA → nhập kết quả<br><br>"
-        "<b>📌 Ví dụ 3:</b> Đọc thông báo lỗi<br>"
-        "→ OCR popup → If Variable contains 'error' → xử lý"
+        "<b>📌 Kịch bản 1: Đọc số dư tài khoản ngân hàng</b><br>"
+        "→ Vùng chụp = khu vực hiển thị số dư (X1=300, Y1=200, X2=500, Y2=230)<br>"
+        "→ Biến = 'balance' → Log to File 'Số dư: {balance}'<br>"
+        "<i>Giải thích:</i> OCR chuyển ảnh text thành chuỗi ký tự macro có thể xử lý.<br><br>"
+        "<b>📌 Kịch bản 2: Đọc mã đơn hàng từ popup</b><br>"
+        "→ Capture Text vùng mã đơn → biến 'order_id' → Write to File<br>"
+        "<i>Giải thích:</i> Dùng khi UI không cho Ctrl+C (text trong ảnh, canvas, PDF viewer)."
     ),
 }
+
+class _HelpPopup(QFrame):
+    """Persistent help popup with close button and Escape key support."""
+
+    def __init__(self, html: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setStyleSheet(
+            "QFrame { background: #1e1e2e; border: 1px solid #6c6cff; "
+            "border-radius: 8px; }"
+        )
+        self.setFixedWidth(400)
+        self.setMaximumHeight(420)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 8)
+        layout.setSpacing(4)
+
+        # Header row: title + close button
+        header = QHBoxLayout()
+        title = QLabel("📖 Hướng dẫn")
+        title.setStyleSheet("font-weight: bold; font-size: 13px; color: #e0e0ff;")
+        header.addWidget(title)
+        header.addStretch()
+
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(24, 24)
+        close_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #aaa; "
+            "border: none; font-size: 16px; font-weight: bold; } "
+            "QPushButton:hover { color: #ff6b6b; }"
+        )
+        close_btn.setToolTip("Đóng (Esc)")
+        close_btn.clicked.connect(self.close)
+        header.addWidget(close_btn)
+        layout.addLayout(header)
+
+        # Content browser
+        browser = QTextBrowser()
+        browser.setHtml(f"<div style='color:#ccc; font-size:12px; "
+                        f"line-height:1.5'>{html}</div>")
+        browser.setOpenExternalLinks(False)
+        browser.setStyleSheet(
+            "QTextBrowser { background: transparent; border: none; "
+            "color: #ccc; }"
+        )
+        browser.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(browser)
+
+        # Escape key shortcut
+        esc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        esc.activated.connect(self.close)
+
+    def keyPressEvent(self, event: Any) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            self.close()
+        else:
+            super().keyPressEvent(event)
+
 
 class ActionEditorDialog(QDialog):
     """
@@ -745,8 +768,7 @@ class ActionEditorDialog(QDialog):
                     w.setValue(self._param_cache[key])
 
     def _show_action_help(self) -> None:
-        """Show rich HTML help tooltip for the selected action type."""
-        from PyQt6.QtWidgets import QToolTip
+        """Show persistent help popup for the selected action type."""
         atype = self._type_combo.currentData(Qt.ItemDataRole.UserRole)
         if not atype:
             return
@@ -759,10 +781,15 @@ class ActionEditorDialog(QDialog):
                 f"{desc}<br><br>"
                 "<i>Chưa có hướng dẫn chi tiết cho action này.</i>"
             )
-        # Show tooltip at button position, with max width
-        pos = self._help_btn.mapToGlobal(self._help_btn.rect().bottomLeft())
-        QToolTip.showText(pos, f"<div style='max-width:380px'>{html}</div>",
-                          self._help_btn)
+        # Close previous popup if open
+        if hasattr(self, '_help_popup') and self._help_popup is not None:
+            self._help_popup.close()
+        self._help_popup = _HelpPopup(html, parent=self)
+        # Position below the help button
+        pos = self._help_btn.mapTo(self, self._help_btn.rect().bottomLeft())
+        self._help_popup.move(max(0, pos.x() - 350), pos.y() + 4)
+        self._help_popup.show()
+        self._help_popup.setFocus()
 
     def _build_mouse_params(self, atype: str) -> None:
         self._add_xy_params()

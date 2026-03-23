@@ -417,6 +417,16 @@ class SetVariable(Action):
                     ctx.set_var(self.var_name, float(current) % divisor)
             except (ValueError, TypeError):
                 logger.warning("Cannot modulo '%s' by '%s'", current, mod_val)
+        elif self.operation == "eval":
+            # 2.2: Safe expression language
+            expr = self.value
+            if '${' in expr:
+                expr = ctx.interpolate(expr)
+            try:
+                result = self._safe_eval(expr)
+                ctx.set_var(self.var_name, result)
+            except Exception as e:
+                logger.warning("Cannot evaluate '%s': %s", expr, e)
         else:
             logger.warning("Unknown operation '%s'", self.operation)
 
@@ -424,6 +434,38 @@ class SetVariable(Action):
                      self.var_name, self.operation, self.value,
                      ctx.get_var(self.var_name))
         return True
+
+    @staticmethod
+    def _safe_eval(expr: str) -> float:
+        """Evaluate math expressions safely via AST (no exec/eval).
+        
+        Supports: numbers, +, -, *, /, //, **, %, parentheses.
+        Example: '(10 + 5) * 2' → 30.0
+        """
+        import ast
+        import operator
+
+        ops = {
+            ast.Add: operator.add, ast.Sub: operator.sub,
+            ast.Mult: operator.mul, ast.Div: operator.truediv,
+            ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
+            ast.Pow: operator.pow, ast.USub: operator.neg,
+        }
+
+        def _eval_node(node):
+            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                return float(node.value)
+            elif isinstance(node, ast.BinOp) and type(node.op) in ops:
+                return ops[type(node.op)](_eval_node(node.left), _eval_node(node.right))
+            elif isinstance(node, ast.UnaryOp) and type(node.op) in ops:
+                return ops[type(node.op)](_eval_node(node.operand))
+            elif isinstance(node, ast.Expression):
+                return _eval_node(node.body)
+            else:
+                raise ValueError(f"Unsupported: {ast.dump(node)}")
+
+        tree = ast.parse(expr.strip(), mode='eval')
+        return _eval_node(tree)
 
     def _get_params(self) -> dict[str, Any]:
         return {
@@ -441,7 +483,7 @@ class SetVariable(Action):
         op_symbols = {
             "set": "=", "increment": "+=", "decrement": "-=",
             "add": "+=", "subtract": "-=", "multiply": "*=",
-            "divide": "/=", "modulo": "%=",
+            "divide": "/=", "modulo": "%=", "eval": "= eval",
         }
         sym = op_symbols.get(self.operation, self.operation)
         val = self.value or ("1" if self.operation in ("increment", "decrement") else "")

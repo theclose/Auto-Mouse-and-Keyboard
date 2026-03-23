@@ -142,6 +142,31 @@ class ExecutionContext:
         self.error_count = 0
         self.start_time = time.perf_counter()
 
+    # -- Checkpoint / Resume (1.1) -------------------------------------------
+    def snapshot(self) -> dict:
+        """Capture full context state for checkpoint/resume."""
+        with self._lock:
+            return {
+                "variables": dict(self._variables),
+                "iteration_count": self.iteration_count,
+                "action_count": self.action_count,
+                "error_count": self.error_count,
+                "last_image_match": self._last_image_match,
+                "last_pixel_color": self._last_pixel_color,
+            }
+
+    def restore(self, snapshot: dict) -> None:
+        """Restore context state from a checkpoint."""
+        with self._lock:
+            self._variables = dict(snapshot.get("variables", {}))
+            self._last_image_match = snapshot.get("last_image_match")
+            self._last_pixel_color = snapshot.get("last_pixel_color")
+        self.iteration_count = snapshot.get("iteration_count", 0)
+        self.action_count = snapshot.get("action_count", 0)
+        self.error_count = snapshot.get("error_count", 0)
+        logger.info("Context restored from checkpoint (vars=%d, iter=%d)",
+                     len(self._variables), self.iteration_count)
+
     # -- Template interpolation ----------------------------------------------
     def interpolate(self, text: str) -> str:
         """Replace ${var_name} patterns with variable values.

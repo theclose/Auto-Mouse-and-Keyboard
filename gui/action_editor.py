@@ -430,7 +430,7 @@ class ActionEditorDialog(QDialog):
 
         operation = QComboBox()
         operation.addItems(["set", "increment", "decrement", "add",
-                           "subtract", "multiply", "divide", "modulo"])
+                           "subtract", "multiply", "divide", "modulo", "eval"])
         self._params_layout.addRow("Operation:", operation)
         self._param_widgets["operation"] = operation
 

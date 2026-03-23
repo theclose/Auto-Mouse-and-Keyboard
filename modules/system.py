@@ -41,20 +41,59 @@ class ActivateWindow(Action):
         if self.exact_match:
             hwnd = _user32.FindWindowW(None, title)
         else:
-            # Partial match: enumerate all windows
             hwnd = self._find_by_partial(title)
 
         if not hwnd:
             logger.warning("Window not found: '%s'", title)
             return False
 
-        # Restore if minimized
+        # 1.3: Multi-strategy window activation
+        if self._activate_multi_strategy(hwnd):
+            time.sleep(0.1)
+            logger.info("Activated window: '%s' (hwnd=%d)", title, hwnd)
+            return True
+
+        logger.warning("All activation strategies failed for '%s'", title)
+        return False
+
+    def _activate_multi_strategy(self, hwnd: int) -> bool:
+        """Try multiple strategies to bring window to foreground."""
+        # Strategy 1: Restore if minimized + SetForegroundWindow
         if _user32.IsIconic(hwnd):
             _user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-        _user32.SetForegroundWindow(hwnd)
-        time.sleep(0.1)  # Small delay for window switch
-        logger.info("Activated window: '%s' (hwnd=%d)", title, hwnd)
-        return True
+        if _user32.SetForegroundWindow(hwnd):
+            return True
+
+        # Strategy 2: BringWindowToTop
+        try:
+            _user32.BringWindowToTop(hwnd)
+            if _user32.GetForegroundWindow() == hwnd:
+                return True
+        except Exception:
+            pass
+
+        # Strategy 3: AttachThreadInput workaround
+        try:
+            _kernel32 = ctypes.windll.kernel32
+            fg_thread = _user32.GetWindowThreadProcessId(
+                _user32.GetForegroundWindow(), None)
+            target_thread = _user32.GetWindowThreadProcessId(hwnd, None)
+            if fg_thread != target_thread:
+                _user32.AttachThreadInput(fg_thread, target_thread, True)
+                _user32.SetForegroundWindow(hwnd)
+                _user32.AttachThreadInput(fg_thread, target_thread, False)
+                if _user32.GetForegroundWindow() == hwnd:
+                    return True
+        except Exception:
+            pass
+
+        # Strategy 4: ShowWindow + SW_SHOW as last resort
+        try:
+            _user32.ShowWindow(hwnd, 5)  # SW_SHOW
+            _user32.SetForegroundWindow(hwnd)
+            return _user32.GetForegroundWindow() == hwnd
+        except Exception:
+            return False
 
     def _find_by_partial(self, partial: str) -> int:
         """Find window by partial title match."""

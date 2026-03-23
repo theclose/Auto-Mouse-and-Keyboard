@@ -111,6 +111,21 @@ class MacroEngine(QThread):
         self._pause_condition.wakeAll()
         self._mutex.unlock()
 
+    def get_last_checkpoint(self) -> dict | None:
+        """1.1: Get the last saved checkpoint (action_idx + context snapshot)."""
+        return self._last_checkpoint
+
+    def resume_from_checkpoint(self, checkpoint: dict | None = None) -> None:
+        """1.1: Set resume point for next run. Uses last checkpoint if not specified."""
+        cp = checkpoint or getattr(self, '_last_checkpoint', None)
+        if cp:
+            self._resume_from_idx = cp.get("action_idx", 0)
+            if self._exec_ctx and "context" in cp:
+                self._exec_ctx.restore(cp["context"])
+            logger.info("Will resume from action #%d", self._resume_from_idx)
+        else:
+            self._resume_from_idx = 0
+
     @property
     def is_running(self) -> bool:
         return self.isRunning() and not self._is_stopped
@@ -134,6 +149,8 @@ class MacroEngine(QThread):
         self._exec_ctx = ExecutionContext()
         self._exec_ctx.reset()
         set_context(self._exec_ctx)
+        self._last_checkpoint: dict | None = None
+        self._resume_from_idx: int = 0
         self.started_signal.emit()
         logger.info("Engine started – %d actions, %s loops",
                     len(self._actions),
@@ -174,11 +191,20 @@ class MacroEngine(QThread):
 
     def _execute_single_action(self, idx: int, action: 'Action') -> bool:
         """Execute one action. Returns False if engine should stop."""
+        # 1.1: Skip actions before resume point
+        if idx < self._resume_from_idx:
+            return True
         self.progress_signal.emit(idx + 1, len(self._actions))
         self.action_signal.emit(action.get_display_name())
         logger.info("Executing [%d/%d]: %s",
                      idx + 1, len(self._actions),
                      action.get_display_name())
+        # 1.1: Save checkpoint before execution
+        if self._exec_ctx:
+            self._last_checkpoint = {
+                "action_idx": idx,
+                "context": self._exec_ctx.snapshot(),
+            }
 
         try:
             success = action.run()
@@ -275,15 +301,33 @@ class MacroEngine(QThread):
                 "Macro file has invalid format (missing 'actions' key)"
             )
 
+        # 1.2: Schema validation
+        version = data.get("version", "1.0")
+        settings = data.get("settings", {})
+        if not isinstance(settings, dict):
+            settings = {}
+        name = data.get("name", "Untitled")
+
+        # Validate action entries have required fields
+        raw_actions = data.get("actions", [])
+        if not isinstance(raw_actions, list):
+            raise ValueError("'actions' must be a list")
+
         actions: list[Action] = []
-        for i, a in enumerate(data.get("actions", [])):
+        for i, a in enumerate(raw_actions):
+            if not isinstance(a, dict):
+                logger.warning("Skipping action #%d: not a dict", i)
+                continue
+            if "type" not in a:
+                logger.warning("Skipping action #%d: missing 'type' field", i)
+                continue
             try:
                 actions.append(Action.from_dict(a))
             except (ValueError, KeyError, TypeError) as exc:
-                logger.warning("Skipping invalid action #%d: %s", i, exc)
+                logger.warning("Skipping invalid action #%d (%s): %s",
+                              i, a.get('type', '?'), exc)
 
-        settings = data.get("settings", {})
-        settings["name"] = data.get("name", "Untitled")
+        settings["name"] = name
         logger.info("Macro loaded from %s (%d actions)",
                     filepath, len(actions))
         return actions, settings

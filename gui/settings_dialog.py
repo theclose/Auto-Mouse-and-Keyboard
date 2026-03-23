@@ -190,12 +190,12 @@ class SettingsDialog(QDialog):
         for key, label in [("start_stop", "Chạy / Dừng:"),
                            ("pause_resume", "Tạm dừng / Tiếp:"),
                            ("emergency_stop", "Dừng khẩn cấp:"),
-                           ("record", "Ghi (Record):")]:
+                           ("record", "Ghi:")]:
             edit = HotkeyEdit(hk.get(key, ""))
             hk_layout.addRow(label, edit)
             self._widgets[f"hotkeys.{key}"] = edit
 
-        tabs.addTab(hotkey_tab, "⌨ Hotkeys")
+        tabs.addTab(hotkey_tab, "⌨ Phím tắt")
 
         # --- Defaults tab ---
         defaults_tab = QWidget()
@@ -206,29 +206,29 @@ class SettingsDialog(QDialog):
         click_delay.setRange(0, 5000)
         click_delay.setSuffix(" ms")
         click_delay.setValue(df.get("click_delay", 100))
-        df_layout.addRow("Click Delay:", click_delay)
+        df_layout.addRow("Trễ click:", click_delay)
         self._widgets["defaults.click_delay"] = click_delay
 
         typing_speed = QSpinBox()
         typing_speed.setRange(1, 200)
         typing_speed.setSuffix(" cps")
         typing_speed.setValue(df.get("typing_speed", 50))
-        df_layout.addRow("Typing Speed:", typing_speed)
+        df_layout.addRow("Tốc độ gõ:", typing_speed)
         self._widgets["defaults.typing_speed"] = typing_speed
 
         img_conf = QDoubleSpinBox()
         img_conf.setRange(0.1, 1.0)
         img_conf.setSingleStep(0.05)
         img_conf.setValue(df.get("image_confidence", 0.8))
-        df_layout.addRow("Image Confidence:", img_conf)
+        df_layout.addRow("Độ chính xác ảnh:", img_conf)
         self._widgets["defaults.image_confidence"] = img_conf
 
-        failsafe = QCheckBox("Enable fail-safe (move mouse to corner)")
+        failsafe = QCheckBox("Bật (di chuột vào góc để dừng)")
         failsafe.setChecked(df.get("failsafe_enabled", True))
-        df_layout.addRow("Fail-Safe:", failsafe)
+        df_layout.addRow("An toàn:", failsafe)
         self._widgets["defaults.failsafe_enabled"] = failsafe
 
-        tabs.addTab(defaults_tab, "Defaults")
+        tabs.addTab(defaults_tab, "Mặc định")
 
         # --- UI tab ---
         ui_tab = QWidget()
@@ -254,15 +254,15 @@ class SettingsDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        reset_btn = QPushButton("Reset Defaults")
+        reset_btn = QPushButton("Đặt lại")
         reset_btn.clicked.connect(self._reset_defaults)
         btn_layout.addWidget(reset_btn)
 
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton("Hủy")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
-        save_btn = QPushButton("Save")
+        save_btn = QPushButton("Lưu")
         save_btn.setObjectName("primaryButton")
         save_btn.clicked.connect(self._on_save)
         btn_layout.addWidget(save_btn)

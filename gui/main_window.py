@@ -287,7 +287,7 @@ class MainWindow(QMainWindow):
         self._table = QTableWidget(0, 6)
         self._table.setAccessibleName("Bảng danh sách action")
         self._table.setHorizontalHeaderLabels(
-            ["#", "", "Action", "Delay", "✓", "Mô tả"])
+            ["#", "", "Hành động", "Trễ", "✓", "Mô tả"])
         h_header = self._table.horizontalHeader()
         assert h_header is not None
         h_header.setSectionResizeMode(
@@ -403,7 +403,7 @@ class MainWindow(QMainWindow):
         play_vbox.addWidget(self._play_btn)
 
         ctrl_row = QHBoxLayout()
-        self._pause_btn = QPushButton("⏸ Tạm dừng")
+        self._pause_btn = QPushButton("⏸ Tạm dừng (F7)")
         self._pause_btn.setObjectName("controlButton")
         self._pause_btn.setEnabled(False)
         self._pause_btn.setToolTip("Tạm dừng (F7)")
@@ -411,7 +411,7 @@ class MainWindow(QMainWindow):
         self._pause_btn.clicked.connect(self._on_pause)
         ctrl_row.addWidget(self._pause_btn)
 
-        self._stop_btn = QPushButton("⏹ Dừng")
+        self._stop_btn = QPushButton("⏹ Dừng (F8)")
         self._stop_btn.setObjectName("dangerButton")
         self._stop_btn.setEnabled(False)
         self._stop_btn.setToolTip("Dừng hoàn toàn (F8)")
@@ -553,11 +553,11 @@ class MainWindow(QMainWindow):
 
         # Header with clear button
         header_row = QHBoxLayout()
-        header_label = QLabel("📝 Application Log")
+        header_label = QLabel("📝 Nhật ký")
         header_label.setObjectName("subtitleLabel")
         header_row.addWidget(header_label)
         header_row.addStretch()
-        clear_btn = QPushButton("🗑 Clear")
+        clear_btn = QPushButton("🗑 Xóa")
         clear_btn.setFixedHeight(22)
         clear_btn.setFixedWidth(70)
         clear_btn.clicked.connect(self._clear_log)

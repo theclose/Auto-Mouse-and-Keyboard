@@ -245,36 +245,39 @@ class ActionEditorDialog(QDialog):
         self._delay_spin.setRange(0, 60000)
         self._delay_spin.setSuffix(" ms")
         self._delay_spin.setValue(0)
-        common_layout.addRow("Delay After:", self._delay_spin)
+        common_layout.addRow("Trễ sau:", self._delay_spin)
 
         self._repeat_spin = QSpinBox()
         self._repeat_spin.setRange(1, 10000)
         self._repeat_spin.setValue(1)
-        common_layout.addRow("Repeat:", self._repeat_spin)
+        common_layout.addRow("Lặp lại:", self._repeat_spin)
 
         self._desc_edit = QLineEdit()
-        self._desc_edit.setPlaceholderText("Optional description...")
-        common_layout.addRow("Description:", self._desc_edit)
+        self._desc_edit.setPlaceholderText("Mô tả tuỳ chọn...")
+        common_layout.addRow("Mô tả:", self._desc_edit)
 
-        self._enabled_check = QCheckBox("Enabled")
+        self._enabled_check = QCheckBox("Bật")
         self._enabled_check.setChecked(True)
         common_layout.addRow("", self._enabled_check)
 
         self._error_combo = QComboBox()
-        self._error_combo.addItems(["stop", "skip", "retry:3", "retry:5"])
-        self._error_combo.setToolTip("What to do when this action fails")
-        common_layout.addRow("On Error:", self._error_combo)
+        _err_items = [("Dừng", "stop"), ("Bỏ qua", "skip"),
+                      ("Thử lại: 3", "retry:3"), ("Thử lại: 5", "retry:5")]
+        for vi_label, en_val in _err_items:
+            self._error_combo.addItem(vi_label, en_val)
+        self._error_combo.setToolTip("Hành động khi action bị lỗi")
+        common_layout.addRow("Khi lỗi:", self._error_combo)
 
         layout.addWidget(common_group)
 
         # OK / Cancel
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton("Hủy")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
-        ok_btn = QPushButton("OK")
+        ok_btn = QPushButton("Đồng ý")
         ok_btn.setObjectName("primaryButton")
         ok_btn.clicked.connect(self._on_ok)
         btn_layout.addWidget(ok_btn)
@@ -426,31 +429,31 @@ class ActionEditorDialog(QDialog):
         clicks = QSpinBox()
         clicks.setRange(-100, 100)
         clicks.setValue(3)
-        self._params_layout.addRow("Clicks (+ up, - down):", clicks)
+        self._params_layout.addRow("Cuộn (+ lên, - xuống):", clicks)
         self._param_widgets["clicks"] = clicks
 
     def _build_key_press_params(self) -> None:
         key_edit = QLineEdit("enter")
-        self._params_layout.addRow("Key:", key_edit)
+        self._params_layout.addRow("Phím:", key_edit)
         self._param_widgets["key"] = key_edit
 
     def _build_key_combo_params(self) -> None:
         keys_edit = QLineEdit("ctrl+c")
-        keys_edit.setPlaceholderText("e.g. ctrl+shift+s")
-        self._params_layout.addRow("Keys (use +):", keys_edit)
+        keys_edit.setPlaceholderText("VD: ctrl+shift+s")
+        self._params_layout.addRow("Tổ hợp phím (+):", keys_edit)
         self._param_widgets["keys_str"] = keys_edit
 
     def _build_type_text_params(self) -> None:
         text_edit = QLineEdit()
-        text_edit.setPlaceholderText("Text to type...")
-        self._params_layout.addRow("Text:", text_edit)
+        text_edit.setPlaceholderText("Nội dung cần gõ...")
+        self._params_layout.addRow("Nội dung:", text_edit)
         self._param_widgets["text"] = text_edit
         interval = QDoubleSpinBox()
         interval.setRange(0.0, 1.0)
         interval.setSingleStep(0.01)
         interval.setValue(0.02)
         interval.setSuffix(" s")
-        self._params_layout.addRow("Interval:", interval)
+        self._params_layout.addRow("Khoảng cách:", interval)
         self._param_widgets["interval"] = interval
 
     def _build_delay_params(self) -> None:
@@ -458,7 +461,7 @@ class ActionEditorDialog(QDialog):
         dur.setRange(0, 300000)
         dur.setSuffix(" ms")
         dur.setValue(1000)
-        self._params_layout.addRow("Duration:", dur)
+        self._params_layout.addRow("Thời gian:", dur)
         self._param_widgets["duration_ms"] = dur
 
     def _build_image_params(self, atype: str) -> None:
@@ -468,7 +471,7 @@ class ActionEditorDialog(QDialog):
             timeout.setRange(0, 120000)
             timeout.setSuffix(" ms")
             timeout.setValue(10000)
-            self._params_layout.addRow("Timeout:", timeout)
+            self._params_layout.addRow("Giới hạn:", timeout)
             self._param_widgets["timeout_ms"] = timeout
         if atype == "click_on_image":
             self._add_button_param()
@@ -478,13 +481,13 @@ class ActionEditorDialog(QDialog):
         dir_layout = QHBoxLayout()
         dir_edit = QLineEdit("macros/screenshots")
         dir_edit.setPlaceholderText("Thư mục lưu ảnh...")
-        dir_browse = QPushButton("Browse")
+        dir_browse = QPushButton("Duyệt")
         dir_browse.clicked.connect(lambda: self._browse_dir(dir_edit))
         dir_layout.addWidget(dir_edit)
         dir_layout.addWidget(dir_browse)
         dir_wrapper = QWidget()
         dir_wrapper.setLayout(dir_layout)
-        self._params_layout.addRow("Save Folder:", dir_wrapper)
+        self._params_layout.addRow("Thư mục:", dir_wrapper)
         self._param_widgets["save_dir"] = dir_edit
 
         # Filename pattern
@@ -492,7 +495,7 @@ class ActionEditorDialog(QDialog):
         pattern_edit.setToolTip(
             "%Y=năm, %m=tháng, %d=ngày, %H=giờ, %M=phút, %S=giây"
         )
-        self._params_layout.addRow("Filename:", pattern_edit)
+        self._params_layout.addRow("Tên file:", pattern_edit)
         self._param_widgets["filename_pattern"] = pattern_edit
 
         # Optional region (0 = full screen)
@@ -508,7 +511,7 @@ class ActionEditorDialog(QDialog):
             self._param_widgets[key] = spin
 
     def _browse_dir(self, line_edit: QLineEdit) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Select Folder")
+        path = QFileDialog.getExistingDirectory(self, "Chọn thư mục")
         if path:
             line_edit.setText(path)
 
@@ -518,19 +521,19 @@ class ActionEditorDialog(QDialog):
             spin = QSpinBox()
             spin.setRange(0, 255)
             spin.setValue(default_val)
-            self._params_layout.addRow(f"Color {color_name.upper()}:", spin)
+            self._params_layout.addRow(f"Màu {color_name.upper()}:", spin)
             self._param_widgets[color_name] = spin
         tol = QSpinBox()
         tol.setRange(0, 255)
         tol.setValue(10)
-        self._params_layout.addRow("Tolerance:", tol)
+        self._params_layout.addRow("Sai số:", tol)
         self._param_widgets["tolerance"] = tol
         if atype == "wait_for_color":
             timeout = QSpinBox()
             timeout.setRange(0, 120000)
             timeout.setSuffix(" ms")
             timeout.setValue(10000)
-            self._params_layout.addRow("Timeout:", timeout)
+            self._params_layout.addRow("Giới hạn:", timeout)
             self._param_widgets["timeout_ms"] = timeout
 
     def _add_xy_params(self) -> None:
@@ -545,12 +548,12 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["y"] = y_spin
 
         # Coordinate Picker button
-        pick_btn = QPushButton("📌 Pick from Screen")
+        pick_btn = QPushButton("📌 Chọn trên màn hình")
         pick_btn.setObjectName("primaryButton")
         pick_btn.setToolTip(
-            "Click to pick coordinates from screen.\n"
-            "Click on any point → coordinates auto-fill.\n"
-            "Press Escape to cancel."
+            "Nhấn để chọn toạ độ trên màn hình.\n"
+            "Click bất kỳ → toạ độ tự điền.\n"
+            "Nhấn Escape để hủy."
         )
         pick_btn.clicked.connect(
             lambda: self._start_coordinate_picker(x_spin, y_spin)
@@ -565,14 +568,14 @@ class ActionEditorDialog(QDialog):
         timeout.setRange(0, 120000)
         timeout.setSuffix(" ms")
         timeout.setValue(5000)
-        self._params_layout.addRow("Timeout:", timeout)
+        self._params_layout.addRow("Giới hạn:", timeout)
         self._param_widgets["timeout_ms"] = timeout
 
         # 3.1: ELSE action (optional)
         else_action = QLineEdit()
-        else_action.setPlaceholderText('Optional ELSE: {"type":"log_to_file","params":{"message":"Image not found"}}')
-        else_action.setToolTip("Action to execute when image is NOT found (JSON)")
-        self._params_layout.addRow("Else Action:", else_action)
+        else_action.setPlaceholderText('Tuỳ chọn: {"type":"log_to_file","params":{"message":"Không tìm thấy ảnh"}}')
+        else_action.setToolTip("Action thực thi khi ảnh KHÔNG tìm thấy (JSON)")
+        self._params_layout.addRow("Nếu không:", else_action)
         self._param_widgets["else_action_json"] = else_action
 
     def _build_loop_block_params(self) -> None:
@@ -580,116 +583,116 @@ class ActionEditorDialog(QDialog):
         iterations = QSpinBox()
         iterations.setRange(0, 999999)
         iterations.setValue(1)
-        iterations.setSpecialValueText("∞ Infinite")
-        iterations.setToolTip("0 = infinite loop (until stopped)")
-        self._params_layout.addRow("Iterations:", iterations)
+        iterations.setSpecialValueText("∞ Vô hạn")
+        iterations.setToolTip("0 = lặp vô hạn (cho đến khi dừng)")
+        self._params_layout.addRow("Số lần lặp:", iterations)
         self._param_widgets["iterations"] = iterations
 
     def _build_if_variable_params(self) -> None:
         var_name = QLineEdit()
-        var_name.setPlaceholderText("e.g. counter, row")
-        self._params_layout.addRow("Variable:", var_name)
+        var_name.setPlaceholderText("VD: counter, row")
+        self._params_layout.addRow("Biến:", var_name)
         self._param_widgets["var_name"] = var_name
 
         operator = QComboBox()
         operator.addItems(["==", "!=", ">", "<", ">=", "<="])
-        self._params_layout.addRow("Operator:", operator)
+        self._params_layout.addRow("Toán tử:", operator)
         self._param_widgets["operator"] = operator
 
         compare_value = QLineEdit()
-        compare_value.setPlaceholderText("e.g. 10, hello")
-        self._params_layout.addRow("Compare Value:", compare_value)
+        compare_value.setPlaceholderText("VD: 10, hello")
+        self._params_layout.addRow("Giá trị so sánh:", compare_value)
         self._param_widgets["compare_value"] = compare_value
 
         # 3.1: ELSE action (optional)
         else_action = QLineEdit()
-        else_action.setPlaceholderText('Optional JSON: {"type":"set_variable","params":{"var_name":"x","value":"0","operation":"set"}}')
-        else_action.setToolTip("Define an action to execute when condition is FALSE (JSON format)")
-        self._params_layout.addRow("Else Action:", else_action)
+        else_action.setPlaceholderText('Tuỳ chọn: {"type":"set_variable","params":{"var_name":"x","value":"0","operation":"set"}}')
+        else_action.setToolTip("Action thực thi khi điều kiện SAI (JSON)")
+        self._params_layout.addRow("Nếu không:", else_action)
         self._param_widgets["else_action_json"] = else_action
 
     def _build_set_variable_params(self) -> None:
         var_name = QLineEdit()
-        var_name.setPlaceholderText("e.g. counter, row")
-        self._params_layout.addRow("Variable:", var_name)
+        var_name.setPlaceholderText("VD: counter, row")
+        self._params_layout.addRow("Biến:", var_name)
         self._param_widgets["var_name"] = var_name
 
         value = QLineEdit()
-        value.setPlaceholderText("e.g. 0, 1, hello")
-        self._params_layout.addRow("Value:", value)
+        value.setPlaceholderText("VD: 0, 1, hello")
+        self._params_layout.addRow("Giá trị:", value)
         self._param_widgets["value"] = value
 
         operation = QComboBox()
         operation.addItems(["set", "increment", "decrement", "add",
                            "subtract", "multiply", "divide", "modulo", "eval"])
-        self._params_layout.addRow("Operation:", operation)
+        self._params_layout.addRow("Phép toán:", operation)
         self._param_widgets["operation"] = operation
 
     def _build_split_string_params(self) -> None:
         src = QLineEdit()
-        src.setPlaceholderText("Source variable name")
-        self._params_layout.addRow("Source Var:", src)
+        src.setPlaceholderText("Tên biến nguồn")
+        self._params_layout.addRow("Biến nguồn:", src)
         self._param_widgets["source_var"] = src
 
         delim = QLineEdit()
         delim.setText(",")
-        self._params_layout.addRow("Delimiter:", delim)
+        self._params_layout.addRow("Dấu phân cách:", delim)
         self._param_widgets["delimiter"] = delim
 
         idx = QSpinBox()
         idx.setRange(0, 100)
-        self._params_layout.addRow("Field Index:", idx)
+        self._params_layout.addRow("Vị trí:", idx)
         self._param_widgets["field_index"] = idx
 
         target = QLineEdit()
-        target.setPlaceholderText("Target variable name")
-        self._params_layout.addRow("Store in:", target)
+        target.setPlaceholderText("Tên biến lưu kết quả")
+        self._params_layout.addRow("Lưu vào:", target)
         self._param_widgets["target_var"] = target
 
     def _build_comment_params(self) -> None:
         text = QLineEdit()
-        text.setPlaceholderText("Section label, e.g. 'Login Phase'")
-        self._params_layout.addRow("Comment:", text)
+        text.setPlaceholderText("Nhãn mục, VD: 'Giai đoạn đăng nhập'")
+        self._params_layout.addRow("Ghi chú:", text)
         self._param_widgets["text"] = text
 
     def _build_activate_window_params(self) -> None:
         title = QLineEdit()
-        title.setPlaceholderText("Window title (partial match)")
-        self._params_layout.addRow("Window Title:", title)
+        title.setPlaceholderText("Tiêu đề cửa sổ (tìm gần đúng)")
+        self._params_layout.addRow("Tiêu đề:", title)
         self._param_widgets["window_title"] = title
 
-        exact = QCheckBox("Exact Match")
+        exact = QCheckBox("Khớp chính xác")
         self._params_layout.addRow("", exact)
         self._param_widgets["exact_match"] = exact
 
     def _build_log_params(self) -> None:
         msg = QLineEdit()
-        msg.setPlaceholderText("Message (supports ${var})")
-        self._params_layout.addRow("Message:", msg)
+        msg.setPlaceholderText("Nội dung (hỗ trợ ${var})")
+        self._params_layout.addRow("Nội dung:", msg)
         self._param_widgets["message"] = msg
 
         path = QLineEdit()
         path.setPlaceholderText("macros/macro_log.txt")
-        self._params_layout.addRow("Log File:", path)
+        self._params_layout.addRow("File log:", path)
         self._param_widgets["file_path"] = path
 
     def _build_read_clipboard_params(self) -> None:
         var_name = QLineEdit()
-        var_name.setPlaceholderText("Variable name to store clipboard")
+        var_name.setPlaceholderText("Tên biến lưu clipboard")
         var_name.setText("clipboard")
-        self._params_layout.addRow("Store in:", var_name)
+        self._params_layout.addRow("Lưu vào:", var_name)
         self._param_widgets["var_name"] = var_name
 
     def _build_read_file_line_params(self) -> None:
         path = QLineEdit()
-        path.setPlaceholderText("Path to file")
-        self._params_layout.addRow("File Path:", path)
+        path.setPlaceholderText("Đường dẫn file")
+        self._params_layout.addRow("Đường dẫn:", path)
         self._param_widgets["file_path"] = path
 
         line = QLineEdit()
-        line.setPlaceholderText("Line number (or ${var})")
+        line.setPlaceholderText("Số dòng (hoặc ${var})")
         line.setText("1")
-        self._params_layout.addRow("Line #:", line)
+        self._params_layout.addRow("Dòng:", line)
         self._param_widgets["line_number"] = line
 
         var_name = QLineEdit()
@@ -699,29 +702,29 @@ class ActionEditorDialog(QDialog):
 
     def _build_write_file_params(self) -> None:
         path = QLineEdit()
-        path.setPlaceholderText("Output file path")
-        self._params_layout.addRow("File Path:", path)
+        path.setPlaceholderText("Đường dẫn file xuất")
+        self._params_layout.addRow("Đường dẫn:", path)
         self._param_widgets["file_path"] = path
 
         text = QLineEdit()
-        text.setPlaceholderText("Text to write (supports ${var})")
-        self._params_layout.addRow("Text:", text)
+        text.setPlaceholderText("Nội dung ghi (hỗ trợ ${var})")
+        self._params_layout.addRow("Nội dung:", text)
         self._param_widgets["text"] = text
 
         mode = QComboBox()
         mode.addItems(["append", "overwrite"])
-        self._params_layout.addRow("Mode:", mode)
+        self._params_layout.addRow("Chế độ:", mode)
         self._param_widgets["mode"] = mode
 
     def _build_secure_text_params(self) -> None:
         text_edit = QLineEdit()
-        text_edit.setPlaceholderText("Enter sensitive text (will be encrypted)")
+        text_edit.setPlaceholderText("Nhập nội dung nhạy cảm (sẽ được mã hóa)")
         text_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self._params_layout.addRow("Text:", text_edit)
+        self._params_layout.addRow("Nội dung:", text_edit)
         self._param_widgets["encrypted_text"] = text_edit
 
-        encrypt_btn = QPushButton("🔒 Encrypt Now")
-        encrypt_btn.setToolTip("Encrypt the text using Windows DPAPI")
+        encrypt_btn = QPushButton("🔒 Mã hóa ngay")
+        encrypt_btn.setToolTip("Mã hóa nội dung bằng Windows DPAPI")
         def _do_encrypt():
             from core.secure import encrypt
             raw = text_edit.text()
@@ -732,15 +735,15 @@ class ActionEditorDialog(QDialog):
 
     def _build_run_macro_params(self) -> None:
         path = QLineEdit()
-        path.setPlaceholderText("Path to macro .json file")
-        self._params_layout.addRow("Macro File:", path)
+        path.setPlaceholderText("Đường dẫn file macro .json")
+        self._params_layout.addRow("File macro:", path)
         self._param_widgets["macro_path"] = path
 
-        browse_btn = QPushButton("📂 Browse...")
+        browse_btn = QPushButton("📂 Duyệt...")
         def _browse():
             from PyQt6.QtWidgets import QFileDialog
             fpath, _ = QFileDialog.getOpenFileName(
-                self, "Select Macro", "macros",
+                self, "Chọn macro", "macros",
                 "JSON Macros (*.json)")
             if fpath:
                 path.setText(fpath)
@@ -753,13 +756,13 @@ class ActionEditorDialog(QDialog):
         w_spin = QSpinBox()
         w_spin.setRange(10, 9999)
         w_spin.setValue(200)
-        self._params_layout.addRow("Width:", w_spin)
+        self._params_layout.addRow("Chiều rộng:", w_spin)
         self._param_widgets["width"] = w_spin
 
         h_spin = QSpinBox()
         h_spin.setRange(10, 9999)
         h_spin.setValue(50)
-        self._params_layout.addRow("Height:", h_spin)
+        self._params_layout.addRow("Chiều cao:", h_spin)
         self._param_widgets["height"] = h_spin
 
         var_name = QLineEdit()
@@ -769,8 +772,8 @@ class ActionEditorDialog(QDialog):
 
         lang = QLineEdit()
         lang.setText("eng")
-        lang.setPlaceholderText("OCR language (eng, vie, etc.)")
-        self._params_layout.addRow("Language:", lang)
+        lang.setPlaceholderText("Ngôn ngữ (eng, vie, ...)")
+        self._params_layout.addRow("Ngôn ngữ:", lang)
         self._param_widgets["lang"] = lang
 
     def _start_coordinate_picker(self, x_spin: QSpinBox, y_spin: QSpinBox) -> None:
@@ -812,22 +815,22 @@ class ActionEditorDialog(QDialog):
         dur.setSingleStep(0.1)
         dur.setValue(0.0)
         dur.setSuffix(" s")
-        self._params_layout.addRow("Duration:", dur)
+        self._params_layout.addRow("Thời gian:", dur)
         self._param_widgets["duration"] = dur
 
     def _add_button_param(self) -> None:
         btn = QComboBox()
         btn.addItems(["left", "right", "middle"])
-        self._params_layout.addRow("Button:", btn)
+        self._params_layout.addRow("Nút chuột:", btn)
         self._param_widgets["button"] = btn
 
     def _add_image_params(self) -> None:
         img_layout = QHBoxLayout()
         img_edit = QLineEdit()
-        img_edit.setPlaceholderText("Path to template image...")
-        browse_btn = QPushButton("Browse")
+        img_edit.setPlaceholderText("Đường dẫn ảnh mẫu...")
+        browse_btn = QPushButton("Duyệt")
         browse_btn.clicked.connect(lambda: self._browse_image(img_edit))
-        capture_btn = QPushButton("📸 Capture")
+        capture_btn = QPushButton("📸 Chụp")
         capture_btn.setObjectName("primaryButton")
         capture_btn.setToolTip(
             "Chụp vùng màn hình → tự động điền path\n"
@@ -849,7 +852,7 @@ class ActionEditorDialog(QDialog):
         conf.setRange(0.1, 1.0)
         conf.setSingleStep(0.05)
         conf.setValue(0.8)
-        self._params_layout.addRow("Confidence:", conf)
+        self._params_layout.addRow("Độ chính xác:", conf)
         self._param_widgets["confidence"] = conf
 
     def _browse_image(self, line_edit: QLineEdit) -> None:
@@ -905,11 +908,11 @@ class ActionEditorDialog(QDialog):
         self._repeat_spin.setValue(action.repeat_count)
         self._desc_edit.setText(action.description)
         self._enabled_check.setChecked(action.enabled)
-        idx = self._error_combo.findText(action.on_error)
-        if idx >= 0:
-            self._error_combo.setCurrentIndex(idx)
-        else:
-            self._error_combo.setEditText(action.on_error)
+        # Match by internal data value (EN), not display text
+        for i in range(self._error_combo.count()):
+            if self._error_combo.itemData(i) == action.on_error:
+                self._error_combo.setCurrentIndex(i)
+                break
 
         # Type-specific params
         params = action._get_params()
@@ -940,7 +943,7 @@ class ActionEditorDialog(QDialog):
             action.repeat_count = self._repeat_spin.value()
             action.description = self._desc_edit.text()
             action.enabled = self._enabled_check.isChecked()
-            action.on_error = self._error_combo.currentText()
+            action.on_error = self._error_combo.currentData() or "stop"
 
             if not self._validate_image_path(action):
                 return

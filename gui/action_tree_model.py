@@ -31,12 +31,25 @@ NUM_COLUMNS = 4
 
 _COLUMN_HEADERS = ["✓", "Loại", "Chi tiết", "Delay"]
 
-# Icons for composite types
+# Icons for action types (matches main_window._TYPE_ICONS)
 _TYPE_ICONS: dict[str, str] = {
+    "mouse_click": "🖱", "mouse_double_click": "🖱",
+    "mouse_right_click": "🖱", "mouse_move": "🖱",
+    "mouse_drag": "🖱", "mouse_scroll": "🖱",
+    "key_press": "⌨", "key_combo": "⌨",
+    "type_text": "⌨", "hotkey": "⌨",
+    "delay": "⏱",
+    "wait_for_image": "🖼", "click_on_image": "🖼",
+    "image_exists": "🖼", "take_screenshot": "📸",
+    "check_pixel_color": "🎨", "wait_for_color": "🎨",
     "loop_block": "🔁",
-    "if_image_found": "🔀",
-    "if_pixel_color": "🔀",
-    "if_variable": "🔀",
+    "if_image_found": "❓", "if_pixel_color": "🎯", "if_variable": "📏",
+    "set_variable": "📊", "split_string": "✂️",
+    "comment": "💬",
+    "activate_window": "🖥", "log_to_file": "📝",
+    "read_clipboard": "📋", "read_file_line": "📂",
+    "write_to_file": "💾",
+    "secure_type_text": "🔒", "run_macro": "▶️", "capture_text": "🔍",
 }
 
 
@@ -118,7 +131,7 @@ class ActionTreeModel(QAbstractItemModel):
 
         if action.is_composite:
             # For If* actions, show THEN/ELSE branches as separate groups
-            if hasattr(action, '_then_actions'):
+            if action.has_branches:
                 for j, child in enumerate(action.then_children):
                     child_node = self._build_node(
                         child, parent=node, row=j, branch_label="THEN"
@@ -267,7 +280,9 @@ class ActionTreeModel(QAbstractItemModel):
                 index.column() == COL_ENABLED:
             node: _TreeNode = index.internalPointer()  # type: ignore
             if node:
-                node.action.enabled = (value == Qt.CheckState.Checked.value)
+                checked = (value == Qt.CheckState.Checked.value
+                           or value == Qt.CheckState.Checked)
+                node.action.enabled = checked
                 self.dataChanged.emit(index, index, [role])
                 return True
         return False

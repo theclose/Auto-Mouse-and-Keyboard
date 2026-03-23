@@ -139,6 +139,12 @@ class Action(ABC):
         """Set ELSE branch. Override in conditionals."""
         pass
 
+    @property
+    def has_branches(self) -> bool:
+        """True if this composite uses THEN/ELSE branches (If* actions).
+        False for simple composites like LoopBlock."""
+        return False
+
     # -- abstract interface --------------------------------------------------
     @abstractmethod
     def execute(self) -> bool:

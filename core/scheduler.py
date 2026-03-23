@@ -105,8 +105,8 @@ class LoopBlock(Action):
                 if ctx and ctx.get_var('__continue__'):
                     ctx.set_var('__continue__', False)
                     break
-                success = action.run()
                 emit_nested_step([i], action.get_display_name())
+                success = action.run()
                 if not success:
                     return False
             if self.iterations > 0 and count >= self.iterations:
@@ -238,6 +238,10 @@ class IfImageFound(Action):
         return True
 
     @property
+    def has_branches(self) -> bool:
+        return True
+
+    @property
     def children(self) -> list[Action]:
         return list(self._then_actions) + list(self._else_actions)
 
@@ -351,6 +355,10 @@ class IfPixelColor(Action):
     # -- composite interface (v3.0) --
     @property
     def is_composite(self) -> bool:
+        return True
+
+    @property
+    def has_branches(self) -> bool:
         return True
 
     @property
@@ -473,6 +481,10 @@ class IfVariable(Action):
     # -- composite interface (v3.0) --
     @property
     def is_composite(self) -> bool:
+        return True
+
+    @property
+    def has_branches(self) -> bool:
         return True
 
     @property

@@ -967,21 +967,44 @@ class MainWindow(QMainWindow):
             f" | \ud83d\udd04 {loops}\u00d7 = ~{total_ms / 1000:.1f}s")
 
     def _selected_row(self) -> int:
+        """Return the single selected row index, or -1."""
+        if self._tree_mode:
+            sel = self._tree.selectionModel()
+            if sel is None:
+                return -1
+            indexes = sel.selectedRows()
+            if not indexes:
+                return -1
+            idx = indexes[0]
+            if idx.parent().isValid():
+                return -1  # Nested child — not a root-level action
+            return idx.row()
         sel_model = self._table.selectionModel()
         assert sel_model is not None
         rows = sel_model.selectedRows()
         return rows[0].row() if rows else -1
 
     def _selected_rows(self) -> list[int]:
-        """Return all selected row indices (sorted)."""
+        """Return all selected row indices (sorted). Root-level only."""
+        if self._tree_mode:
+            sel = self._tree.selectionModel()
+            if sel is None:
+                return []
+            return sorted(
+                idx.row() for idx in sel.selectedRows()
+                if not idx.parent().isValid()
+            )
         sel_model = self._table.selectionModel()
         assert sel_model is not None
         return sorted(idx.row() for idx in sel_model.selectedRows())
 
     def _show_context_menu(self, pos: Any) -> None:
-        """Right-click context menu for action table."""
+        """Right-click context menu for action table/tree."""
         from PyQt6.QtWidgets import QMenu
-        vp = self._table.viewport()
+        if self._tree_mode:
+            vp = self._tree.viewport()
+        else:
+            vp = self._table.viewport()
         assert vp is not None
         global_pos = vp.mapToGlobal(pos)
 

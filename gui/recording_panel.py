@@ -64,23 +64,20 @@ class RecordingPanel(QWidget):
         opt2_layout.addStretch()
         layout.addLayout(opt2_layout)
 
-        # Buttons: Record / Pause / Stop
+        # Buttons: Record / Pause / Stop (hotkeys shown dynamically)
         btn_layout = QHBoxLayout()
         self._record_btn = QPushButton("⏺ Ghi (F9)")
         self._record_btn.setObjectName("dangerButton")
-        self._record_btn.setToolTip("Bắt đầu ghi hành động (F9)")
         self._record_btn.clicked.connect(self._start_recording)
         btn_layout.addWidget(self._record_btn)
 
-        self._pause_btn = QPushButton("⏸ Tạm dừng")
+        self._pause_btn = QPushButton("⏸ Tạm dừng (F7)")
         self._pause_btn.setEnabled(False)
-        self._pause_btn.setToolTip("Tạm dừng/tiếp tục ghi")
         self._pause_btn.clicked.connect(self._toggle_pause)
         btn_layout.addWidget(self._pause_btn)
 
-        self._stop_btn = QPushButton("⏹ Dừng")
+        self._stop_btn = QPushButton("⏹ Dừng (F8)")
         self._stop_btn.setEnabled(False)
-        self._stop_btn.setToolTip("Dừng ghi và thêm vào danh sách")
         self._stop_btn.clicked.connect(self._stop_recording)
         btn_layout.addWidget(self._stop_btn)
         layout.addLayout(btn_layout)
@@ -95,6 +92,25 @@ class RecordingPanel(QWidget):
         self._status_label = QLabel("Sẵn sàng ghi")
         self._status_label.setObjectName("subtitleLabel")
         layout.addWidget(self._status_label)
+
+    # -- Public API: update hotkey labels from config -----------------------
+    def update_hotkeys(self, config: dict) -> None:
+        """Update button labels with current hotkey assignments."""
+        hk = config.get("hotkeys", {})
+        rec = hk.get("record", "F9")
+        pause = hk.get("pause_resume", "F7")
+        stop = hk.get("emergency_stop", "F8")
+
+        self._record_btn.setText(f"⏺ Ghi ({rec})")
+        self._record_btn.setToolTip(f"Bắt đầu ghi hành động ({rec})")
+
+        # Only update pause/stop text if not actively recording
+        if not self._recorder.is_recording:
+            self._pause_btn.setText(f"⏸ Tạm dừng ({pause})")
+            self._stop_btn.setText(f"⏹ Dừng ({stop})")
+        self._pause_btn.setToolTip(f"Tạm dừng/tiếp tục ghi ({pause})")
+        self._stop_btn.setToolTip(f"Dừng ghi ({stop})")
+
 
     # -- External hotkey trigger (called from MainWindow) --------------------
     def toggle_recording(self) -> None:

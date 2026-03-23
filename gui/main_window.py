@@ -480,6 +480,7 @@ class MainWindow(QMainWindow):
         self._rec_panel.recording_finished.connect(self._on_recording_done)
         self._rec_panel.recording_state_changed.connect(
             self._on_recording_state_changed)
+        self._rec_panel.update_hotkeys(self._config)
         right_layout.addWidget(self._rec_panel)
 
         # ── 4. Execution (progress + log merged) ──────────────
@@ -1466,6 +1467,8 @@ class MainWindow(QMainWindow):
                 f"Dừng tạm: {hk.get('pause_resume', 'F7')}  |  "
                 f"Dừng: {hk.get('emergency_stop', 'F8')}  |  "
                 f"Ghi: {hk.get('record', 'F9')}")
+            # Update recording panel button labels
+            self._rec_panel.update_hotkeys(config)
             self._status_label.setText("Cài đặt đã lưu ✅")
             logger.info("Settings saved — hotkeys re-registered")
         except Exception:

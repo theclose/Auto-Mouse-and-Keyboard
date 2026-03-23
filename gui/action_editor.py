@@ -168,7 +168,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản 2: Copy đường dẫn ảnh trên web</b><br>"
         "→ Right-click ảnh → click 'Copy image address'<br>"
         "→ Read Clipboard → Write to File (lưu URL)<br>"
-        "<i>Giải thích:</i> Context menu trình duyệt có option copy URL mà Ctrl+C không làm được."
+        "<i>Giải thích:</i> Context menu trình duyệt có option copy URL mà Ctrl+C không làm được.<br><br><b>📌 Kịch bản 3: Đổi tên file hàng loạt</b><br>Right-click file → Key Press M (Rename) → Ctrl+A → Type Text tên mới → Enter<br><i>Giải thích:</i> Phím M trong context menu Explorer = Rename. Nhanh hơn click option."
     ),
     "mouse_move": (
         "<b>🖱 Move — Di chuyển chuột</b><br><br>"
@@ -178,7 +178,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản 1: Mở submenu của thanh menu</b><br>"
         "Trong Excel, hover vào 'Format' → submenu hiện ra.<br>"
         "→ Move đến 'Format' (X=200, Y=30) → Delay 500ms → Click submenu item<br>"
-        "<i>Giải thích:</i> Nếu click thẳng vào submenu item mà chưa hover parent → menu chưa hiện."
+        "<i>Giải thích:</i> Nếu click thẳng vào submenu item mà chưa hover parent → menu chưa hiện.<br><br><b>📌 Kịch bản 2: Hover để hiện tooltip giá trị</b><br>Trong dashboard, hover lên biểu đồ → tooltip hiện số liệu.<br>→ Move đến điểm data (X=450, Y=280) → Delay 1s → Take Screenshot<br><i>Giải thích:</i> Tooltip chỉ hiện khi chuột ở trên phần tử. Delay 1s cho tooltip render.<br><br><b>📌 Kịch bản 3: Chuẩn bị kéo scrollbar</b><br>App không hỗ trợ scroll wheel → cần kéo scrollbar thủ công.<br>→ Move đến scrollbar thumb → Mouse Drag xuống vị trí mới<br><i>Giải thích:</i> Move trước rồi Drag — tách 2 bước cho chính xác."
     ),
     "mouse_drag": (
         "<b>🖱 Drag — Kéo thả chuột</b><br><br>"
@@ -192,7 +192,7 @@ _ACTION_HELP: dict[str, str] = {
         "<i>Giải thích:</i> Duration quá nhanh (<0.1s) có thể khiến app không nhận drag.<br><br>"
         "<b>📌 Kịch bản 2: Chọn vùng text bằng kéo chuột</b><br>"
         "→ Move đến đầu dòng 1 → Drag đến cuối dòng 3 → Ctrl+C<br>"
-        "<i>Giải thích:</i> Khác Ctrl+A (chọn tất cả), drag cho phép chọn chính xác vùng muốn."
+        "<i>Giải thích:</i> Khác Ctrl+A (chọn tất cả), drag cho phép chọn chính xác vùng muốn.<br><br><b>📌 Kịch bản 3: Di chuyển widget trong dashboard</b><br>Kéo widget sang vị trí mới trong ứng dụng quản lý.<br>→ Move đến tiêu đề widget → Drag đến (X=200, Y=100), Duration=0.8s<br><i>Giải thích:</i> Web app cần drag chậm để JavaScript kịp xử lý sự kiện dragover."
     ),
     "mouse_scroll": (
         "<b>🖱 Scroll — Cuộn chuột</b><br><br>"
@@ -200,7 +200,7 @@ _ACTION_HELP: dict[str, str] = {
         "<hr>"
         "<b>📌 Kịch bản 1: Cuộn xuống cuối trang web để chụp ảnh</b><br>"
         "→ Loop: Scroll Clicks=-5 → Delay 1s → Take Screenshot → lặp lại<br>"
-        "<i>Giải thích:</i> Clicks=-5 cuộn xuống khoảng 5 dòng. Delay cho trang load lazy content."
+        "<i>Giải thích:</i> Clicks=-5 cuộn xuống khoảng 5 dòng. Delay cho trang load lazy content.<br><br><b>📌 Kịch bản 2: Zoom bản đồ</b><br>Google Maps, AutoCAD dùng scroll wheel để zoom.<br>→ Move đến vùng cần zoom → Scroll Clicks=3 (zoom in) hoặc -3 (zoom out)<br><i>Giải thích:</i> X, Y xác định trung tâm zoom. Phải Move chuột trước.<br><br><b>📌 Kịch bản 3: Cuộn danh sách dropdown dài</b><br>Dropdown 200 item, cần cuộn xuống item thứ 150.<br>→ Click dropdown → Scroll Clicks=-30 → Click on Image (item cần chọn)<br><i>Giải thích:</i> Clicks=-30 cuộn nhanh ~30 dòng."
     ),
     "key_press": (
         "<b>⌨ Key Press — Nhấn 1 phím</b><br><br>"
@@ -257,7 +257,7 @@ _ACTION_HELP: dict[str, str] = {
         "<i>Giải thích:</i> Phím tắt mở trực tiếp Task Manager, không cần qua Ctrl+Alt+Del.<br><br>"
         "<b>📌 Kịch bản 2: Save As file với tên mới</b><br>"
         "→ Hotkey <b>'ctrl+shift+s'</b> → Type Text tên mới → Enter<br>"
-        "<i>Giải thích:</i> Ctrl+S lưu đè, Ctrl+Shift+S mở 'Save As' để lưu file mới."
+        "<i>Giải thích:</i> Ctrl+S lưu đè, Ctrl+Shift+S mở 'Save As' để lưu file mới.<br><br><b>📌 Kịch bản 3: Chụp màn hình vùng chọn</b><br>→ Hotkey <b>win+shift+s</b> → đợi Snipping Tool → Drag chọn vùng<br><i>Giải thích:</i> Phím tắt Windows 10/11 mở Snip &amp; Sketch. Macro tự chụp vùng cố định."
     ),
     "wait_for_image": (
         "<b>🖼 Wait for Image — Đợi ảnh xuất hiện</b><br><br>"
@@ -271,7 +271,7 @@ _ACTION_HELP: dict[str, str] = {
         "Wait for Image tự adjust: mạng nhanh → chuyển ngay, mạng chậm → đợi thêm.<br><br>"
         "<b>📌 Kịch bản 2: Đợi file download xong</b><br>"
         "→ Ảnh mẫu = <b>'Download complete'</b>, Timeout = <b>120s</b><br>"
-        "<i>Giải thích:</i> Dùng Timeout lớn cho file lớn. Nếu quá timeout → on_error xử lý."
+        "<i>Giải thích:</i> Dùng Timeout lớn cho file lớn. Nếu quá timeout → on_error xử lý.<br><br><b>📌 Kịch bản 3: Đợi máy in hoàn tất</b><br>Gửi lệnh in → đợi thông báo hoàn tất hiện trên taskbar.<br>→ Ảnh mẫu = <b>icon máy in OK</b>, Timeout = <b>180s</b><br><i>Giải thích:</i> Timeout 3 phút cho tài liệu dài. Macro tiếp ngay khi in xong."
     ),
     "click_on_image": (
         "<b>🖼 Click on Image — Tìm ảnh rồi click</b><br><br>"
@@ -286,7 +286,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản 2: Click icon trong System Tray</b><br>"
         "Icon system tray rất nhỏ (16×16px), tọa độ thay đổi tùy số app chạy.<br>"
         "→ Ảnh mẫu = ảnh icon app (chụp từ tray)<br>"
-        "<i>Giải thích:</i> Tọa độ cố định sẽ sai khi có app khác mở/đóng."
+        "<i>Giải thích:</i> Tọa độ cố định sẽ sai khi có app khác mở/đóng.<br><br><b>📌 Kịch bản 3: Chọn sản phẩm theo ảnh</b><br>Click vào ảnh sản phẩm trong danh sách web shop.<br>→ Ảnh mẫu = thumbnail chụp sẵn, Confidence = <b>0.85</b><br><i>Giải thích:</i> Ảnh có thể resize nhẹ → 0.85 cho phép sai lệch nhỏ."
     ),
     "image_exists": (
         "<b>🖼 Image Exists — Kiểm tra ảnh tồn tại</b><br><br>"
@@ -296,7 +296,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản: Kiểm tra đã login chưa trước khi làm việc</b><br>"
         "→ Image Exists: ảnh = <b>avatar user</b><br>"
         "→ Nếu có → tiếp tục. Nếu không → run macro 'login.json'<br>"
-        "<i>Giải thích:</i> Kết hợp với If Image Found để rẽ nhánh tự động."
+        "<i>Giải thích:</i> Kết hợp với If Image Found để rẽ nhánh tự động.<br><br><b>📌 Kịch bản 2: Kiểm tra có popup lỗi không</b><br>Sau submit form, check popup Error.<br>→ Image Exists: ảnh <b>icon lỗi đỏ</b><br>→ Nếu có → Take Screenshot → dừng. Nếu không → tiếp tục<br><i>Giải thích:</i> Check nhanh 1 lần, không đợi như Wait for Image.<br><br><b>📌 Kịch bản 3: Kiểm tra app đã mở chưa</b><br>→ Image Exists: ảnh <b>title bar app</b><br>→ Không có → mở app → Delay 3s → check lại<br><i>Giải thích:</i> Tránh lỗi khi macro chạy mà app đích chưa sẵn sàng."
     ),
     "take_screenshot": (
         "<b>🖼 Take Screenshot — Chụp màn hình</b><br><br>"
@@ -305,7 +305,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản: Chụp xác nhận sau mỗi đơn hàng</b><br>"
         "Macro xử lý 50 đơn hàng, mỗi đơn cần chụp ảnh xác nhận.<br>"
         "→ Loop 50: xử lý đơn → <b>Take Screenshot</b> → lặp<br>"
-        "<i>Giải thích:</i> File ảnh tự đặt tên theo timestamp → không bao giờ ghi đè."
+        "<i>Giải thích:</i> File ảnh tự đặt tên theo timestamp → không bao giờ ghi đè.<br><br><b>📌 Kịch bản 2: Debug macro bị lỗi</b><br>Macro sai ở bước 15 → chèn Take Screenshot trước bước 15 để xem UI.<br><i>Giải thích:</i> Ảnh giúp thấy chính xác trạng thái màn hình lúc lỗi.<br><br><b>📌 Kịch bản 3: Lưu bằng chứng giao dịch online</b><br>→ Sau chuyển tiền xong → Take Screenshot<br><i>Giải thích:</i> Timestamp trong tên file = bằng chứng thời điểm giao dịch."
     ),
     "check_pixel_color": (
         "<b>🎨 Check Pixel Color — Kiểm tra màu pixel</b><br><br>"
@@ -316,7 +316,7 @@ _ACTION_HELP: dict[str, str] = {
         "Nút active = xanh #4CAF50, disabled = xám #999.<br>"
         "→ Check pixel giữa nút (X=400, Y=500)<br>"
         "→ Xanh → click. Xám → đợi thêm<br>"
-        "<i>Giải thích:</i> Nhanh hơn nhiều so với Image Match vì chỉ 1 pixel."
+        "<i>Giải thích:</i> Nhanh hơn nhiều so với Image Match vì chỉ 1 pixel.<br><br><b>📌 Kịch bản 2: Giám sát server trong dashboard</b><br>Icon server: xanh = online, đỏ = offline.<br>→ Check pixel giữa icon → Xanh → OK. Đỏ → alert email<br><i>Giải thích:</i> Polling mỗi 60s, cực nhẹ vì chỉ check 1 pixel.<br><br><b>📌 Kịch bản 3: Phát hiện trang web load xong</b><br>Loading: nền trắng. Load xong: nền app tối.<br>→ Check pixel vùng content → đổi màu = đã load<br><i>Giải thích:</i> Thay Wait for Image khi không có ảnh mẫu rõ ràng."
     ),
     "wait_for_color": (
         "<b>🎨 Wait for Color — Đợi pixel đổi màu</b><br><br>"
@@ -325,7 +325,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản: Đợi progress bar đầy rồi tiếp tục</b><br>"
         "Thanh loading khi full = xanh #00FF00.<br>"
         "→ Tọa độ = cuối thanh (X=700, Y=580), Màu = #00FF00, Timeout = 60s<br>"
-        "<i>Giải thích:</i> Check pixel cuối thanh: khi chuyển xanh → thanh đã full."
+        "<i>Giải thích:</i> Check pixel cuối thanh: khi chuyển xanh → thanh đã full.<br><br><b>📌 Kịch bản 2: Đợi video render xong</b><br>Nút Export xám → render xong chuyển xanh #4CAF50.<br>→ Tọa độ = giữa nút, Màu = #4CAF50, Timeout = 600s<br><i>Giải thích:</i> Timeout 10 phút cho video dài. Xanh → click Export.<br><br><b>📌 Kịch bản 3: Đợi máy CNC sẵn sàng</b><br>Đèn: đỏ = đang chạy, xanh = sẵn sàng.<br>→ Wait for Color: pixel đèn, Màu = xanh, Timeout = 120s<br><i>Giải thích:</i> Đảm bảo máy dừng trước khi gửi lệnh mới."
     ),
     "delay": (
         "<b>⏱ Delay — Tạm dừng</b><br><br>"
@@ -347,7 +347,7 @@ _ACTION_HELP: dict[str, str] = {
         "<hr>"
         "<b>📌 Kịch bản 1: Gửi 100 email từ danh sách</b><br>"
         "→ Loop 100: Read File Line → Click 'To:' → Type Text '{email}' → soạn → Gửi → Delay 3s<br>"
-        "<i>Giải thích:</i> Mỗi vòng Read File Line tự động đọc dòng tiếp theo."
+        "<i>Giải thích:</i> Mỗi vòng Read File Line tự động đọc dòng tiếp theo.<br><br><b>📌 Kịch bản 2: Monitor server 24/7 (loop vô hạn)</b><br>→ Loop ∞: Check Pixel → If đỏ → alert → Delay 300000ms<br><i>Giải thích:</i> Count=0 = vô hạn. Delay 5 phút tránh spam.<br><br><b>📌 Kịch bản 3: In 30 hóa đơn liên tiếp</b><br>→ Loop 30: điền thông tin → Ctrl+P → Enter → Delay 5s<br><i>Giải thích:</i> Delay 5s đợi in xong trước hóa đơn tiếp."
     ),
     "if_image_found": (
         "<b>🔀 If Image Found — Rẽ nhánh theo ảnh</b><br><br>"
@@ -361,7 +361,7 @@ _ACTION_HELP: dict[str, str] = {
         "<i>Giải thích:</i> Đặt trong loop → tự xử lý popup bất cứ lúc nào hiện ra.<br><br>"
         "<b>📌 Kịch bản 2: Kiểm tra login thành công</b><br>"
         "→ If Image Found: ảnh 'Dashboard'<br>"
-        "→ Có → tiếp. Không → Take Screenshot lỗi → dừng"
+        "→ Có → tiếp. Không → Take Screenshot lỗi → dừng<br><br><b>📌 Kịch bản 3: Skip quảng cáo YouTube</b><br>→ If Image Found: ảnh nút Skip Ad<br>→ Có → Click. Không → đợi 5s rồi check lại<br><i>Giải thích:</i> Nút Skip chỉ hiện sau vài giây. Đặt trong loop để skip mọi ad."
     ),
     "if_pixel_color": (
         "<b>🔀 If Pixel Color — Rẽ nhánh theo màu</b><br><br>"
@@ -371,7 +371,7 @@ _ACTION_HELP: dict[str, str] = {
         "HP bar: đỏ = full, đen = hết.<br>"
         "→ Check pixel giữa HP bar<br>"
         "→ Đỏ → tiếp tục attack. Đen → dùng potion heal<br>"
-        "<i>Giải thích:</i> Check pixel mỗi 100ms — rất nhanh, phù hợp game loop."
+        "<i>Giải thích:</i> Check pixel mỗi 100ms — rất nhanh, phù hợp game loop.<br><br><b>📌 Kịch bản 2: Auto-farm game</b><br>Minimap: đỏ = có quái, xanh = an toàn.<br>→ Đỏ → attack. Xanh → tiếp tục farm<br><i>Giải thích:</i> Minimap dùng màu cố định → pixel check đáng tin.<br><br><b>📌 Kịch bản 3: Kiểm tra email mới Outlook</b><br>Icon thông báo: xanh = email mới, xám = không.<br>→ Xanh → Click. Xám → Delay 60s rồi check lại<br><i>Giải thích:</i> Polling nhẹ mỗi phút thay vì Image Match nặng."
     ),
     "if_variable": (
         "<b>🔀 If Variable — Rẽ nhánh theo biến</b><br><br>"
@@ -384,7 +384,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản 2: Kiểm tra kết quả OCR</b><br>"
         "→ Capture Text → biến 'result'<br>"
         "→ If Variable: result contains 'thành công' → tiếp. Không → Log lỗi<br>"
-        "<i>Giải thích:</i> Dùng 'contains' thay '==' vì OCR có thể trả thêm khoảng trắng thừa."
+        "<i>Giải thích:</i> Dùng 'contains' thay '==' vì OCR có thể trả thêm khoảng trắng thừa.<br><br><b>📌 Kịch bản 3: Xử lý theo loại file</b><br>→ Split tên file lấy ext → If ext == pdf → mở Reader<br>→ If ext == xlsx → mở Excel<br><i>Giải thích:</i> Nhiều If Variable liên tiếp = switch-case đơn giản."
     ),
     "set_variable": (
         "<b>📊 Set Variable — Gán giá trị biến</b><br><br>"
@@ -396,7 +396,7 @@ _ACTION_HELP: dict[str, str] = {
         "<i>Giải thích:</i> {counter} thay bằng giá trị hiện tại, +1 → tự tăng mỗi vòng.<br><br>"
         "<b>📌 Kịch bản 2: Tên file động</b><br>"
         "→ Value = 'report_{counter}.pdf'<br>"
-        "<i>Giải thích:</i> Mỗi vòng tạo tên file khác: report_1.pdf, report_2.pdf..."
+        "<i>Giải thích:</i> Mỗi vòng tạo tên file khác: report_1.pdf, report_2.pdf...<br><br><b>📌 Kịch bản 3: Lưu timestamp đặt tên file</b><br>→ Set Variable: Name = ts, Value = {timestamp}<br>→ Write to File: backup_{ts}.txt<br><i>Giải thích:</i> {timestamp} là biến hệ thống, trả về thời gian hiện tại."
     ),
     "split_string": (
         "<b>📊 Split String — Tách chuỗi</b><br><br>"
@@ -405,7 +405,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản: Xử lý file CSV</b><br>"
         "Dòng CSV: 'Nguyễn Văn A,email@gmail.com,0912345678'<br>"
         "→ Split: Separator = ',' → Index 0 = tên, Index 1 = email, Index 2 = SĐT<br>"
-        "<i>Giải thích:</i> Sau Split, mỗi phần tử lưu vào biến riêng → Type Text từng ô."
+        "<i>Giải thích:</i> Sau Split, mỗi phần tử lưu vào biến riêng → Type Text từng ô.<br><br><b>📌 Kịch bản 2: Tách domain từ email</b><br>Email: user@company.com<br>→ Split: Separator = @ → Index 1 = company.com<br><i>Giải thích:</i> Kiểm tra domain: nếu nội bộ → xử lý, ngược lại → bỏ qua.<br><br><b>📌 Kịch bản 3: Lấy tên file từ đường dẫn</b><br>Path: C:/Users/Admin/report.pdf<br>→ Split: Separator = / → Index -1 = report.pdf (phần tử cuối)<br><i>Giải thích:</i> Index -1 luôn lấy cuối cùng, bất kể path dài bao nhiêu."
     ),
     "comment": (
         "<b>📝 Comment — Ghi chú</b><br><br>"
@@ -415,7 +415,7 @@ _ACTION_HELP: dict[str, str] = {
         "Macro 50 action khó theo dõi → thêm Comment phân section:<br>"
         "→ <b>'=== PHẦN 1: ĐĂNG NHẬP ==='</b><br>"
         "→ <b>'⚠ LƯU Ý: Server chậm, cần đợi 5s'</b><br>"
-        "<i>Giải thích:</i> Giúp macro 'self-documenting' — đọc lại sau 1 tháng vẫn hiểu."
+        "<i>Giải thích:</i> Giúp macro 'self-documenting' — đọc lại sau 1 tháng vẫn hiểu.<br><br><b>📌 Kịch bản 2: Ghi chú TODO</b><br>→ TODO: Thêm xử lý lỗi timeout ở bước này<br><i>Giải thích:</i> Đánh dấu vị trí cần cải thiện — giống comment trong code.<br><br><b>📌 Kịch bản 3: Đánh dấu vùng disable khi debug</b><br>→ Thêm Comment === DISABLED === phía trên nhóm action cần tắt<br><i>Giải thích:</i> Giúp nhận biết vùng nào đang bị disable khi nhìn danh sách."
     ),
     "activate_window": (
         "<b>🖥 Activate Window — Chuyển cửa sổ</b><br><br>"
@@ -424,7 +424,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản: Macro thao tác giữa Chrome và Excel</b><br>"
         "→ Activate Window <b>'Chrome'</b> → copy dữ liệu<br>"
         "→ Activate Window <b>'BaoCao.xlsx'</b> → paste vào Excel<br>"
-        "<i>Giải thích:</i> Chỉ cần 1 phần tiêu đề: 'Chrome' sẽ match 'Báo cáo - Google Chrome'."
+        "<i>Giải thích:</i> Chỉ cần 1 phần tiêu đề: 'Chrome' sẽ match 'Báo cáo - Google Chrome'.<br><br><b>📌 Kịch bản 2: Dùng Notepad làm clipboard trung gian</b><br>→ Activate Window Notepad → Ctrl+V → Ctrl+S<br><i>Giải thích:</i> Lưu dữ liệu tạm khi cần paste giữa các bước.<br><br><b>📌 Kịch bản 3: Quay lại app chính sau popup</b><br>→ Xử lý popup xong → Activate Window app chính<br><i>Giải thích:</i> Popup đổi focus → Activate Window đưa đúng app lên lại."
     ),
     "log_to_file": (
         "<b>📝 Log to File — Ghi log</b><br><br>"
@@ -432,7 +432,7 @@ _ACTION_HELP: dict[str, str] = {
         "<hr>"
         "<b>📌 Kịch bản: Ghi nhật ký chạy macro</b><br>"
         "→ Mỗi vòng: Log to File <b>'Vòng {counter}: xử lý {email} — OK'</b><br>"
-        "<i>Giải thích:</i> Sau khi chạy xong, mở file log → biết rõ đã xử lý bao nhiêu item."
+        "<i>Giải thích:</i> Sau khi chạy xong, mở file log → biết rõ đã xử lý bao nhiêu item.<br><br><b>📌 Kịch bản 2: Log lỗi kèm timestamp</b><br>→ Log to File: [{timestamp}] ERROR: Không tìm thấy ảnh nút OK<br><i>Giải thích:</i> Timestamp giúp biết chính xác thời điểm lỗi → dễ debug.<br><br><b>📌 Kịch bản 3: Báo cáo tổng hợp sau macro</b><br>→ Log to File: Tổng: {counter}, Thành công: {success}, Lỗi: {error}<br><i>Giải thích:</i> Đặt sau loop → tổng kết. Dùng nhiều biến trong 1 dòng."
     ),
     "read_clipboard": (
         "<b>📋 Read Clipboard — Đọc clipboard</b><br><br>"
@@ -441,7 +441,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản: Lấy URL từ thanh địa chỉ trình duyệt</b><br>"
         "→ Click thanh địa chỉ → Ctrl+A → Ctrl+C<br>"
         "→ <b>Read Clipboard</b> → biến 'url' → Write to File<br>"
-        "<i>Giải thích:</i> Ctrl+C copy vào clipboard, Read Clipboard lấy ra để macro sử dụng."
+        "<i>Giải thích:</i> Ctrl+C copy vào clipboard, Read Clipboard lấy ra để macro sử dụng.<br><br><b>📌 Kịch bản 2: So sánh giá sản phẩm</b><br>→ Double-click giá shop 1 → Ctrl+C → Read Clipboard → biến price_1<br>→ Chuyển tab → lặp lại → biến price_2 → If price_1 &lt; price_2 → chọn shop 1<br><i>Giải thích:</i> Read Clipboard lưu vào biến → so sánh tự động.<br><br><b>📌 Kịch bản 3: Lấy dữ liệu từ app legacy</b><br>→ Ctrl+C trong app cũ → Read Clipboard → Write to File<br><i>Giải thích:</i> Clipboard là cầu nối duy nhất giữa app cũ và macro."
     ),
     "read_file_line": (
         "<b>📄 Read File Line — Đọc dòng từ file</b><br><br>"
@@ -451,7 +451,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản: Nhập 100 tài khoản từ file</b><br>"
         "File 'accounts.txt' mỗi dòng: username,password<br>"
         "→ Loop 100: Read File Line → Split ',' → Type Text user → Tab → Secure Type pass → Enter<br>"
-        "<i>Giải thích:</i> Kết hợp Read File Line + Split String = đọc CSV cơ bản."
+        "<i>Giải thích:</i> Kết hợp Read File Line + Split String = đọc CSV cơ bản.<br><br><b>📌 Kịch bản 2: Mở 50 URL từ file</b><br>→ Loop 50: Read File Line → Ctrl+L → Type Text {url} → Enter → Delay 3s<br><i>Giải thích:</i> Ctrl+L focus thanh địa chỉ mọi trình duyệt.<br><br><b>📌 Kịch bản 3: Chạy danh sách lệnh SQL</b><br>→ Read File Line → paste vào editor → F5 (Execute) → Delay 2s<br><i>Giải thích:</i> Mỗi dòng = 1 câu SQL. Macro chạy lần lượt."
     ),
     "write_to_file": (
         "<b>📄 Write to File — Ghi vào file</b><br><br>"
@@ -460,7 +460,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản: Xuất kết quả ra CSV</b><br>"
         "→ File = 'result.csv', Text = '{name},{email},{phone}'<br>"
         "→ Mode = Append (nối thêm, không ghi đè)<br>"
-        "<i>Giải thích:</i> Chế độ Append thêm dòng mới mỗi lần → tạo file CSV nhiều dòng."
+        "<i>Giải thích:</i> Chế độ Append thêm dòng mới mỗi lần → tạo file CSV nhiều dòng.<br><br><b>📌 Kịch bản 2: Tạo file cấu hình tự động</b><br>→ File = config.ini, Mode = Overwrite<br>→ Nội dung: Server={server}, Port={port}<br><i>Giải thích:</i> Mode Overwrite tạo file mới. Dùng cho config cần cập nhật.<br><br><b>📌 Kịch bản 3: Ghi danh sách lỗi</b><br>→ Write to File: errors.txt, Append, Text = Item {counter}: lỗi bước xác nhận<br><i>Giải thích:</i> Sau macro xong, mở errors.txt → biết item nào lỗi."
     ),
     "secure_type_text": (
         "<b>🔒 Secure Type Text — Gõ bảo mật</b><br><br>"
@@ -469,7 +469,7 @@ _ACTION_HELP: dict[str, str] = {
         "<b>📌 Kịch bản: Tự động đăng nhập hệ thống</b><br>"
         "→ Click ô Password → <b>Secure Type Text</b> 'P@ssw0rd!'<br>"
         "→ Trong log chỉ hiện: 'type_text: ****'<br>"
-        "<i>Giải thích:</i> Type Text thường → password hiện rõ trong log → rủi ro bảo mật."
+        "<i>Giải thích:</i> Type Text thường → password hiện rõ trong log → rủi ro bảo mật.<br><br><b>📌 Kịch bản 2: Nhập API key</b><br>→ Click ô API Key → Secure Type Text sk-abc123xyz789<br><i>Giải thích:</i> API key nhạy cảm như password — lộ = mất tài khoản.<br><br><b>📌 Kịch bản 3: Nhập mã OTP/PIN</b><br>→ Read Clipboard (OTP) → Secure Type Text {otp}<br><i>Giải thích:</i> OTP dùng 1 lần nhưng vẫn nên ẩn để tránh replay attack."
     ),
     "run_macro": (
         "<b>📦 Run Sub-Macro — Chạy macro con</b><br><br>"
@@ -479,7 +479,7 @@ _ACTION_HELP: dict[str, str] = {
         "Nhiều macro đều cần login → tạo 'login.json' riêng.<br>"
         "→ Macro A: <b>Run 'login.json'</b> → xử lý A<br>"
         "→ Macro B: <b>Run 'login.json'</b> → xử lý B<br>"
-        "<i>Giải thích:</i> Thay đổi flow login → chỉ sửa 1 file thay vì sửa tất cả macro."
+        "<i>Giải thích:</i> Thay đổi flow login → chỉ sửa 1 file thay vì sửa tất cả macro.<br><br><b>📌 Kịch bản 2: Chia macro dài thành modules</b><br>Macro 200 action → chia 3 file nhỏ:<br>→ Run 01_login → Run 02_nhap_lieu → Run 03_xuat_bao_cao<br><i>Giải thích:</i> Giống chia code thành hàm — dễ bảo trì, test từng phần.<br><br><b>📌 Kịch bản 3: Chạy macro tùy điều kiện</b><br>→ If Variable: type == invoice → Run xu_ly_hoa_don.json<br>→ If Variable: type == receipt → Run xu_ly_phieu_thu.json<br><i>Giải thích:</i> Kết hợp If Variable + Run Macro = routing logic linh hoạt."
     ),
     "capture_text": (
         "<b>🔎 Capture Text (OCR) — Nhận dạng chữ</b><br><br>"
@@ -492,7 +492,7 @@ _ACTION_HELP: dict[str, str] = {
         "<i>Giải thích:</i> OCR chuyển ảnh text thành chuỗi ký tự macro có thể xử lý.<br><br>"
         "<b>📌 Kịch bản 2: Đọc mã đơn hàng từ popup</b><br>"
         "→ Capture Text vùng mã đơn → biến 'order_id' → Write to File<br>"
-        "<i>Giải thích:</i> Dùng khi UI không cho Ctrl+C (text trong ảnh, canvas, PDF viewer)."
+        "<i>Giải thích:</i> Dùng khi UI không cho Ctrl+C (text trong ảnh, canvas, PDF viewer).<br><br><b>📌 Kịch bản 3: Đọc mã vận đơn từ nhãn in</b><br>→ Capture Text vùng barcode text → biến tracking → Type Text vào ô tra cứu<br><i>Giải thích:</i> OCR đọc text dưới barcode — không cần thư viện barcode riêng."
     ),
 }
 

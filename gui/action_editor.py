@@ -213,7 +213,14 @@ class ActionEditorDialog(QDialog):
         # Combo + Help button in same row
         combo_row = QHBoxLayout()
         self._type_combo = QComboBox()
+        self._type_combo.blockSignals(True)
         self._build_grouped_combo()
+        # Skip to first non-header item before connecting signals
+        for i in range(self._type_combo.count()):
+            if self._type_combo.itemData(i, Qt.ItemDataRole.UserRole) is not None:
+                self._type_combo.setCurrentIndex(i)
+                break
+        self._type_combo.blockSignals(False)
         self._type_combo.currentIndexChanged.connect(self._on_type_changed)
         combo_row.addWidget(self._type_combo, stretch=1)
 
@@ -283,12 +290,7 @@ class ActionEditorDialog(QDialog):
         btn_layout.addWidget(ok_btn)
         layout.addLayout(btn_layout)
 
-        # Show first selectable type's params
-        # Skip to first non-header item
-        for i in range(self._type_combo.count()):
-            if self._type_combo.itemData(i, Qt.ItemDataRole.UserRole) is not None:
-                self._type_combo.setCurrentIndex(i)
-                break
+        # Initialize params for the pre-selected type
         self._on_type_changed()
 
     def _build_grouped_combo(self) -> None:

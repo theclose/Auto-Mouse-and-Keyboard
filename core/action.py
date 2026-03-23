@@ -4,8 +4,11 @@ Each action is a self-contained command that can be serialized/deserialized,
 executed, and composed into macro sequences.
 """
 
+import logging
 import time
 from abc import ABC, abstractmethod
+
+logger = logging.getLogger(__name__)
 
 _id_counter = 0
 

@@ -177,7 +177,10 @@ class ReadClipboard(Action):
 
 @register_action("read_file_line")
 class ReadFileLine(Action):
-    """Read a specific line from a file into a variable."""
+    """Read a specific line from a file into a variable.
+    
+    Uses per-instance cache with mtime invalidation — O(1) per read after first load.
+    """
 
     def __init__(self, file_path: str = "", line_number: str = "1",
                  var_name: str = "line", **kwargs: Any) -> None:
@@ -185,6 +188,34 @@ class ReadFileLine(Action):
         self.file_path = file_path
         self.line_number = line_number  # Can be ${var} for dynamic
         self.var_name = var_name
+        # File cache: {resolved_path: (mtime, lines_list)}
+        self._cache: dict[str, tuple[float, list[str]]] = {}
+
+    def _get_lines(self, path: str) -> list[str] | None:
+        """Get cached lines or reload if file has changed."""
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            self._cache.pop(path, None)
+            return None
+
+        cached = self._cache.get(path)
+        if cached and cached[0] == mtime:
+            return cached[1]
+
+        # (Re)load file
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            self._cache[path] = (mtime, lines)
+            # Cap cache to 5 files to prevent memory growth
+            if len(self._cache) > 5:
+                oldest_key = next(iter(self._cache))
+                del self._cache[oldest_key]
+            return lines
+        except (OSError, IOError) as e:
+            logger.error("Cannot read file: %s", e)
+            return None
 
     def execute(self) -> bool:
         from core.engine_context import get_context
@@ -203,22 +234,20 @@ class ReadFileLine(Action):
             logger.warning("Invalid line number: %s", line_str)
             return False
 
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-            if 1 <= line_num <= len(lines):
-                content = lines[line_num - 1].rstrip("\n\r")
-                if ctx:
-                    ctx.set_var(self.var_name, content)
-                logger.info("Read line %d → ${%s} = '%s'",
-                            line_num, self.var_name, content[:50])
-                return True
-            else:
-                logger.warning("Line %d out of range (file has %d lines)",
-                               line_num, len(lines))
-                return False
-        except (OSError, IOError) as e:
-            logger.error("Cannot read file: %s", e)
+        lines = self._get_lines(path)
+        if lines is None:
+            return False
+
+        if 1 <= line_num <= len(lines):
+            content = lines[line_num - 1].rstrip("\n\r")
+            if ctx:
+                ctx.set_var(self.var_name, content)
+            logger.info("Read line %d → ${%s} = '%s'",
+                        line_num, self.var_name, content[:50])
+            return True
+        else:
+            logger.warning("Line %d out of range (file has %d lines)",
+                           line_num, len(lines))
             return False
 
     def _get_params(self) -> dict[str, Any]:

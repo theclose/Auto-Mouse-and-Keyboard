@@ -111,10 +111,17 @@ class IfImageFound(Action):
 
     def execute(self) -> bool:
         from modules.image import get_image_finder
-        from core.engine_context import is_stopped
+        from core.engine_context import is_stopped, get_context
         finder = get_image_finder()
+
+        # Support ${var} in image_path (e.g. "screens/${screen_id}.png")
+        img_path = self.image_path
+        ctx = get_context()
+        if ctx and '${' in img_path:
+            img_path = ctx.interpolate(img_path)
+
         result = finder.find_on_screen(
-            self.image_path,
+            img_path,
             confidence=self.confidence,
             timeout_ms=self.timeout_ms,
         )

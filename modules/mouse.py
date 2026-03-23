@@ -144,33 +144,58 @@ class MouseRightClick(Action):
 
 @register_action("mouse_move")
 class MouseMove(Action):
-    """Move the cursor to (x, y)."""
+    """Move the cursor to (x, y). Supports ${var} in coordinates."""
 
     def __init__(self, x: int = 0, y: int = 0, duration: float = 0.25, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.x = x
         self.y = y
         self.duration = duration
+        self._dynamic_x: str = ""
+        self._dynamic_y: str = ""
+
+    def _resolve_coords(self) -> tuple[int, int]:
+        """Resolve coordinates, using ${var} if set."""
+        rx, ry = self.x, self.y
+        if self._dynamic_x or self._dynamic_y:
+            from core.engine_context import get_context
+            ctx = get_context()
+            if ctx:
+                if self._dynamic_x:
+                    try: rx = int(float(ctx.interpolate(self._dynamic_x)))
+                    except (ValueError, TypeError): pass
+                if self._dynamic_y:
+                    try: ry = int(float(ctx.interpolate(self._dynamic_y)))
+                    except (ValueError, TypeError): pass
+        return rx, ry
 
     def execute(self) -> bool:
-        pyautogui.moveTo(self.x, self.y, duration=self.duration)
+        rx, ry = self._resolve_coords()
+        pyautogui.moveTo(rx, ry, duration=self.duration)
         return True
 
     def _get_params(self) -> dict[str, Any]:
-        return {"x": self.x, "y": self.y, "duration": self.duration}
+        p = {"x": self.x, "y": self.y, "duration": self.duration}
+        if self._dynamic_x: p["dynamic_x"] = self._dynamic_x
+        if self._dynamic_y: p["dynamic_y"] = self._dynamic_y
+        return p
 
     def _set_params(self, params: dict[str, Any]) -> None:
         self.x = params.get("x", 0)
         self.y = params.get("y", 0)
         self.duration = params.get("duration", 0.25)
+        self._dynamic_x = params.get("dynamic_x", "")
+        self._dynamic_y = params.get("dynamic_y", "")
 
     def get_display_name(self) -> str:
+        if self._dynamic_x or self._dynamic_y:
+            return f"Move to ({self._dynamic_x or self.x}, {self._dynamic_y or self.y})"
         return f"Move to ({self.x}, {self.y})"
 
 
 @register_action("mouse_drag")
 class MouseDrag(Action):
-    """Drag from current position to (x, y)."""
+    """Drag from current position to (x, y). Supports ${var} in coordinates."""
 
     def __init__(self, x: int = 0, y: int = 0,
                  duration: float = 0.5, button: str = "left", **kwargs: Any) -> None:
@@ -179,23 +204,46 @@ class MouseDrag(Action):
         self.y = y
         self.duration = duration
         self.button = button
+        self._dynamic_x: str = ""
+        self._dynamic_y: str = ""
+
+    def _resolve_coords(self) -> tuple[int, int]:
+        rx, ry = self.x, self.y
+        if self._dynamic_x or self._dynamic_y:
+            from core.engine_context import get_context
+            ctx = get_context()
+            if ctx:
+                if self._dynamic_x:
+                    try: rx = int(float(ctx.interpolate(self._dynamic_x)))
+                    except (ValueError, TypeError): pass
+                if self._dynamic_y:
+                    try: ry = int(float(ctx.interpolate(self._dynamic_y)))
+                    except (ValueError, TypeError): pass
+        return rx, ry
 
     def execute(self) -> bool:
-        pyautogui.dragTo(self.x, self.y,
-                         duration=self.duration, button=self.button)
+        rx, ry = self._resolve_coords()
+        pyautogui.dragTo(rx, ry, duration=self.duration, button=self.button)
         return True
 
     def _get_params(self) -> dict[str, Any]:
-        return {"x": self.x, "y": self.y,
-                "duration": self.duration, "button": self.button}
+        p = {"x": self.x, "y": self.y,
+             "duration": self.duration, "button": self.button}
+        if self._dynamic_x: p["dynamic_x"] = self._dynamic_x
+        if self._dynamic_y: p["dynamic_y"] = self._dynamic_y
+        return p
 
     def _set_params(self, params: dict[str, Any]) -> None:
         self.x = params.get("x", 0)
         self.y = params.get("y", 0)
         self.duration = params.get("duration", 0.5)
         self.button = params.get("button", "left")
+        self._dynamic_x = params.get("dynamic_x", "")
+        self._dynamic_y = params.get("dynamic_y", "")
 
     def get_display_name(self) -> str:
+        if self._dynamic_x or self._dynamic_y:
+            return f"Drag to ({self._dynamic_x or self.x}, {self._dynamic_y or self.y})"
         return f"Drag to ({self.x}, {self.y})"
 
 

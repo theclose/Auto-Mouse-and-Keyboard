@@ -64,12 +64,18 @@ class LoopBlock(Action):
     """
 
     def __init__(self, iterations: int = 1, **kwargs: Any) -> None:
+        """Initialize a loop block.
+
+        Args:
+            iterations: Number of loop iterations. 0 = infinite.
+        """
         super().__init__(**kwargs)
         self.iterations = max(0, iterations)
         self._sub_actions: list[Action] = []
         self._cancel_event = threading.Event()
 
     def add_action(self, action: Action) -> None:
+        """Append a child action to this loop."""
         self._sub_actions.append(action)
 
     def cancel(self) -> None:
@@ -77,6 +83,11 @@ class LoopBlock(Action):
         self._cancel_event.set()
 
     def execute(self) -> bool:
+        """Run sub-actions for the configured number of iterations.
+
+        Supports __break__ and __continue__ context variables for flow control.
+        Returns False if any sub-action fails, True otherwise.
+        """
         from core.engine_context import is_stopped, get_context, emit_nested_step
         self._cancel_event.clear()
         count = 0
@@ -114,18 +125,21 @@ class LoopBlock(Action):
         return True
 
     def _get_params(self) -> dict[str, Any]:
+        """Serialize loop params including nested sub-actions."""
         return {
             "iterations": self.iterations,
             "sub_actions": [a.to_dict() for a in self._sub_actions],
         }
 
     def _set_params(self, params: dict[str, Any]) -> None:
+        """Deserialize loop params and rebuild sub-action list."""
         self.iterations = params.get("iterations", 1)
         self._sub_actions = [
             Action.from_dict(a) for a in params.get("sub_actions", [])
         ]
 
     def get_display_name(self) -> str:
+        """Return human-readable label, e.g. 'Loop ×3 (5 actions)'."""
         n = "∞" if self.iterations == 0 else str(self.iterations)
         return f"Loop ×{n} ({len(self._sub_actions)} actions)"
 
@@ -136,10 +150,12 @@ class LoopBlock(Action):
 
     @property
     def children(self) -> list[Action]:
+        """Return copy of sub-actions list (composite interface)."""
         return list(self._sub_actions)
 
     @children.setter
     def children(self, value: list[Action]) -> None:
+        """Replace sub-actions list entirely."""
         self._sub_actions = list(value)
 
 
@@ -153,6 +169,14 @@ class IfImageFound(Action):
     def __init__(self, image_path: str = "", confidence: float = 0.8,
                  timeout_ms: int = 5000, else_action_json: str = "",
                  **kwargs: Any) -> None:
+        """Initialize image-based conditional.
+
+        Args:
+            image_path: Template image file path (supports ${var}).
+            confidence: Match confidence threshold (0.0–1.0).
+            timeout_ms: Search timeout in milliseconds.
+            else_action_json: Optional inline JSON for ELSE branch.
+        """
         super().__init__(**kwargs)
         self.image_path = image_path
         self.confidence = confidence
@@ -209,6 +233,7 @@ class IfImageFound(Action):
         return True
 
     def _get_params(self) -> dict[str, Any]:
+        """Serialize image-conditional params including both branches."""
         return {
             "image_path": self.image_path,
             "confidence": self.confidence,
@@ -218,6 +243,7 @@ class IfImageFound(Action):
         }
 
     def _set_params(self, params: dict[str, Any]) -> None:
+        """Deserialize image-conditional params and rebuild branches."""
         self.image_path = params.get("image_path", "")
         self.confidence = params.get("confidence", 0.8)
         self.timeout_ms = params.get("timeout_ms", 5000)
@@ -229,6 +255,7 @@ class IfImageFound(Action):
         ]
 
     def get_display_name(self) -> str:
+        """Return label showing image name and THEN action count."""
         name = self.image_path.split("\\")[-1].split("/")[-1] or "?"
         return f"If '{name}' found → {len(self._then_actions)} actions"
 
@@ -292,6 +319,7 @@ class IfPixelColor(Action):
 
     @staticmethod
     def _parse_color_str(color: str) -> tuple[int, int, int]:
+        """Parse '#RRGGBB' or 'R,G,B' string to (r, g, b) tuple."""
         c = color.strip()
         if c.startswith('#') and len(c) == 7:
             return (int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16))
@@ -326,6 +354,7 @@ class IfPixelColor(Action):
         return True
 
     def _get_params(self) -> dict[str, Any]:
+        """Serialize pixel-color conditional params."""
         return {
             "x": self.x, "y": self.y,
             "r": self.r, "g": self.g, "b": self.b,
@@ -335,6 +364,7 @@ class IfPixelColor(Action):
         }
 
     def _set_params(self, params: dict[str, Any]) -> None:
+        """Deserialize pixel-color conditional params."""
         self.x = params.get("x", 0)
         self.y = params.get("y", 0)
         self.r = params.get("r", 0)
@@ -349,6 +379,7 @@ class IfPixelColor(Action):
         ]
 
     def get_display_name(self) -> str:
+        """Return label showing pixel coordinates and RGB values."""
         return (f"If pixel({self.x},{self.y}) = RGB({self.r},{self.g},{self.b})"
                 f" → {len(self._then_actions)} actions")
 
@@ -653,6 +684,7 @@ class SetVariable(Action):
         return _eval_node(tree)
 
     def _get_params(self) -> dict[str, Any]:
+        """Serialize variable assignment params."""
         return {
             "var_name": self.var_name,
             "value": self.value,
@@ -660,11 +692,13 @@ class SetVariable(Action):
         }
 
     def _set_params(self, params: dict[str, Any]) -> None:
+        """Deserialize variable assignment params."""
         self.var_name = params.get("var_name", "")
         self.value = params.get("value", "")
         self.operation = params.get("operation", "set")
 
     def get_display_name(self) -> str:
+        """Return label showing variable name, operation symbol, and value."""
         op_symbols = {
             "set": "=", "increment": "+=", "decrement": "-=",
             "add": "+=", "subtract": "-=", "multiply": "*=",
@@ -727,6 +761,7 @@ class SplitString(Action):
             return True
 
     def _get_params(self) -> dict[str, Any]:
+        """Serialize split-string params."""
         return {
             "source_var": self.source_var,
             "delimiter": self.delimiter,
@@ -735,12 +770,14 @@ class SplitString(Action):
         }
 
     def _set_params(self, params: dict[str, Any]) -> None:
+        """Deserialize split-string params."""
         self.source_var = params.get("source_var", "")
         self.delimiter = params.get("delimiter", ",")
         self.field_index = params.get("field_index", 0)
         self.target_var = params.get("target_var", "")
 
     def get_display_name(self) -> str:
+        """Return label showing source→target mapping."""
         return (f"Split ${{{self.source_var}}}[{self.field_index}]"
                 f" → ${{{self.target_var}}}")
 
@@ -754,13 +791,17 @@ class Comment(Action):
         self.text = text
 
     def execute(self) -> bool:
+        """No-op: comments are visual-only labels."""
         return True  # No-op
 
     def _get_params(self) -> dict[str, Any]:
+        """Serialize comment text."""
         return {"text": self.text}
 
     def _set_params(self, params: dict[str, Any]) -> None:
+        """Deserialize comment text."""
         self.text = params.get("text", "")
 
     def get_display_name(self) -> str:
+        """Return formatted comment label with decorative dashes."""
         return f"── {self.text} ──" if self.text else "────────"

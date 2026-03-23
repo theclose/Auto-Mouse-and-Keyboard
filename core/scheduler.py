@@ -365,7 +365,6 @@ class SetVariable(Action):
                 step = 1
             ctx.set_var(self.var_name, int(current) - step)
         elif self.operation == "add":
-            # Add arbitrary value (from var or literal)
             current = ctx.get_var(self.var_name, 0)
             add_val = self.value
             if '${' in add_val:
@@ -373,7 +372,51 @@ class SetVariable(Action):
             try:
                 ctx.set_var(self.var_name, float(current) + float(add_val))
             except (ValueError, TypeError):
-                logger.warning("Cannot add '%s' to '%s'", add_val, current)
+                logger.warning("Cannot add '%s' to '%s' — keeping current", add_val, current)
+        elif self.operation == "subtract":
+            current = ctx.get_var(self.var_name, 0)
+            sub_val = self.value
+            if '${' in sub_val:
+                sub_val = ctx.interpolate(sub_val)
+            try:
+                ctx.set_var(self.var_name, float(current) - float(sub_val))
+            except (ValueError, TypeError):
+                logger.warning("Cannot subtract '%s' from '%s'", sub_val, current)
+        elif self.operation == "multiply":
+            current = ctx.get_var(self.var_name, 0)
+            mul_val = self.value
+            if '${' in mul_val:
+                mul_val = ctx.interpolate(mul_val)
+            try:
+                ctx.set_var(self.var_name, float(current) * float(mul_val))
+            except (ValueError, TypeError):
+                logger.warning("Cannot multiply '%s' by '%s'", current, mul_val)
+        elif self.operation == "divide":
+            current = ctx.get_var(self.var_name, 0)
+            div_val = self.value
+            if '${' in div_val:
+                div_val = ctx.interpolate(div_val)
+            try:
+                divisor = float(div_val)
+                if divisor == 0:
+                    logger.warning("Division by zero")
+                else:
+                    ctx.set_var(self.var_name, float(current) / divisor)
+            except (ValueError, TypeError):
+                logger.warning("Cannot divide '%s' by '%s'", current, div_val)
+        elif self.operation == "modulo":
+            current = ctx.get_var(self.var_name, 0)
+            mod_val = self.value
+            if '${' in mod_val:
+                mod_val = ctx.interpolate(mod_val)
+            try:
+                divisor = float(mod_val)
+                if divisor == 0:
+                    logger.warning("Modulo by zero")
+                else:
+                    ctx.set_var(self.var_name, float(current) % divisor)
+            except (ValueError, TypeError):
+                logger.warning("Cannot modulo '%s' by '%s'", current, mod_val)
         else:
             logger.warning("Unknown operation '%s'", self.operation)
 
@@ -395,15 +438,14 @@ class SetVariable(Action):
         self.operation = params.get("operation", "set")
 
     def get_display_name(self) -> str:
-        if self.operation == "set":
-            return f"${{{self.var_name}}} = {self.value}"
-        elif self.operation == "increment":
-            return f"${{{self.var_name}}} += {self.value or 1}"
-        elif self.operation == "decrement":
-            return f"${{{self.var_name}}} -= {self.value or 1}"
-        elif self.operation == "add":
-            return f"${{{self.var_name}}} += {self.value}"
-        return f"${{{self.var_name}}} {self.operation} {self.value}"
+        op_symbols = {
+            "set": "=", "increment": "+=", "decrement": "-=",
+            "add": "+=", "subtract": "-=", "multiply": "*=",
+            "divide": "/=", "modulo": "%=",
+        }
+        sym = op_symbols.get(self.operation, self.operation)
+        val = self.value or ("1" if self.operation in ("increment", "decrement") else "")
+        return f"${{{self.var_name}}} {sym} {val}"
 
 
 @register_action("split_string")
@@ -423,6 +465,8 @@ class SplitString(Action):
         self.target_var = target_var
 
     def execute(self) -> bool:
+        import csv
+        import io
         from core.engine_context import get_context
         ctx = get_context()
         if not ctx:
@@ -432,7 +476,16 @@ class SplitString(Action):
         if not isinstance(value, str):
             value = str(value)
 
-        parts = value.split(self.delimiter)
+        # Use csv.reader for proper quote/escape handling
+        if self.delimiter == ",":
+            try:
+                reader = csv.reader(io.StringIO(value))
+                parts = next(reader)
+            except (csv.Error, StopIteration):
+                parts = value.split(self.delimiter)
+        else:
+            parts = value.split(self.delimiter)
+
         if 0 <= self.field_index < len(parts):
             result = parts[self.field_index].strip()
             ctx.set_var(self.target_var, result)
@@ -444,7 +497,7 @@ class SplitString(Action):
             logger.warning("Field %d out of range (%d fields in '%s')",
                            self.field_index, len(parts), value[:50])
             ctx.set_var(self.target_var, "")
-            return True  # Don't fail — just empty
+            return True
 
     def _get_params(self) -> dict[str, Any]:
         return {
@@ -465,3 +518,22 @@ class SplitString(Action):
                 f" → ${{{self.target_var}}}")
 
 
+@register_action("comment")
+class Comment(Action):
+    """L7: Visual label/separator for organizing macros. No-op at runtime."""
+
+    def __init__(self, text: str = "", **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.text = text
+
+    def execute(self) -> bool:
+        return True  # No-op
+
+    def _get_params(self) -> dict[str, Any]:
+        return {"text": self.text}
+
+    def _set_params(self, params: dict[str, Any]) -> None:
+        self.text = params.get("text", "")
+
+    def get_display_name(self) -> str:
+        return f"── {self.text} ──" if self.text else "────────"

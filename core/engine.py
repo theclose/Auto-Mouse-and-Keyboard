@@ -40,6 +40,7 @@ class MacroEngine(QThread):
     progress_signal = pyqtSignal(int, int)
     action_signal = pyqtSignal(str)
     loop_signal = pyqtSignal(int, int)
+    step_signal = pyqtSignal(int, str)  # L6: (action_index, display_name)
 
     def __init__(self, parent: 'QObject | None' = None) -> None:
         super().__init__(parent)
@@ -56,6 +57,8 @@ class MacroEngine(QThread):
         self._is_paused = False
         self._is_stopped = False
         self._stop_event = threading.Event()
+        # L6: Step-by-step debug mode
+        self._step_mode = False
 
     # -- public API ----------------------------------------------------------
     def load_actions(self, actions: list[Action]) -> None:
@@ -90,10 +93,23 @@ class MacroEngine(QThread):
         self._mutex.lock()
         self._is_stopped = True
         self._is_paused = False
-        self._stop_event.set()  # Signal all interruptible sleeps
+        self._step_mode = False
+        self._stop_event.set()
         self._pause_condition.wakeAll()
         self._mutex.unlock()
         logger.info("Engine stop requested")
+
+    def set_step_mode(self, enabled: bool) -> None:
+        """L6: Enable/disable step-by-step execution."""
+        self._step_mode = enabled
+        logger.info("Step mode: %s", "ON" if enabled else "OFF")
+
+    def step_next(self) -> None:
+        """L6: Resume to execute the next single action (used in step mode)."""
+        self._mutex.lock()
+        self._is_paused = False
+        self._pause_condition.wakeAll()
+        self._mutex.unlock()
 
     @property
     def is_running(self) -> bool:
@@ -174,6 +190,14 @@ class MacroEngine(QThread):
                 if self._stop_on_error:
                     logger.info("Stopping on error (stop_on_error=True)")
                     return False
+            # L6: Step mode — pause after each action
+            if self._step_mode and not self._is_stopped:
+                self.step_signal.emit(idx, action.get_display_name())
+                self._mutex.lock()
+                self._is_paused = True
+                while self._is_paused and not self._is_stopped:
+                    self._pause_condition.wait(self._mutex)
+                self._mutex.unlock()
         except Exception as exc:
             error_msg = f"Error in {action.get_display_name()}: {exc}"
             logger.error(error_msg, exc_info=True)

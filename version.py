@@ -10,7 +10,7 @@ Follows Semantic Versioning (https://semver.org/):
 Update this file before each release/commit.
 """
 
-__version__ = "2.3.1"
+__version__ = "2.4.0"
 __app_name__ = "AutoMacro"
 __author__ = "TungDo"
 

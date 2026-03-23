@@ -113,10 +113,25 @@ class LogToFile(Action):
         line = f"[{timestamp}] {msg}\n"
 
         os.makedirs(os.path.dirname(self.file_path) or ".", exist_ok=True)
+        # L1: Log rotation — rotate at 5MB
+        self._rotate_if_needed(self.file_path, max_bytes=5 * 1024 * 1024)
         with open(self.file_path, "a", encoding="utf-8") as f:
             f.write(line)
         logger.info("Logged: %s", msg[:80])
         return True
+
+    @staticmethod
+    def _rotate_if_needed(path: str, max_bytes: int = 5_242_880) -> None:
+        """Rotate log file when it exceeds max_bytes."""
+        try:
+            if os.path.exists(path) and os.path.getsize(path) > max_bytes:
+                rotated = path + ".1"
+                if os.path.exists(rotated):
+                    os.remove(rotated)
+                os.rename(path, rotated)
+                logger.info("Rotated log: %s → %s", path, rotated)
+        except OSError:
+            pass  # Best-effort rotation
 
     def _get_params(self) -> dict[str, Any]:
         return {"message": self.message, "file_path": self.file_path}
@@ -290,6 +305,9 @@ class WriteToFile(Action):
                 path = ctx.interpolate(path)
 
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        # L1: Rotate at 10MB for append mode
+        if self.mode == "append":
+            LogToFile._rotate_if_needed(path, max_bytes=10 * 1024 * 1024)
         file_mode = "a" if self.mode == "append" else "w"
         with open(path, file_mode, encoding="utf-8") as f:
             f.write(text + "\n")
@@ -436,7 +454,11 @@ class CaptureText(Action):
             import pytesseract
             from PIL import ImageGrab
         except ImportError:
-            logger.error("CaptureText requires pytesseract and Pillow")
+            logger.error(
+                "CaptureText requires pytesseract and Pillow.\n"
+                "Install: pip install pytesseract Pillow\n"
+                "Also install Tesseract OCR: https://github.com/tesseract-ocr/tesseract\n"
+                "Windows: https://github.com/UB-Mannheim/tesseract/wiki")
             return False
 
         from core.engine_context import get_context
@@ -450,6 +472,12 @@ class CaptureText(Action):
             text = pytesseract.image_to_string(
                 screenshot, lang=self.lang
             ).strip()
+        except pytesseract.TesseractNotFoundError:
+            logger.error(
+                "Tesseract executable not found!\n"
+                "Install from: https://github.com/UB-Mannheim/tesseract/wiki\n"
+                "Then set path: pytesseract.pytesseract.tesseract_cmd = r'C:\\...\\tesseract.exe'")
+            return False
         except Exception as e:
             logger.error("OCR failed: %s", e)
             return False

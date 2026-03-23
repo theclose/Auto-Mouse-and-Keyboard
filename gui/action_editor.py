@@ -57,6 +57,7 @@ ACTION_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
     ("📊 Variables", [
         ("set_variable", "Set Variable"),
         ("split_string", "Split String"),
+        ("comment", "Comment / Label"),
     ]),
     ("🖥 System", [
         ("activate_window", "Activate Window"),
@@ -233,6 +234,7 @@ class ActionEditorDialog(QDialog):
             "if_variable": self._build_if_variable_params,
             "set_variable": self._build_set_variable_params,
             "split_string": self._build_split_string_params,
+            "comment": self._build_comment_params,
             "activate_window": self._build_activate_window_params,
             "log_to_file": self._build_log_params,
             "read_clipboard": self._build_read_clipboard_params,
@@ -427,7 +429,8 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["value"] = value
 
         operation = QComboBox()
-        operation.addItems(["set", "increment", "decrement", "add"])
+        operation.addItems(["set", "increment", "decrement", "add",
+                           "subtract", "multiply", "divide", "modulo"])
         self._params_layout.addRow("Operation:", operation)
         self._param_widgets["operation"] = operation
 
@@ -451,6 +454,12 @@ class ActionEditorDialog(QDialog):
         target.setPlaceholderText("Target variable name")
         self._params_layout.addRow("Store in:", target)
         self._param_widgets["target_var"] = target
+
+    def _build_comment_params(self) -> None:
+        text = QLineEdit()
+        text.setPlaceholderText("Section label, e.g. 'Login Phase'")
+        self._params_layout.addRow("Comment:", text)
+        self._param_widgets["text"] = text
 
     def _build_activate_window_params(self) -> None:
         title = QLineEdit()

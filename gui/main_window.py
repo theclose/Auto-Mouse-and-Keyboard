@@ -335,7 +335,7 @@ class MainWindow(QMainWindow):
             "  ➕  Click  Thêm  để tạo action đầu tiên\n"
             "  📂  Mở macro có sẵn (Ctrl+O)\n"
             "  ⏺  Nhấn nút  Ghi  để ghi lại thao tác\n\n"
-            "Phím tắt: F6=Chạy  F7=Dừng tạm  F8=Dừng hẳn\n"
+            "Phím tắt: F6=Chạy  F7=Dừng tạm  F8=Dừng hẳn  F9=Ghi\n"
             "Nhấn F1 để xem hướng dẫn đầy đủ")
         self._empty_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_overlay.setObjectName("emptyOverlay")
@@ -577,7 +577,7 @@ class MainWindow(QMainWindow):
 
         # Replay startup summary (these logs fired before handler existed)
         logger.info("Application Log panel attached — showing live logs")
-        logger.info("Hotkeys: F6=Start/Stop, F7=Pause, F8=Emergency Stop")
+        logger.info("Hotkeys: F6=Start/Stop, F7=Pause, F8=Emergency Stop, F9=Record")
 
     def _append_log(self, text: str) -> None:
         """Slot: append a log line (called via signal, thread-safe)."""
@@ -592,7 +592,7 @@ class MainWindow(QMainWindow):
     def _setup_statusbar(self) -> None:
         self._statusbar = QStatusBar()
         self.setStatusBar(self._statusbar)
-        self._status_label = QLabel("Ready")
+        self._status_label = QLabel("Sẵn sàng")
         self._statusbar.addWidget(self._status_label)
 
         self._ram_label = QLabel("RAM: --")
@@ -600,9 +600,10 @@ class MainWindow(QMainWindow):
         self._statusbar.addPermanentWidget(self._ram_label)
 
         self._hotkey_label = QLabel(
-            f"  Start/Stop: {self._config['hotkeys']['start_stop']}  |  "
-            f"Pause: {self._config['hotkeys']['pause_resume']}  |  "
-            f"Stop: {self._config['hotkeys']['emergency_stop']}")
+            f"  Chạy: {self._config['hotkeys']['start_stop']}  |  "
+            f"Dừng tạm: {self._config['hotkeys']['pause_resume']}  |  "
+            f"Dừng: {self._config['hotkeys']['emergency_stop']}  |  "
+            f"Ghi: {self._config['hotkeys'].get('record', 'F9')}")
         self._hotkey_label.setObjectName("subtitleLabel")
         self._statusbar.addPermanentWidget(self._hotkey_label)
 
@@ -1424,7 +1425,7 @@ class MainWindow(QMainWindow):
                 cmd = AddBatchCommand(self._actions, actions)
                 self._undo_stack.push(cmd)
                 self._status_label.setText(
-                    f"Added {len(actions)} recorded actions")
+                    f"Đã thêm {len(actions)} hành động ghi")
                 logger.info("Recording finished: %d actions added (total: %d)",
                             len(actions), len(self._actions))
         except Exception:

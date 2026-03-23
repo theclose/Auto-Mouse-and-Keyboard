@@ -546,7 +546,7 @@ class TestRecordingPanelState:
         assert panel._stop_btn.isEnabled()
         assert not panel._mouse_check.isEnabled()
         # Countdown text should show
-        assert "Recording in" in panel._status_label.text()
+        assert "Bắt đầu ghi sau" in panel._status_label.text()
 
     def test_stop_emits_signal_and_restores_ui(self) -> None:
         from gui.recording_panel import RecordingPanel
@@ -584,6 +584,6 @@ class TestRecordingPanelState:
 
         assert panel._record_btn.isEnabled()
         assert not panel._stop_btn.isEnabled()
-        assert "cancelled" in panel._status_label.text()
+        assert "hủy" in panel._status_label.text()
         assert len(received) == 0  # No signal emitted
 

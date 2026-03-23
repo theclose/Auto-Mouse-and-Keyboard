@@ -69,17 +69,24 @@ def setup_global_hotkeys(config: dict[str, Any]) -> Any:
             if w:
                 w._on_stop()
 
+        def toggle_record() -> None:
+            w = _find_main_window()
+            if w and hasattr(w, '_rec_panel'):
+                w._rec_panel.toggle_recording()
+
         start_key = hotkeys.get("start_stop", "F6")
         pause_key = hotkeys.get("pause_resume", "F7")
         stop_key = hotkeys.get("emergency_stop", "F8")
+        record_key = hotkeys.get("record", "F9")
 
         hk_mgr.register(start_key, toggle_play)
         hk_mgr.register(pause_key, toggle_pause)
         hk_mgr.register(stop_key, emergency_stop)
+        hk_mgr.register(record_key, toggle_record)
         hk_mgr.start()
 
-        logger.info("Global hotkeys (Win32): Start=%s, Pause=%s, Stop=%s",
-                    start_key, pause_key, stop_key)
+        logger.info("Global hotkeys (Win32): Start=%s, Pause=%s, Stop=%s, Record=%s",
+                    start_key, pause_key, stop_key, record_key)
         return hk_mgr  # Keep reference to prevent GC
     except Exception as e:
         logger.warning("Failed to set up global hotkeys: %s", e)

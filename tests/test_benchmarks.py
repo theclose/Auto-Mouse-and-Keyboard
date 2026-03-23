@@ -84,6 +84,14 @@ class TestBenchmarks:
         mw._empty_overlay = QLabel("")
         mw._loop_spin = QSpinBox()
         mw._loop_spin.setValue(1)
+        # v3.0: tree view attributes
+        from PyQt6.QtWidgets import QLineEdit, QPushButton, QTreeView
+        mw._tree_mode = False
+        mw._tree = QTreeView()
+        from gui.action_tree_model import ActionTreeModel
+        mw._tree_model = ActionTreeModel(mw._actions)
+        mw._filter_edit = QLineEdit()
+        mw._view_toggle_btn = QPushButton()
 
         benchmark(mw._refresh_table)
 

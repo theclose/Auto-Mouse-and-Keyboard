@@ -197,10 +197,12 @@ class TestCaptureButtonInEditor:
                         i, Qt.ItemDataRole.UserRole) == atype:
                     dialog._type_combo.setCurrentIndex(i)
                     break
-            # Find capture button by text
+            # Find capture button by text (📸 Chụp — Vietnamese)
             buttons = dialog.findChildren(QPushButton)
             capture_btns = [b for b in buttons
-                            if "Capture" in (b.text() or "")]
+                            if "📸" in (b.text() or "")
+                            or "Capture" in (b.text() or "")
+                            or "Chụp" in (b.text() or "")]
             assert len(capture_btns) >= 1, \
                 f"No Capture button for {atype}"
 

@@ -143,8 +143,8 @@ class TestTrayManager:
         assert tray._tray.toolTip() == "Testing 123"
 
     def test_default_icon_creates(self) -> None:
-        from gui.tray import _create_default_icon
-        icon = _create_default_icon()
+        from gui.tray import _create_icon
+        icon = _create_icon()
         assert not icon.isNull()
 
 
@@ -519,7 +519,8 @@ class TestActionRunMocked:
         from modules.mouse import MouseClick
         action = MouseClick(x=100, y=200)
 
-        with patch('modules.mouse.pyautogui') as mock_pag:
+        mock_pag = MagicMock()
+        with patch('modules.mouse._pag', return_value=mock_pag):
             result = action.execute()
 
         assert result is True

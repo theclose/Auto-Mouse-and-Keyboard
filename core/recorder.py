@@ -73,7 +73,8 @@ class Recorder:
                  record_keyboard: bool = True,
                  min_delay_ms: int = 50,
                  capture_context: bool = False,
-                 macro_dir: str = "macros") -> None:
+                 macro_dir: str = "macros",
+                 ignored_hotkeys: list[str] | None = None) -> None:
         _ensure_modules()
         self._record_mouse = record_mouse
         self._record_keyboard = record_keyboard
@@ -106,6 +107,18 @@ class Recorder:
         self._mouse_pressed: bool = False
         self._press_pos: tuple[int, int] = (0, 0)
         self._press_button: str = "left"
+
+        # Hotkeys the app uses — must NOT be recorded (#filter)
+        self._ignored_hotkeys: set[str] = set()
+        if ignored_hotkeys:
+            for hk in ignored_hotkeys:
+                self._ignored_hotkeys.add(self._normalize_hotkey(hk))
+
+    @staticmethod
+    def _normalize_hotkey(hk: str) -> str:
+        """Normalize 'CTRL+SHIFT+F9' → 'ctrl+f9+shift' (sorted parts)."""
+        parts = [p.strip().lower() for p in hk.split("+")]
+        return "+".join(sorted(parts))
 
     # -- public API ----------------------------------------------------------
     def start(self) -> None:
@@ -357,6 +370,11 @@ class Recorder:
         self._record_delay()
 
         key_name = key.name if hasattr(key, "name") else str(key)
+
+        # Filter out app hotkeys (single keys like F6, F7, F8, F9)
+        if self._normalize_hotkey(key_name) in self._ignored_hotkeys:
+            return
+
         try:
             cls = get_action_class("key_press")
             action = cls(key=key_name)  # type: ignore[call-arg]
@@ -386,6 +404,11 @@ class Recorder:
             key_name = key.name if hasattr(key, "name") else str(key)
 
         combo = "+".join(mod_names + [key_name])
+
+        # Filter out app hotkeys (combos like ctrl+shift+f9)
+        if self._normalize_hotkey(combo) in self._ignored_hotkeys:
+            self._active_modifiers.clear()  # reset modifier tracking
+            return
 
         try:
             cls = get_action_class("key_combo")

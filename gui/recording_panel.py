@@ -24,6 +24,7 @@ class RecordingPanel(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._recorder = Recorder()
+        self._app_hotkeys: list[str] = []  # filled by update_hotkeys()
         self._update_timer = QTimer()
         self._update_timer.setInterval(300)
         self._update_timer.timeout.connect(self._update_preview)
@@ -100,6 +101,10 @@ class RecordingPanel(QWidget):
         rec = hk.get("record", "F9")
         pause = hk.get("pause_resume", "F7")
         stop = hk.get("emergency_stop", "F8")
+        start = hk.get("start_stop", "F6")
+
+        # Store all hotkeys so Recorder can filter them out
+        self._app_hotkeys = [start, pause, stop, rec]
 
         self._record_btn.setText(f"⏺ Ghi ({rec})")
         self._record_btn.setToolTip(f"Bắt đầu ghi hành động ({rec})")
@@ -127,6 +132,7 @@ class RecordingPanel(QWidget):
             record_mouse=self._mouse_check.isChecked(),
             record_keyboard=self._keyboard_check.isChecked(),
             capture_context=self._context_check.isChecked(),
+            ignored_hotkeys=self._app_hotkeys,
         )
         self._preview_list.clear()
         self._record_btn.setEnabled(False)

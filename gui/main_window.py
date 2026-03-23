@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QToolBar, QStatusBar, QLabel, QFileDialog,
     QMessageBox, QSpinBox, QGroupBox, QFormLayout, QProgressBar,
     QApplication, QCheckBox, QListWidget, QPlainTextEdit,
-    QDoubleSpinBox, QLineEdit,
+    QDoubleSpinBox, QLineEdit, QTreeView, QStackedWidget,
 )
 from PyQt6.QtCore import Qt, QSize, QTimer, QObject, pyqtSignal
 from PyQt6.QtGui import QAction as QMenuAction, QKeySequence, QCloseEvent, QUndoStack
@@ -327,6 +327,55 @@ class MainWindow(QMainWindow):
         self._pre_drag_order: list[Action] = []
         self._table.viewport().installEventFilter(self)
         left_layout.addWidget(self._table)
+
+        # v3.0: Tree view for hierarchical display
+        from gui.action_tree_model import ActionTreeModel
+        self._tree = QTreeView()
+        self._tree.setAccessibleName("Cây hành động")
+        self._tree.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows)
+        self._tree.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection)
+        self._tree.setAlternatingRowColors(True)
+        self._tree.setAnimated(True)
+        self._tree.setIndentation(24)
+        self._tree.setDragDropMode(
+            QAbstractItemView.DragDropMode.InternalMove)
+        self._tree.setDragEnabled(True)
+        self._tree.setAcceptDrops(True)
+        self._tree.setDropIndicatorShown(True)
+        self._tree.doubleClicked.connect(self._on_edit_action)
+        self._tree.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu)
+        self._tree.customContextMenuRequested.connect(
+            self._show_context_menu)
+        self._tree_model = ActionTreeModel(self._actions)
+        self._tree.setModel(self._tree_model)
+        # Configure tree columns
+        tree_header = self._tree.header()
+        if tree_header:
+            tree_header.setSectionResizeMode(
+                0, QHeaderView.ResizeMode.ResizeToContents)  # ✓
+            tree_header.setSectionResizeMode(
+                1, QHeaderView.ResizeMode.ResizeToContents)  # Type
+            tree_header.setSectionResizeMode(
+                2, QHeaderView.ResizeMode.Stretch)           # Details
+            tree_header.setSectionResizeMode(
+                3, QHeaderView.ResizeMode.ResizeToContents)  # Delay
+        left_layout.addWidget(self._tree)
+
+        # v3.0: View toggle (Table ↔ Tree)
+        self._tree_mode = False
+        self._tree.setVisible(False)  # Start in table mode
+        view_toggle_layout = QHBoxLayout()
+        self._view_toggle_btn = QPushButton("🌳 Chế độ Cây")
+        self._view_toggle_btn.setToolTip(
+            "Chuyển giữa bảng phẳng và chế độ cây phân cấp")
+        self._view_toggle_btn.setCheckable(True)
+        self._view_toggle_btn.clicked.connect(self._toggle_view_mode)
+        view_toggle_layout.addWidget(self._view_toggle_btn)
+        view_toggle_layout.addStretch()
+        left_layout.addLayout(view_toggle_layout)
 
         # Empty state overlay (shown when no actions)
         self._empty_overlay = QLabel(
@@ -860,13 +909,32 @@ class MainWindow(QMainWindow):
         self._table.blockSignals(False)
         # Update empty state overlay
         has_actions = len(self._actions) > 0
-        self._table.setVisible(has_actions)
+        self._table.setVisible(has_actions and not self._tree_mode)
+        self._tree.setVisible(has_actions and self._tree_mode)
         self._empty_overlay.setVisible(not has_actions)
+        # v3.0: sync tree model
+        if hasattr(self, '_tree_model'):
+            self._tree_model.rebuild()
         # Re-apply filter if active
         if hasattr(self, '_filter_edit') and self._filter_edit.text():
             self._on_filter_changed(self._filter_edit.text())
         # Update stats bar
         self._update_stats()
+
+    def _toggle_view_mode(self, checked: bool) -> None:
+        """v3.0: Switch between flat table and hierarchical tree view."""
+        self._tree_mode = checked
+        has_actions = len(self._actions) > 0
+        self._table.setVisible(has_actions and not self._tree_mode)
+        self._tree.setVisible(has_actions and self._tree_mode)
+        if self._tree_mode:
+            self._tree_model.rebuild()
+            self._tree.expandAll()
+            self._view_toggle_btn.setText("📋 Chế độ Bảng")
+        else:
+            self._refresh_table()
+            self._view_toggle_btn.setText("🌳 Chế độ Cây")
+        logger.info("View mode: %s", "tree" if self._tree_mode else "table")
 
     def _on_filter_changed(self, text: str) -> None:
         """Filter table rows by action name or description (P2 #4)."""

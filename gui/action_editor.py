@@ -360,7 +360,7 @@ class ActionEditorDialog(QDialog):
             "check_pixel_color": lambda: self._build_pixel_params(atype),
             "wait_for_color": lambda: self._build_pixel_params(atype),
             "take_screenshot": self._build_screenshot_params,
-            "if_pixel_color": lambda: self._build_pixel_params(atype),
+            "if_pixel_color": self._build_if_pixel_color_params,
             "if_image_found": self._build_if_image_found_params,
             "loop_block": self._build_loop_block_params,
             "if_variable": self._build_if_variable_params,
@@ -530,13 +530,24 @@ class ActionEditorDialog(QDialog):
         tol.setValue(10)
         self._params_layout.addRow("Sai số:", tol)
         self._param_widgets["tolerance"] = tol
-        if atype == "wait_for_color":
+        if atype in ("wait_for_color", "if_pixel_color"):
             timeout = QSpinBox()
             timeout.setRange(0, 120000)
             timeout.setSuffix(" ms")
             timeout.setValue(10000)
             self._params_layout.addRow("Giới hạn:", timeout)
             self._param_widgets["timeout_ms"] = timeout
+
+    def _build_if_pixel_color_params(self) -> None:
+        """Builder for IfPixelColor — pixel check with timeout and ELSE."""
+        self._build_pixel_params("if_pixel_color")
+
+        # ELSE action (optional)
+        else_action = QLineEdit()
+        else_action.setPlaceholderText('Tuỳ chọn: {"type":"log_to_file","params":{"message":"Pixel not found"}}')
+        else_action.setToolTip("Action thực thi khi pixel KHÔNG khớp (JSON)")
+        self._params_layout.addRow("Nếu không:", else_action)
+        self._param_widgets["else_action_json"] = else_action
 
     def _add_xy_params(self) -> None:
         x_spin = QSpinBox()

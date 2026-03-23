@@ -10,7 +10,7 @@ from typing import Optional, Callable, Any
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit, QPushButton,
-    QGroupBox, QCheckBox, QFileDialog, QWidget,
+    QGroupBox, QCheckBox, QFileDialog, QWidget, QLabel,
 )
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal
 
@@ -71,6 +71,41 @@ ACTION_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
     ]),
 ]
 
+# Per-type descriptions shown in editor (P2 #8)
+_ACTION_DESCRIPTIONS: dict[str, str] = {
+    "mouse_click": "Click chuột trái tại tọa độ (X, Y) hoặc vị trí ảnh mẫu",
+    "mouse_double_click": "Double-click chuột trái tại tọa độ hoặc ảnh mẫu",
+    "mouse_right_click": "Click chuột phải tại tọa độ hoặc ảnh mẫu",
+    "mouse_move": "Di chuyển chuột đến vị trí chỉ định",
+    "mouse_drag": "Kéo thả chuột từ vị trí hiện tại đến tọa độ đích",
+    "mouse_scroll": "Cuộn chuột lên/xuống số dòng chỉ định",
+    "key_press": "Nhấn một phím (đơn hoặc đặc biệt như Enter, Tab)",
+    "key_combo": "Nhấn tổ hợp phím (ví dụ: Ctrl+C, Alt+F4)",
+    "type_text": "Gõ chuỗi ký tự vào ô nhập liệu hiện tại",
+    "hotkey": "Nhấn tổ hợp phím nóng (hỗ trợ nhiều phím)",
+    "wait_for_image": "Đợi cho đến khi ảnh mẫu xuất hiện trên màn hình",
+    "click_on_image": "Tìm ảnh mẫu trên màn hình và click vào vị trí tìm thấy",
+    "image_exists": "Kiểm tra ảnh mẫu có tồn tại trên màn hình không",
+    "take_screenshot": "Chụp màn hình và lưu thành file ảnh",
+    "check_pixel_color": "Kiểm tra màu pixel tại tọa độ chỉ định",
+    "wait_for_color": "Đợi cho đến khi pixel tại tọa độ có màu chỉ định",
+    "delay": "Dừng chờ một khoảng thời gian (ms)",
+    "loop_block": "Lặp lại nhóm action bên trong số lần chỉ định",
+    "if_image_found": "Rẽ nhánh: thực hiện action tuỳ theo ảnh có tìm thấy hay không",
+    "if_pixel_color": "Rẽ nhánh: thực hiện action tuỳ theo màu pixel",
+    "if_variable": "Rẽ nhánh: so sánh giá trị biến và thực hiện action tương ứng",
+    "set_variable": "Tạo hoặc cập nhật giá trị biến (số, chuỗi, biểu thức)",
+    "split_string": "Tách chuỗi thành mảng theo dấu phân cách",
+    "comment": "Nhãn/ghi chú — không thực thi, dùng để đánh dấu",
+    "activate_window": "Kích hoạt cửa sổ ứng dụng theo tiêu đề",
+    "log_to_file": "Ghi nội dung vào file log",
+    "read_clipboard": "Đọc nội dung clipboard vào biến",
+    "read_file_line": "Đọc 1 dòng từ file text vào biến",
+    "write_to_file": "Ghi nội dung vào file (tạo mới hoặc nối thêm)",
+    "secure_type_text": "Gõ text bảo mật (dùng cho mật khẩu)",
+    "run_macro": "Chạy một macro khác như sub-routine",
+    "capture_text": "Nhận dạng chữ trên màn hình (OCR) và lưu vào biến",
+}
 
 class ActionEditorDialog(QDialog):
     """
@@ -87,7 +122,7 @@ class ActionEditorDialog(QDialog):
         self._result_action: Optional[Action] = None
         self._param_widgets: dict[str, Any] = {}
 
-        self.setWindowTitle("Edit Action" if action else "Add Action")
+        self.setWindowTitle("Sửa Action" if action else "Thêm Action")
         self.setMinimumWidth(480)
         self.resize(500, 520)
         self.setSizeGripEnabled(True)
@@ -104,21 +139,27 @@ class ActionEditorDialog(QDialog):
         layout.setSpacing(12)
 
         # Action type selector — grouped with category headers
-        type_group = QGroupBox("Action Type")
+        type_group = QGroupBox("Loại Action")
         type_layout = QVBoxLayout(type_group)
         self._type_combo = QComboBox()
         self._build_grouped_combo()
         self._type_combo.currentIndexChanged.connect(self._on_type_changed)
         type_layout.addWidget(self._type_combo)
+
+        # Action type description (P2 #8)
+        self._type_desc_label = QLabel("")
+        self._type_desc_label.setObjectName("subtitleLabel")
+        self._type_desc_label.setWordWrap(True)
+        type_layout.addWidget(self._type_desc_label)
         layout.addWidget(type_group)
 
         # Parameters area (dynamic)
-        self._params_group = QGroupBox("Parameters")
+        self._params_group = QGroupBox("Tham số")
         self._params_layout = QFormLayout(self._params_group)
         layout.addWidget(self._params_group)
 
         # Common settings
-        common_group = QGroupBox("Common Settings")
+        common_group = QGroupBox("Cài đặt chung")
         common_layout = QFormLayout(common_group)
 
         self._delay_spin = QSpinBox()
@@ -209,7 +250,12 @@ class ActionEditorDialog(QDialog):
         self._clear_params()
         atype = self._type_combo.currentData(Qt.ItemDataRole.UserRole)
         if not atype:
+            self._type_desc_label.setText("")
             return
+
+        # Update description (P2 #8)
+        self._type_desc_label.setText(
+            f"ℹ️ {_ACTION_DESCRIPTIONS.get(atype, '')}")
 
         # Dispatch to per-category builder
         builders: dict[str, Callable[[], None]] = {

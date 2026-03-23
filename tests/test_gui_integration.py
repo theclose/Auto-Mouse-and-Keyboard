@@ -168,11 +168,12 @@ class TestRefreshTable:
         with patch.object(MainWindow, '__init__', lambda self: None):
             mw = MainWindow.__new__(MainWindow)
         # Setup minimal table
-        from PyQt6.QtWidgets import QTableWidget, QLabel, QSpinBox
+        from PyQt6.QtWidgets import QTableWidget, QLabel, QSpinBox, QLineEdit
         mw._table = QTableWidget(0, 6)
         mw._actions = []
         mw._stats_label = QLabel("")
         mw._empty_overlay = QLabel("")
+        mw._filter_edit = QLineEdit()
         mw._loop_spin = QSpinBox()
         mw._loop_spin.setValue(1)
         return mw

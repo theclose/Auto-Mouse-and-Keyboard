@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QToolBar, QStatusBar, QLabel, QFileDialog,
     QMessageBox, QSpinBox, QGroupBox, QFormLayout, QProgressBar,
     QApplication, QCheckBox, QListWidget, QPlainTextEdit,
-    QDoubleSpinBox,
+    QDoubleSpinBox, QLineEdit,
 )
 from PyQt6.QtCore import Qt, QSize, QTimer, QObject, pyqtSignal
 from PyQt6.QtGui import QAction as QMenuAction, QKeySequence, QCloseEvent, QUndoStack
@@ -181,17 +181,28 @@ class MainWindow(QMainWindow):
         open_act.triggered.connect(self._on_open)
         tb.addAction(open_act)
 
+        # Recent Files dropdown (P2 #5)
+        from PyQt6.QtWidgets import QToolButton, QMenu as QRecentMenu
+        self._recent_btn = QToolButton()
+        self._recent_btn.setText("📋 Gần đây")
+        self._recent_btn.setToolTip("Mở macro gần đây")
+        self._recent_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self._recent_menu = QRecentMenu(self)
+        self._recent_btn.setMenu(self._recent_menu)
+        self._build_recent_menu()
+        tb.addWidget(self._recent_btn)
+
         save_act = QMenuAction("💾 Lưu", self)
         save_act.setShortcut(QKeySequence("Ctrl+S"))
         save_act.setToolTip("Lưu macro hiện tại (Ctrl+S)")
         save_act.triggered.connect(self._on_save)
         tb.addAction(save_act)
 
-        undo_act = self._undo_stack.createUndoAction(self, "↩ Undo")
+        undo_act = self._undo_stack.createUndoAction(self, "↩ Hoàn tác")
         undo_act.setShortcut(QKeySequence.StandardKey.Undo)
         tb.addAction(undo_act)
 
-        redo_act = self._undo_stack.createRedoAction(self, "↪ Redo")
+        redo_act = self._undo_stack.createRedoAction(self, "↪ Làm lại")
         redo_act.setShortcut(QKeySequence.StandardKey.Redo)
         tb.addAction(redo_act)
 
@@ -261,14 +272,22 @@ class MainWindow(QMainWindow):
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
-        header_label = QLabel("Action List")
+        header_label = QLabel("Danh sách Action")
         header_label.setObjectName("headerLabel")
         left_layout.addWidget(header_label)
 
+        # Search/filter bar (P2 #4)
+        self._filter_edit = QLineEdit()
+        self._filter_edit.setPlaceholderText("🔍 Tìm action...")
+        self._filter_edit.setClearButtonEnabled(True)
+        self._filter_edit.setAccessibleName("Tìm kiếm action")
+        self._filter_edit.textChanged.connect(self._on_filter_changed)
+        left_layout.addWidget(self._filter_edit)
+
         self._table = QTableWidget(0, 6)
-        self._table.setAccessibleName("Action list table")
+        self._table.setAccessibleName("Bảng danh sách action")
         self._table.setHorizontalHeaderLabels(
-            ["#", "", "Action", "Delay", "✓", "Description"])
+            ["#", "", "Action", "Delay", "✓", "Mô tả"])
         h_header = self._table.horizontalHeader()
         assert h_header is not None
         h_header.setSectionResizeMode(
@@ -311,11 +330,13 @@ class MainWindow(QMainWindow):
 
         # Empty state overlay (shown when no actions)
         self._empty_overlay = QLabel(
-            "🎬 Welcome to AutoMacro\n\n"
-            "⏺  Click Record to start capturing\n"
-            "➕  Or click + to add steps manually\n"
-            "📂  Open a macro: Ctrl+O\n\n"
-            "Hotkeys: F6=Play  F7=Pause  F8=Stop")
+            "📋 Chưa có action nào\n\n"
+            "Bắt đầu bằng cách:\n"
+            "  ➕  Click  Thêm  để tạo action đầu tiên\n"
+            "  📂  Mở macro có sẵn (Ctrl+O)\n"
+            "  ⏺  Nhấn nút  Ghi  để ghi lại thao tác\n\n"
+            "Phím tắt: F6=Chạy  F7=Dừng tạm  F8=Dừng hẳn\n"
+            "Nhấn F1 để xem hướng dẫn đầy đủ")
         self._empty_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_overlay.setObjectName("emptyOverlay")
         self._empty_overlay.setWordWrap(True)
@@ -704,8 +725,8 @@ class MainWindow(QMainWindow):
 
     def _on_engine_started(self) -> None:
         self._set_ui_locked(True)
-        self._status_label.setText("▶ Running")
-        self.setWindowTitle("▶ Running... — AutoMacro (by TungDo)")
+        self._status_label.setText("▶ Đang chạy")
+        self.setWindowTitle("▶ Đang chạy... — AutoMacro (by TungDo)")
         self._tray.update_state(True, False)
         self._var_timer.start()  # 2.1: start variable inspector
         self._var_group.setVisible(True)  # auto-show inspector
@@ -716,8 +737,8 @@ class MainWindow(QMainWindow):
 
     def _on_engine_stopped(self) -> None:
         self._set_ui_locked(False)
-        self._status_label.setText("⏹ Stopped")
-        self._action_label.setText("Idle")
+        self._status_label.setText("⏹ Đã dừng")
+        self._action_label.setText("Đang chờ")
         self._loop_label.setText("")
         self._progress_bar.reset()
         self._tray.update_state(False, False)
@@ -725,15 +746,20 @@ class MainWindow(QMainWindow):
         self._var_group.setVisible(False)  # auto-hide inspector
         self._step_next_btn.setEnabled(False)
         # Reset window title
-        name = Path(self._current_file).stem if self._current_file else "New Macro"
+        name = Path(self._current_file).stem if self._current_file else "Macro mới"
         self.setWindowTitle(f"AutoMacro (by TungDo) – {name}")
         # Clear row highlight
         self._table.clearSelection()
         logger.info("Engine stopped")
 
     def _on_engine_error(self, msg: str) -> None:
-        self._status_label.setText(f"⚠ Error: {msg[:80]}")
+        self._status_label.setText(f"⚠ Lỗi: {msg[:80]}")
         logger.error("Engine error: %s", msg)
+        # P1 #2: Error popup — chủ động thông báo, không để user phải tự phát hiện
+        QMessageBox.warning(
+            self, "⚠ Lỗi thực thi",
+            f"Macro gặp lỗi:\n\n{msg}\n\n"
+            "Kiểm tra action và thử lại.")
 
     def _on_engine_progress(self, current: int, total: int) -> None:
         self._progress_bar.setMaximum(total)
@@ -753,9 +779,9 @@ class MainWindow(QMainWindow):
 
     def _on_engine_loop(self, current: int, total: int) -> None:
         if total < 0:
-            self._loop_label.setText(f"Loop: {current} / ∞")
+            self._loop_label.setText(f"Vòng lặp: {current} / ∞")
         else:
-            self._loop_label.setText(f"Loop: {current} / {total}")
+            self._loop_label.setText(f"Vòng lặp: {current} / {total}")
 
     # ------------------------------------------------------------------ #
     # Action list management
@@ -829,8 +855,24 @@ class MainWindow(QMainWindow):
         has_actions = len(self._actions) > 0
         self._table.setVisible(has_actions)
         self._empty_overlay.setVisible(not has_actions)
+        # Re-apply filter if active
+        if hasattr(self, '_filter_edit') and self._filter_edit.text():
+            self._on_filter_changed(self._filter_edit.text())
         # Update stats bar
         self._update_stats()
+
+    def _on_filter_changed(self, text: str) -> None:
+        """Filter table rows by action name or description (P2 #4)."""
+        needle = text.strip().lower()
+        for row in range(self._table.rowCount()):
+            if not needle:
+                self._table.setRowHidden(row, False)
+                continue
+            name_item = self._table.item(row, 2)
+            desc_item = self._table.item(row, 5)
+            name = name_item.text().lower() if name_item else ""
+            desc = desc_item.text().lower() if desc_item else ""
+            self._table.setRowHidden(row, needle not in name and needle not in desc)
 
     def _update_stats(self) -> None:
         """Update action count and estimated runtime in stats bar."""
@@ -927,8 +969,8 @@ class MainWindow(QMainWindow):
     def _on_new(self) -> None:
         if self._actions:
             r = QMessageBox.question(
-                self, "New Macro",
-                "Discard current macro?",
+                self, "Macro mới",
+                "Bỏ macro hiện tại?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if r != QMessageBox.StandardButton.Yes:
                 return
@@ -942,7 +984,7 @@ class MainWindow(QMainWindow):
 
     def _on_open(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open Macro", self._macro_dir,
+            self, "Mở Macro", self._macro_dir,
             "JSON Macros (*.json);;All Files (*)")
         if not path:
             return
@@ -955,10 +997,11 @@ class MainWindow(QMainWindow):
             self._refresh_table()
             name = settings.get("name", Path(path).stem)
             self.setWindowTitle(f"AutoMacro (by TungDo) – {name}")
-            self._status_label.setText(f"Opened: {Path(path).name}")
+            self._status_label.setText(f"Đã mở: {Path(path).name}")
             logger.info("Opened macro: %s (%d actions)", Path(path).name, len(self._actions))
             self._autosave.set_current_file(Path(path))
             self._autosave.mark_clean()
+            self._add_to_recent(path)
         except Exception as e:
             QMessageBox.critical(
                 self, "Lỗi Mở File",
@@ -968,7 +1011,7 @@ class MainWindow(QMainWindow):
     def _on_save(self) -> None:
         if not self._current_file:
             path, _ = QFileDialog.getSaveFileName(
-                self, "Save Macro", self._macro_dir,
+                self, "Lưu Macro", self._macro_dir,
                 "JSON Macros (*.json)")
             if not path:
                 return
@@ -985,16 +1028,78 @@ class MainWindow(QMainWindow):
                 loop_delay_ms=self._loop_delay_spin.value(),
             )
             self._status_label.setText(
-                f"Saved: {Path(self._current_file).name}")
+                f"Đã lưu: {Path(self._current_file).name}")
             logger.info("Saved macro: %s (%d actions)",
                         Path(self._current_file).name, len(self._actions))
             self._autosave.set_current_file(Path(self._current_file))
             self._autosave.mark_clean()
+            self._add_to_recent(self._current_file)
         except Exception as e:
             QMessageBox.critical(
                 self, "Lỗi Lưu File",
                 self._friendly_error_msg(
                     "Không thể lưu file macro.", e))
+
+    # ── Recent Files (P2 #5) ──────────────────────────────
+
+    def _build_recent_menu(self) -> None:
+        """Populate the Recent Files dropdown from config."""
+        self._recent_menu.clear()
+        recent = self._config.get("recent_files", [])
+        if not recent:
+            empty_act = self._recent_menu.addAction("(không có file nào)")
+            assert empty_act is not None
+            empty_act.setEnabled(False)
+            return
+        for path in recent:
+            short = Path(path).name
+            act = self._recent_menu.addAction(f"📄 {short}")
+            assert act is not None
+            act.setToolTip(path)
+            act.triggered.connect(lambda checked, p=path: self._open_recent(p))
+
+    def _add_to_recent(self, path: str) -> None:
+        """Add a file to the recent files list and persist."""
+        path = str(Path(path).resolve())
+        recent = self._config.get("recent_files", [])
+        if path in recent:
+            recent.remove(path)
+        recent.insert(0, path)
+        self._config["recent_files"] = recent[:8]  # keep max 8
+        save_config(self._config)
+        self._build_recent_menu()
+
+    def _open_recent(self, path: str) -> None:
+        """Open a macro from the recent files list."""
+        if not Path(path).exists():
+            QMessageBox.warning(
+                self, "File không tồn tại",
+                f"File không tìm thấy:\n{path}")
+            # Remove from recent
+            recent = self._config.get("recent_files", [])
+            if path in recent:
+                recent.remove(path)
+                self._config["recent_files"] = recent
+                save_config(self._config)
+                self._build_recent_menu()
+            return
+        try:
+            self._actions, settings = MacroEngine.load_macro(path)
+            self._loop_spin.setValue(settings.get("loop_count", 1))
+            self._loop_delay_spin.setValue(
+                settings.get("delay_between_loops", 0))
+            self._current_file = path
+            self._refresh_table()
+            name = settings.get("name", Path(path).stem)
+            self.setWindowTitle(f"AutoMacro (by TungDo) – {name}")
+            self._status_label.setText(f"Đã mở: {Path(path).name}")
+            logger.info("Opened recent: %s", Path(path).name)
+            self._add_to_recent(path)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Lỗi Mở File",
+                self._friendly_error_msg(
+                    "Không thể mở file macro.", e))
 
     def _on_add_action(self) -> None:
         dialog = ActionEditorDialog(self, macro_dir=self._macro_dir)
@@ -1141,23 +1246,23 @@ class MainWindow(QMainWindow):
                 self._undo_stack.push(cmd)
                 self._refresh_table()
                 self._status_label.setText(
-                    f"📥 Pasted {len(pasted)} action(s)")
+                    f"📥 Đã dán {len(pasted)} action")
                 logger.info("Pasted %d action(s) from clipboard", len(pasted))
         except (json.JSONDecodeError, ValueError, KeyError):
-            self._status_label.setText("⚠ Clipboard does not contain actions")
+            self._status_label.setText("⚠ Clipboard không chứa action hợp lệ")
         except Exception:
             logger.exception("Failed to paste actions")
 
     def _on_play(self) -> None:
         if not self._actions:
-            self._status_label.setText("No actions to play")
+            self._status_label.setText("Chưa có action để chạy")
             logger.info("Play blocked: no actions")
             return
 
         # Guard: check if at least one action is enabled
         enabled_count = sum(1 for a in self._actions if a.enabled)
         if enabled_count == 0:
-            self._status_label.setText("⚠ All actions are disabled")
+            self._status_label.setText("⚠ Tất cả action đều bị tắt")
             logger.info("Play blocked: all %d actions disabled",
                         len(self._actions))
             return
@@ -1179,7 +1284,7 @@ class MainWindow(QMainWindow):
 
         if self._engine.is_paused:
             self._engine.resume()
-            self._status_label.setText("▶ Resumed")
+            self._status_label.setText("▶ Tiếp tục")
             self._play_btn.setEnabled(False)
             self._tray.update_state(True, False)
             return
@@ -1219,12 +1324,12 @@ class MainWindow(QMainWindow):
         if self._engine.is_running:
             if self._engine.is_paused:
                 self._engine.resume()
-                self._status_label.setText("▶ Resumed")
+                self._status_label.setText("▶ Tiếp tục")
                 self._play_btn.setEnabled(False)
                 self._tray.update_state(True, False)
             else:
                 self._engine.pause()
-                self._status_label.setText("⏸ Paused")
+                self._status_label.setText("⏸ Tạm dừng")
                 self._play_btn.setEnabled(True)  # allow resume via Play
                 self._tray.update_state(True, True)
                 logger.info("Paused by user")
@@ -1286,7 +1391,7 @@ class MainWindow(QMainWindow):
 
     def _on_image_captured(self, path: str) -> None:
         self.show()
-        self._status_label.setText(f"Captured: {Path(path).name}")
+        self._status_label.setText(f"Đã chụp: {Path(path).name}")
         logger.info("Image captured: %s", Path(path).name)
 
     def _on_pick_coordinate(self) -> None:

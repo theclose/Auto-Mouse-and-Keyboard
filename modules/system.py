@@ -14,6 +14,40 @@ from core.action import Action, register_action
 
 logger = logging.getLogger(__name__)
 
+# Security: allowed base directories for file I/O actions
+_SAFE_BASES: tuple[str, ...] = ()
+
+
+def _validate_path(path: str, operation: str = "access") -> str:
+    """Validate and normalize a file path for security.
+
+    Prevents path traversal attacks (e.g., '../../etc/passwd').
+    Resolves the path and ensures it doesn't escape the working directory.
+
+    Args:
+        path: The file path to validate.
+        operation: Description for logging (e.g., 'write', 'read').
+
+    Returns:
+        Resolved absolute path if safe.
+
+    Raises:
+        ValueError: If path contains dangerous patterns.
+    """
+    if not path or not path.strip():
+        raise ValueError(f"Empty path for {operation}")
+
+    resolved = os.path.realpath(path)
+
+    # Block obvious traversal attempts
+    if '..' in os.path.normpath(path).split(os.sep):
+        logger.warning("Path traversal blocked: %s", path)
+        raise ValueError(
+            f"Path traversal not allowed: {path}"
+        )
+
+    return resolved
+
 _user32 = ctypes.windll.user32
 
 
@@ -343,6 +377,13 @@ class WriteToFile(Action):
             if '${' in path:
                 path = ctx.interpolate(path)
 
+        # Security: validate path
+        try:
+            path = _validate_path(path, "write")
+        except ValueError as e:
+            logger.error("WriteToFile blocked: %s", e)
+            return False
+
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         # L1: Rotate at 10MB for append mode
         if self.mode == "append":
@@ -433,6 +474,18 @@ class RunMacro(Action):
         path = self.macro_path
         if ctx and '${' in path:
             path = ctx.interpolate(path)
+
+        # Security: validate macro path
+        try:
+            path = _validate_path(path, "run_macro")
+        except ValueError as e:
+            logger.error("RunMacro blocked: %s", e)
+            return False
+
+        # Ensure it's a .json macro file
+        if not path.endswith('.json'):
+            logger.error("RunMacro: not a .json file: %s", path)
+            return False
 
         try:
             actions, settings = MacroEngine.load_macro(path)

@@ -88,7 +88,7 @@ class HotkeyManager:
 
     def __init__(self) -> None:
         self._hotkeys: dict[int, Callable[[], None]] = {}
-        self._pending: list[tuple[str, int, int, Callable[[], None]]] = []
+        self._pending: list[tuple[str, int, int, Callable[[], None], int]] = []
         self._next_id = 1
         self._thread: threading.Thread | None = None
         self._thread_id: int | None = None

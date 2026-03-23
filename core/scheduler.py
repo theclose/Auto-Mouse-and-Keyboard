@@ -272,6 +272,11 @@ class IfImageFound(Action):
     def children(self) -> list[Action]:
         return list(self._then_actions) + list(self._else_actions)
 
+    @children.setter
+    def children(self, value: list[Action]) -> None:
+        """Set all children as THEN actions (ELSE must use else_children)."""
+        self._then_actions = list(value)
+
     @property
     def then_children(self) -> list[Action]:
         return list(self._then_actions)
@@ -396,6 +401,11 @@ class IfPixelColor(Action):
     def children(self) -> list[Action]:
         return list(self._then_actions) + list(self._else_actions)
 
+    @children.setter
+    def children(self, value: list[Action]) -> None:
+        """Set all children as THEN actions (ELSE must use else_children)."""
+        self._then_actions = list(value)
+
     @property
     def then_children(self) -> list[Action]:
         return list(self._then_actions)
@@ -449,6 +459,8 @@ class IfVariable(Action):
         var_val = ctx.get_var(self.var_name) if ctx else None
 
         # Try numeric comparison
+        a: Any  # float or str depending on parse success
+        b: Any
         try:
             a = float(var_val) if var_val is not None else 0
             b = float(self.compare_value) if self.compare_value else 0
@@ -521,6 +533,11 @@ class IfVariable(Action):
     @property
     def children(self) -> list[Action]:
         return list(self._then_actions) + list(self._else_actions)
+
+    @children.setter
+    def children(self, value: list[Action]) -> None:
+        """Set all children as THEN actions (ELSE must use else_children)."""
+        self._then_actions = list(value)
 
     @property
     def then_children(self) -> list[Action]:

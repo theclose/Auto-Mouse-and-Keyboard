@@ -184,7 +184,7 @@ class MouseMove(Action):
         return True
 
     def _get_params(self) -> dict[str, Any]:
-        p = {"x": self.x, "y": self.y, "duration": self.duration}
+        p: dict[str, Any] = {"x": self.x, "y": self.y, "duration": self.duration}
         if self._dynamic_x: p["dynamic_x"] = self._dynamic_x
         if self._dynamic_y: p["dynamic_y"] = self._dynamic_y
         return p
@@ -236,7 +236,7 @@ class MouseDrag(Action):
         return True
 
     def _get_params(self) -> dict[str, Any]:
-        p = {"x": self.x, "y": self.y,
+        p: dict[str, Any] = {"x": self.x, "y": self.y,
              "duration": self.duration, "button": self.button}
         if self._dynamic_x: p["dynamic_x"] = self._dynamic_x
         if self._dynamic_y: p["dynamic_y"] = self._dynamic_y

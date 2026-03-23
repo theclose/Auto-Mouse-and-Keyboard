@@ -298,7 +298,7 @@ class DelayAction(Action):
         return True
 
     def _get_params(self) -> dict[str, Any]:
-        p = {"duration_ms": self.duration_ms}
+        p: dict[str, Any] = {"duration_ms": self.duration_ms}
         if self._dynamic_ms:
             p["dynamic_ms"] = self._dynamic_ms
         return p

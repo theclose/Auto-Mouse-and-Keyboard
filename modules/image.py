@@ -59,7 +59,7 @@ class ImageFinder:
             if grayscale:
                 screen = capture_region_gray(*region)
             else:
-                screen: Any = capture_region(*region)
+                screen = capture_region(*region)
         elif grayscale:
             screen = capture_full_screen_gray()  # BGRA→GRAY direct
         else:

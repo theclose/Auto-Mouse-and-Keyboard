@@ -60,6 +60,9 @@ class MacroEngine(QThread):
         self._stop_event = threading.Event()
         # L6: Step-by-step debug mode
         self._step_mode = False
+        # Checkpoint/resume support
+        self._last_checkpoint: dict | None = None
+        self._resume_from_idx: int = 0
 
     # -- public API ----------------------------------------------------------
     def load_actions(self, actions: list[Action]) -> None:
@@ -150,8 +153,8 @@ class MacroEngine(QThread):
         self._exec_ctx = ExecutionContext()
         self._exec_ctx.reset()
         set_context(self._exec_ctx)
-        self._last_checkpoint: dict | None = None
-        self._resume_from_idx: int = 0
+        self._last_checkpoint = None
+        self._resume_from_idx = 0
         # v3.0: register nested callback for composite actions
         from core.engine_context import set_nested_callback
         set_nested_callback(self._on_nested_step)

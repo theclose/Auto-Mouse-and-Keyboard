@@ -184,7 +184,7 @@ class SettingsDialog(QDialog):
 
         hint = QLabel("💡 Click ô → ấn phím hoặc tổ hợp phím để gán")
         hint.setObjectName("subtitleLabel")
-        hint.setStyleSheet("color: #888; font-size: 11px; margin-bottom: 4px;")
+        hint.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 4px;")
         hk_layout.addRow(hint)
 
         for key, label in [("start_stop", "Chạy / Dừng:"),

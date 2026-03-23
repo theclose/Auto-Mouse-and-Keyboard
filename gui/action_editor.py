@@ -501,13 +501,16 @@ class _HelpPopup(QFrame):
 
     def __init__(self, html: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setWindowFlags(
+            Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(
-            "QFrame { background: #1e1e2e; border: 1px solid #6c6cff; "
+            "_HelpPopup { background: #1e1e2e; border: 1px solid #6c6cff; "
             "border-radius: 8px; }"
         )
-        self.setFixedWidth(400)
-        self.setMaximumHeight(420)
+        self.setFixedWidth(420)
+        self.setMinimumHeight(200)
+        self.setMaximumHeight(450)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 6, 8, 8)
@@ -785,9 +788,10 @@ class ActionEditorDialog(QDialog):
         if hasattr(self, '_help_popup') and self._help_popup is not None:
             self._help_popup.close()
         self._help_popup = _HelpPopup(html, parent=self)
-        # Position below the help button
-        pos = self._help_btn.mapTo(self, self._help_btn.rect().bottomLeft())
-        self._help_popup.move(max(0, pos.x() - 350), pos.y() + 4)
+        # Position below the help button (global coords since popup is a window)
+        btn_pos = self._help_btn.mapToGlobal(
+            self._help_btn.rect().bottomRight())
+        self._help_popup.move(btn_pos.x() - 420, btn_pos.y() + 4)
         self._help_popup.show()
         self._help_popup.setFocus()
 

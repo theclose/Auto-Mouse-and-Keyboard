@@ -420,6 +420,14 @@ class ActionEditorDialog(QDialog):
         self._add_xy_params()
         if atype in ("mouse_click", "mouse_move"):
             self._add_duration_param()
+        # context_image: read-only display (set by recorder, not edited manually)
+        if atype in ("mouse_click", "mouse_double_click", "mouse_right_click"):
+            ctx_img = QLineEdit()
+            ctx_img.setPlaceholderText("(thiết lập bởi Recorder)")
+            ctx_img.setReadOnly(True)
+            ctx_img.setStyleSheet("color: #888;")
+            self._params_layout.addRow("Ảnh ngữ cảnh 📷:", ctx_img)
+            self._param_widgets["context_image"] = ctx_img
 
     def _build_drag_params(self) -> None:
         self._add_xy_params()
@@ -910,6 +918,7 @@ class ActionEditorDialog(QDialog):
 
     def _load_action(self, action: Action) -> None:
         """Pre-fill dialog from an existing action."""
+        self._editing_action = action  # Store for context_image preservation
         # Select the correct type
         for i in range(self._type_combo.count()):
             if self._type_combo.itemData(i, Qt.ItemDataRole.UserRole) == action.ACTION_TYPE:
@@ -957,6 +966,13 @@ class ActionEditorDialog(QDialog):
             action.description = self._desc_edit.text()
             action.enabled = self._enabled_check.isChecked()
             action.on_error = self._error_combo.currentData() or "stop"
+
+            # Preserve hidden params from original action (e.g. context_image)
+            if hasattr(self, '_editing_action') and self._editing_action:
+                orig = self._editing_action
+                if hasattr(orig, 'context_image') and orig.context_image:
+                    if hasattr(action, 'context_image') and not action.context_image:
+                        action.context_image = orig.context_image
 
             if not self._validate_image_path(action):
                 return

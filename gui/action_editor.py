@@ -788,10 +788,10 @@ class ActionEditorDialog(QDialog):
         if hasattr(self, '_help_popup') and self._help_popup is not None:
             self._help_popup.close()
         self._help_popup = _HelpPopup(html, parent=self)
-        # Position below the help button (global coords since popup is a window)
+        # Position to the right of the help button
         btn_pos = self._help_btn.mapToGlobal(
-            self._help_btn.rect().bottomRight())
-        self._help_popup.move(btn_pos.x() - 420, btn_pos.y() + 4)
+            self._help_btn.rect().topRight())
+        self._help_popup.move(btn_pos.x() + 6, btn_pos.y())
         self._help_popup.show()
         self._help_popup.setFocus()
 

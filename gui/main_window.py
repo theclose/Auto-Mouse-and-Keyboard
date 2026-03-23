@@ -483,8 +483,8 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(exec_group)
 
         # ── 5. Variable Inspector (2.1) ────────────────────────
-        var_group = QGroupBox("🔍 Variables")
-        var_layout = QVBoxLayout(var_group)
+        self._var_group = QGroupBox("🔍 Biến")
+        var_layout = QVBoxLayout(self._var_group)
         self._var_table = QTableWidget(0, 3)
         self._var_table.setHorizontalHeaderLabels(["Tên", "Giá trị", "Kiểu"])
         self._var_table.horizontalHeader().setStretchLastSection(True)
@@ -493,7 +493,8 @@ class MainWindow(QMainWindow):
         self._var_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._var_table.setAccessibleName("Bảng biến")
         var_layout.addWidget(self._var_table)
-        right_layout.addWidget(var_group)
+        right_layout.addWidget(self._var_group)
+        self._var_group.setVisible(False)  # auto-hide: shown when engine runs
 
         # Variable refresh timer
         self._var_timer = QTimer(self)
@@ -707,6 +708,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("▶ Running... — AutoMacro (by TungDo)")
         self._tray.update_state(True, False)
         self._var_timer.start()  # 2.1: start variable inspector
+        self._var_group.setVisible(True)  # auto-show inspector
         self._step_next_btn.setEnabled(self._step_toggle.isChecked())
         logger.info("Engine started (%d actions, loop=%s)",
                     len(self._actions),
@@ -720,6 +722,7 @@ class MainWindow(QMainWindow):
         self._progress_bar.reset()
         self._tray.update_state(False, False)
         self._var_timer.stop()  # 2.1: stop variable inspector
+        self._var_group.setVisible(False)  # auto-hide inspector
         self._step_next_btn.setEnabled(False)
         # Reset window title
         name = Path(self._current_file).stem if self._current_file else "New Macro"

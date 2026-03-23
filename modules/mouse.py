@@ -4,16 +4,25 @@ Provides click, double-click, right-click, move, drag, and scroll.
 """
 
 import logging
-import pyautogui
 from typing import Any
 
 from core.action import Action, register_action
 
 logger = logging.getLogger(__name__)
 
-# Safety: pyautogui fail-safe (move mouse to top-left corner to abort)
-pyautogui.FAILSAFE = True
-pyautogui.PAUSE = 0.005  # 5ms — minimal safe pause (was 30ms)
+# Lazy-load pyautogui to save ~680ms startup
+_pyautogui = None
+
+
+def _pag():
+    """Return pyautogui module, importing on first call."""
+    global _pyautogui
+    if _pyautogui is None:
+        import pyautogui
+        pyautogui.FAILSAFE = True
+        pyautogui.PAUSE = 0.005  # 5ms — minimal safe pause
+        _pyautogui = pyautogui
+    return _pyautogui
 
 import os
 
@@ -54,7 +63,7 @@ class MouseClick(Action):
 
     def execute(self) -> bool:
         tx, ty = _resolve_visual(self.context_image, self.x, self.y)
-        pyautogui.click(tx, ty, duration=self.duration)
+        _pag().click(tx, ty, duration=self.duration)
         logger.debug("Clicked at (%d, %d)", tx, ty)
         return True
 
@@ -89,7 +98,7 @@ class MouseDoubleClick(Action):
 
     def execute(self) -> bool:
         tx, ty = _resolve_visual(self.context_image, self.x, self.y)
-        pyautogui.doubleClick(tx, ty)
+        _pag().doubleClick(tx, ty)
         logger.debug("Double-clicked at (%d, %d)", tx, ty)
         return True
 
@@ -122,7 +131,7 @@ class MouseRightClick(Action):
 
     def execute(self) -> bool:
         tx, ty = _resolve_visual(self.context_image, self.x, self.y)
-        pyautogui.rightClick(tx, ty)
+        _pag().rightClick(tx, ty)
         logger.debug("Right-clicked at (%d, %d)", tx, ty)
         return True
 
@@ -171,7 +180,7 @@ class MouseMove(Action):
 
     def execute(self) -> bool:
         rx, ry = self._resolve_coords()
-        pyautogui.moveTo(rx, ry, duration=self.duration)
+        _pag().moveTo(rx, ry, duration=self.duration)
         return True
 
     def _get_params(self) -> dict[str, Any]:
@@ -223,7 +232,7 @@ class MouseDrag(Action):
 
     def execute(self) -> bool:
         rx, ry = self._resolve_coords()
-        pyautogui.dragTo(rx, ry, duration=self.duration, button=self.button)
+        _pag().dragTo(rx, ry, duration=self.duration, button=self.button)
         return True
 
     def _get_params(self) -> dict[str, Any]:
@@ -258,7 +267,7 @@ class MouseScroll(Action):
         self.clicks = clicks  # positive = up, negative = down
 
     def execute(self) -> bool:
-        pyautogui.scroll(self.clicks, self.x, self.y)
+        _pag().scroll(self.clicks, self.x, self.y)
         return True
 
     def _get_params(self) -> dict[str, Any]:

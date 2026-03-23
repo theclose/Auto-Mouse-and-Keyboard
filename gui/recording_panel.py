@@ -100,6 +100,8 @@ class RecordingPanel(QWidget):
         """Toggle recording on/off — called by F9 hotkey."""
         if self._recorder.is_recording:
             self._stop_recording()
+        elif hasattr(self, '_countdown_timer') and self._countdown_timer.isActive():
+            self._stop_recording()  # Cancel countdown
         elif self._record_btn.isEnabled():
             self._start_recording()
 

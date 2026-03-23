@@ -62,11 +62,19 @@ def setup_global_hotkeys(config: dict[str, Any]) -> Any:
         def toggle_pause() -> None:
             w = _find_main_window()
             if w:
+                # If recording, pause/resume recording instead of engine
+                if hasattr(w, '_rec_panel') and w._rec_panel._recorder.is_recording:
+                    w._rec_panel._toggle_pause()
+                    return
                 w._on_pause()
 
         def emergency_stop() -> None:
             w = _find_main_window()
             if w:
+                # If recording, stop recording
+                if hasattr(w, '_rec_panel') and w._rec_panel._recorder.is_recording:
+                    w._rec_panel._stop_recording()
+                    return
                 w._on_stop()
 
         def toggle_record() -> None:

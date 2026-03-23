@@ -19,6 +19,7 @@ DEFAULT_CONFIG = {
         "start_stop": "F6",
         "pause_resume": "F7",
         "emergency_stop": "F8",
+        "record": "F9",
     },
     "defaults": {
         "click_delay": 100,
@@ -98,7 +99,8 @@ class SettingsDialog(QDialog):
 
         for key, label in [("start_stop", "Start / Stop:"),
                            ("pause_resume", "Pause / Resume:"),
-                           ("emergency_stop", "Emergency Stop:")]:
+                           ("emergency_stop", "Emergency Stop:"),
+                           ("record", "Record (Ghi):")]:
             edit = QLineEdit(hk.get(key, ""))
             edit.setPlaceholderText("e.g. F6")
             hk_layout.addRow(label, edit)

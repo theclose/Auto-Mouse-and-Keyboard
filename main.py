@@ -41,6 +41,7 @@ def setup_global_hotkeys(config: dict[str, Any]) -> Any:
     """Register system-wide hotkeys using Win32 RegisterHotKey."""
     try:
         from core.hotkey_manager import HotkeyManager
+        from PyQt6.QtCore import QTimer
 
         hotkeys = config.get("hotkeys", {})
         hk_mgr = HotkeyManager()
@@ -57,30 +58,30 @@ def setup_global_hotkeys(config: dict[str, Any]) -> Any:
         def toggle_play() -> None:
             w = _find_main_window()
             if w:
-                w._on_play()
+                QTimer.singleShot(0, w._on_play)
 
         def toggle_pause() -> None:
             w = _find_main_window()
             if w:
                 # If recording, pause/resume recording instead of engine
                 if hasattr(w, '_rec_panel') and w._rec_panel._recorder.is_recording:
-                    w._rec_panel._toggle_pause()
+                    QTimer.singleShot(0, w._rec_panel._toggle_pause)
                     return
-                w._on_pause()
+                QTimer.singleShot(0, w._on_pause)
 
         def emergency_stop() -> None:
             w = _find_main_window()
             if w:
                 # If recording, stop recording
                 if hasattr(w, '_rec_panel') and w._rec_panel._recorder.is_recording:
-                    w._rec_panel._stop_recording()
+                    QTimer.singleShot(0, w._rec_panel._stop_recording)
                     return
-                w._on_stop()
+                QTimer.singleShot(0, w._on_stop)
 
         def toggle_record() -> None:
             w = _find_main_window()
             if w and hasattr(w, '_rec_panel'):
-                w._rec_panel.toggle_recording()
+                QTimer.singleShot(0, w._rec_panel.toggle_recording)
 
         start_key = hotkeys.get("start_stop", "F6")
         pause_key = hotkeys.get("pause_resume", "F7")

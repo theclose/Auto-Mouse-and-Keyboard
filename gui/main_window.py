@@ -40,7 +40,8 @@ from gui.image_capture import ImageCaptureOverlay
 from gui.coordinate_picker import CoordinatePickerOverlay
 from gui.tray import TrayManager
 from gui.settings_dialog import SettingsDialog, load_config, save_config
-from gui.styles import DARK_THEME
+from gui.styles import DARK_THEME, get_theme
+from gui.help_dialog import HelpDialog
 from version import __version__, __app_name__, __author__, __build_date__
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,9 @@ class MainWindow(QMainWindow):
         w = self._config.get("ui", {}).get("window_width", 900)
         h = self._config.get("ui", {}).get("window_height", 650)
         self.resize(w, h)
-        self.setStyleSheet(DARK_THEME)
+        cfg = load_config()
+        theme_pref = cfg.get("theme", "auto")
+        self.setStyleSheet(get_theme(theme_pref))
 
         self._undo_stack = QUndoStack(self)
         self._undo_stack.indexChanged.connect(self._on_undo_index_changed)
@@ -166,19 +169,19 @@ class MainWindow(QMainWindow):
         tb.setMovable(False)
         self.addToolBar(tb)
 
-        new_act = QMenuAction("📄 New", self)
+        new_act = QMenuAction("📄 Mới", self)
         new_act.setShortcut(QKeySequence("Ctrl+N"))
         new_act.setToolTip("Tạo macro mới (Ctrl+N)")
         new_act.triggered.connect(self._on_new)
         tb.addAction(new_act)
 
-        open_act = QMenuAction("📂 Open", self)
+        open_act = QMenuAction("📂 Mở", self)
         open_act.setShortcut(QKeySequence("Ctrl+O"))
         open_act.setToolTip("Mở file macro (Ctrl+O)")
         open_act.triggered.connect(self._on_open)
         tb.addAction(open_act)
 
-        save_act = QMenuAction("💾 Save", self)
+        save_act = QMenuAction("💾 Lưu", self)
         save_act.setShortcut(QKeySequence("Ctrl+S"))
         save_act.setToolTip("Lưu macro hiện tại (Ctrl+S)")
         save_act.triggered.connect(self._on_save)
@@ -194,17 +197,17 @@ class MainWindow(QMainWindow):
 
         tb.addSeparator()
 
-        self._add_act = QMenuAction("➕ Add", self)
+        self._add_act = QMenuAction("➕ Thêm", self)
         self._add_act.setToolTip("Thêm action mới")
         self._add_act.triggered.connect(self._on_add_action)
         tb.addAction(self._add_act)
 
-        self._edit_act = QMenuAction("✏️ Edit", self)
+        self._edit_act = QMenuAction("✏️ Sửa", self)
         self._edit_act.setToolTip("Sửa action đang chọn")
         self._edit_act.triggered.connect(self._on_edit_action)
         tb.addAction(self._edit_act)
 
-        self._del_act = QMenuAction("🗑️ Delete", self)
+        self._del_act = QMenuAction("🗑️ Xóa", self)
         self._del_act.setShortcut(QKeySequence.StandardKey.Delete)
         self._del_act.setToolTip("Xóa action (Delete)")
         self._del_act.triggered.connect(self._on_delete_action)
@@ -213,28 +216,34 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
 
         # Tools
-        capture_act = QMenuAction("📸 Capture", self)
-        capture_act.setToolTip("Capture a screen region as template image")
+        capture_act = QMenuAction("📸 Chụp", self)
+        capture_act.setToolTip("Chụp vùng màn hình làm ảnh mẫu")
         capture_act.triggered.connect(self._on_capture)
         tb.addAction(capture_act)
 
-        coord_act = QMenuAction("🎯 Pick XY", self)
+        coord_act = QMenuAction("🎯 Tọa độ", self)
         coord_act.setShortcut(QKeySequence("Ctrl+G"))
         coord_act.setToolTip(
-            "Pick coordinates from screen (Ctrl+G)\n"
-            "Click anywhere → X,Y shown in status bar & copied to clipboard")
+            "Chọn tọa độ từ màn hình (Ctrl+G)\n"
+            "Click bất kỳ → X,Y hiển thị trên thanh trạng thái")
         coord_act.triggered.connect(self._on_pick_coordinate)
         tb.addAction(coord_act)
 
-        settings_act = QMenuAction("⚙ Settings", self)
+        settings_act = QMenuAction("⚙ Cài đặt", self)
         settings_act.setToolTip("Mở cài đặt ứng dụng")
         settings_act.triggered.connect(self._on_settings)
         tb.addAction(settings_act)
 
-        about_act = QMenuAction("ℹ️ About", self)
+        about_act = QMenuAction("ℹ️ Giới thiệu", self)
         about_act.setToolTip("Thông tin ứng dụng")
         about_act.triggered.connect(self._on_about)
         tb.addAction(about_act)
+
+        help_act = QMenuAction("📖 Hướng dẫn", self)
+        help_act.setShortcut(QKeySequence("F1"))
+        help_act.setToolTip("Mở hướng dẫn sử dụng (F1)")
+        help_act.triggered.connect(self._on_help)
+        tb.addAction(help_act)
 
     # ------------------------------------------------------------------ #
     # Central Widget
@@ -314,29 +323,34 @@ class MainWindow(QMainWindow):
 
         # Move Up/Down buttons with keyboard shortcuts
         move_layout = QHBoxLayout()
-        self._up_btn = QPushButton("⬆ Up")
+        self._up_btn = QPushButton("⬆ Lên")
         self._up_btn.setShortcut(QKeySequence("Ctrl+Up"))
-        self._up_btn.setToolTip("Move action up (Ctrl+↑)")
+        self._up_btn.setToolTip("Di chuyển lên (Ctrl+↑)")
+        self._up_btn.setAccessibleName("Di chuyển action lên")
         self._up_btn.clicked.connect(self._on_move_up)
         move_layout.addWidget(self._up_btn)
-        self._down_btn = QPushButton("⬇ Down")
+        self._down_btn = QPushButton("⬇ Xuống")
         self._down_btn.setShortcut(QKeySequence("Ctrl+Down"))
-        self._down_btn.setToolTip("Move action down (Ctrl+↓)")
+        self._down_btn.setToolTip("Di chuyển xuống (Ctrl+↓)")
+        self._down_btn.setAccessibleName("Di chuyển action xuống")
         self._down_btn.clicked.connect(self._on_move_down)
         move_layout.addWidget(self._down_btn)
-        self._dup_btn = QPushButton("📋 Duplicate")
+        self._dup_btn = QPushButton("📋 Nhân bản")
         self._dup_btn.setShortcut(QKeySequence("Ctrl+D"))
-        self._dup_btn.setToolTip("Duplicate action (Ctrl+D)")
+        self._dup_btn.setToolTip("Nhân bản action (Ctrl+D)")
+        self._dup_btn.setAccessibleName("Nhân bản action")
         self._dup_btn.clicked.connect(self._on_duplicate)
         move_layout.addWidget(self._dup_btn)
-        self._copy_btn = QPushButton("📄 Copy")
+        self._copy_btn = QPushButton("📄 Sao chép")
         self._copy_btn.setShortcut(QKeySequence("Ctrl+C"))
-        self._copy_btn.setToolTip("Copy selected actions (Ctrl+C)")
+        self._copy_btn.setToolTip("Sao chép action (Ctrl+C)")
+        self._copy_btn.setAccessibleName("Sao chép action")
         self._copy_btn.clicked.connect(self._on_copy_actions)
         move_layout.addWidget(self._copy_btn)
-        self._paste_btn = QPushButton("📥 Paste")
+        self._paste_btn = QPushButton("📥 Dán")
         self._paste_btn.setShortcut(QKeySequence("Ctrl+V"))
-        self._paste_btn.setToolTip("Paste actions from clipboard (Ctrl+V)")
+        self._paste_btn.setToolTip("Dán action từ clipboard (Ctrl+V)")
+        self._paste_btn.setAccessibleName("Dán action")
         self._paste_btn.clicked.connect(self._on_paste_actions)
         move_layout.addWidget(self._paste_btn)
         move_layout.addStretch()
@@ -356,45 +370,47 @@ class MainWindow(QMainWindow):
         right_layout.setContentsMargins(0, 0, 0, 0)
 
         # ── 1. Playback controls (prominent) ──────────────────
-        play_group = QGroupBox("Playback")
+        play_group = QGroupBox("Điều khiển")
         play_vbox = QVBoxLayout(play_group)
 
         self._play_btn = QPushButton("▶  P L A Y")
         self._play_btn.setObjectName("playButton")
         self._play_btn.setMinimumHeight(48)
         self._play_btn.setToolTip("Bắt đầu chạy macro (F6)")
-        self._play_btn.setAccessibleName("Play macro")
+        self._play_btn.setAccessibleName("Chạy macro")
         self._play_btn.clicked.connect(self._on_play)
         play_vbox.addWidget(self._play_btn)
 
         ctrl_row = QHBoxLayout()
-        self._pause_btn = QPushButton("⏸ Pause")
+        self._pause_btn = QPushButton("⏸ Tạm dừng")
         self._pause_btn.setObjectName("controlButton")
         self._pause_btn.setEnabled(False)
         self._pause_btn.setToolTip("Tạm dừng (F7)")
-        self._pause_btn.setAccessibleName("Pause macro")
+        self._pause_btn.setAccessibleName("Tạm dừng macro")
         self._pause_btn.clicked.connect(self._on_pause)
         ctrl_row.addWidget(self._pause_btn)
 
-        self._stop_btn = QPushButton("⏹ Stop")
+        self._stop_btn = QPushButton("⏹ Dừng")
         self._stop_btn.setObjectName("dangerButton")
         self._stop_btn.setEnabled(False)
         self._stop_btn.setToolTip("Dừng hoàn toàn (F8)")
-        self._stop_btn.setAccessibleName("Stop macro")
+        self._stop_btn.setAccessibleName("Dừng macro")
         self._stop_btn.clicked.connect(self._on_stop)
         ctrl_row.addWidget(self._stop_btn)
         play_vbox.addLayout(ctrl_row)
 
         # Step debug controls (2.1)
         step_row = QHBoxLayout()
-        self._step_toggle = QCheckBox("🐛 Step Mode")
-        self._step_toggle.setToolTip("Enable step-by-step execution")
+        self._step_toggle = QCheckBox("🐛 Chạy từng bước")
+        self._step_toggle.setToolTip("Bật chế độ chạy từng bước")
+        self._step_toggle.setAccessibleName("Chế độ từng bước")
         self._step_toggle.toggled.connect(self._on_step_toggle)
         step_row.addWidget(self._step_toggle)
 
-        self._step_next_btn = QPushButton("⏭ Step")
+        self._step_next_btn = QPushButton("⏭ Bước tiếp")
         self._step_next_btn.setEnabled(False)
-        self._step_next_btn.setToolTip("Execute next action")
+        self._step_next_btn.setToolTip("Thực thi bước tiếp theo")
+        self._step_next_btn.setAccessibleName("Bước tiếp theo")
         self._step_next_btn.clicked.connect(self._on_step_next)
         step_row.addWidget(self._step_next_btn)
         play_vbox.addLayout(step_row)
@@ -402,25 +418,28 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(play_group)
 
         # ── 2. Loop settings ──────────────────────────────────
-        self._loop_group = QGroupBox("Loop Settings")
+        self._loop_group = QGroupBox("Cài đặt lặp")
         loop_form = QFormLayout(self._loop_group)
 
         self._loop_spin = QSpinBox()
         self._loop_spin.setRange(0, 999999)
         self._loop_spin.setValue(1)
-        self._loop_spin.setSpecialValueText("∞ Infinite")
-        loop_form.addRow("Loop Count:", self._loop_spin)
+        self._loop_spin.setSpecialValueText("∞ Vô hạn")
+        self._loop_spin.setAccessibleName("Số lần lặp")
+        loop_form.addRow("Số lần lặp:", self._loop_spin)
 
         self._loop_delay_spin = QSpinBox()
         self._loop_delay_spin.setRange(0, 60000)
         self._loop_delay_spin.setSuffix(" ms")
         self._loop_delay_spin.setValue(0)
-        loop_form.addRow("Loop Delay:", self._loop_delay_spin)
+        self._loop_delay_spin.setAccessibleName("Độ trễ giữa các lần lặp")
+        loop_form.addRow("Độ trễ lặp:", self._loop_delay_spin)
 
-        self._stop_on_error_check = QCheckBox("Stop on Error")
+        self._stop_on_error_check = QCheckBox("Dừng khi lỗi")
         self._stop_on_error_check.setToolTip(
-            "Stop execution when an action fails instead of continuing")
+            "Dừng thực thi khi action bị lỗi thay vì tiếp tục")
         self._stop_on_error_check.setChecked(False)
+        self._stop_on_error_check.setAccessibleName("Dừng khi gặp lỗi")
         loop_form.addRow("", self._stop_on_error_check)
 
         self._speed_spin = QDoubleSpinBox()
@@ -429,8 +448,9 @@ class MainWindow(QMainWindow):
         self._speed_spin.setSingleStep(0.1)
         self._speed_spin.setDecimals(1)
         self._speed_spin.setSuffix("×")
-        self._speed_spin.setToolTip("Playback speed (0.1× slow → 5× fast)")
-        loop_form.addRow("Speed:", self._speed_spin)
+        self._speed_spin.setToolTip("Tốc độ (0.1× chậm → 5× nhanh)")
+        self._speed_spin.setAccessibleName("Tốc độ chạy")
+        loop_form.addRow("Tốc độ:", self._speed_spin)
 
         right_layout.addWidget(self._loop_group)
 
@@ -440,10 +460,10 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(self._rec_panel)
 
         # ── 4. Execution (progress + log merged) ──────────────
-        exec_group = QGroupBox("Execution")
+        exec_group = QGroupBox("Thực thi")
         exec_layout = QVBoxLayout(exec_group)
 
-        self._action_label = QLabel("Idle")
+        self._action_label = QLabel("Đang chờ")
         self._action_label.setObjectName("subtitleLabel")
         exec_layout.addWidget(self._action_label)
 
@@ -466,11 +486,12 @@ class MainWindow(QMainWindow):
         var_group = QGroupBox("🔍 Variables")
         var_layout = QVBoxLayout(var_group)
         self._var_table = QTableWidget(0, 3)
-        self._var_table.setHorizontalHeaderLabels(["Name", "Value", "Type"])
+        self._var_table.setHorizontalHeaderLabels(["Tên", "Giá trị", "Kiểu"])
         self._var_table.horizontalHeader().setStretchLastSection(True)
         self._var_table.setMaximumHeight(120)
         self._var_table.setAlternatingRowColors(True)
         self._var_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._var_table.setAccessibleName("Bảng biến")
         var_layout.addWidget(self._var_table)
         right_layout.addWidget(var_group)
 
@@ -847,38 +868,38 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         rows = self._selected_rows()
         if not rows:
-            add_act = menu.addAction("➕ Add Action")
+            add_act = menu.addAction("➕ Thêm Action")
             assert add_act is not None
             add_act.triggered.connect(self._on_add_action)
             menu.exec(global_pos)
             return
 
-        edit_act = menu.addAction("✏️ Edit")
+        edit_act = menu.addAction("✏️ Sửa")
         assert edit_act is not None
         edit_act.triggered.connect(self._on_edit_action)
         edit_act.setEnabled(len(rows) == 1)
 
-        dup_act = menu.addAction("📋 Duplicate")
+        dup_act = menu.addAction("📋 Nhân bản")
         assert dup_act is not None
         dup_act.triggered.connect(self._on_duplicate)
         dup_act.setEnabled(len(rows) == 1)
 
-        copy_act = menu.addAction("📄 Copy (Ctrl+C)")
+        copy_act = menu.addAction("📄 Sao chép (Ctrl+C)")
         assert copy_act is not None
         copy_act.triggered.connect(self._on_copy_actions)
 
-        paste_act = menu.addAction("📥 Paste (Ctrl+V)")
+        paste_act = menu.addAction("📥 Dán (Ctrl+V)")
         assert paste_act is not None
         paste_act.triggered.connect(self._on_paste_actions)
 
         toggle_act = menu.addAction(
-            "✗ Disable" if self._actions[rows[0]].enabled else "✓ Enable")
+            "✗ Tắt" if self._actions[rows[0]].enabled else "✓ Bật")
         assert toggle_act is not None
         toggle_act.triggered.connect(self._on_toggle_enabled)
 
         menu.addSeparator()
 
-        del_act = menu.addAction("🗑️ Delete")
+        del_act = menu.addAction("🗑️ Xóa")
         assert del_act is not None
         del_act.triggered.connect(self._on_delete_action)
 
@@ -1311,7 +1332,10 @@ class MainWindow(QMainWindow):
         try:
             self._config = config
             save_config(self._config)
-            self._status_label.setText("Settings saved")
+            # Apply theme immediately
+            theme_pref = config.get("ui", {}).get("theme", "auto")
+            self.setStyleSheet(get_theme(theme_pref))
+            self._status_label.setText("Cài đặt đã lưu")
             logger.info("Settings saved")
         except Exception:
             logger.exception("Failed to save settings")
@@ -1325,6 +1349,11 @@ class MainWindow(QMainWindow):
                 f"RAM: {stats['current_mb']}MB (peak: {stats['peak_mb']}MB)")
         except Exception:
             pass
+
+    def _on_help(self) -> None:
+        """Open the in-app help dialog."""
+        dlg = HelpDialog(self)
+        dlg.exec()
 
     def _on_about(self) -> None:
         import platform

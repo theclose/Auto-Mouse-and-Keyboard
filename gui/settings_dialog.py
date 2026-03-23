@@ -79,7 +79,7 @@ class SettingsDialog(QDialog):
 
     def __init__(self, config: dict[str, Any], parent: Any = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Settings")
+        self.setWindowTitle("Cài đặt")
         self.setMinimumWidth(460)
         self.setModal(True)
         self._config: dict[str, Any] = dict(config)
@@ -145,17 +145,17 @@ class SettingsDialog(QDialog):
         ui = self._config.get("ui", {})
 
         theme = QComboBox()
-        theme.addItems(["dark", "light"])
-        theme.setCurrentText(ui.get("theme", "dark"))
-        ui_layout.addRow("Theme:", theme)
+        theme.addItems(["auto", "dark", "light"])
+        theme.setCurrentText(ui.get("theme", "auto"))
+        ui_layout.addRow("Giao diện:", theme)
         self._widgets["ui.theme"] = theme
 
-        tray_check = QCheckBox("Minimize to system tray")
+        tray_check = QCheckBox("Thu nhỏ vào khay hệ thống")
         tray_check.setChecked(ui.get("minimize_to_tray", True))
         ui_layout.addRow("", tray_check)
         self._widgets["ui.minimize_to_tray"] = tray_check
 
-        tabs.addTab(ui_tab, "UI")
+        tabs.addTab(ui_tab, "Giao diện")
 
         layout.addWidget(tabs)
 

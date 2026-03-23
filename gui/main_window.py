@@ -478,6 +478,8 @@ class MainWindow(QMainWindow):
         # ── 3. Recording panel ────────────────────────────────
         self._rec_panel = RecordingPanel()
         self._rec_panel.recording_finished.connect(self._on_recording_done)
+        self._rec_panel.recording_state_changed.connect(
+            self._on_recording_state_changed)
         right_layout.addWidget(self._rec_panel)
 
         # ── 4. Execution (progress + log merged) ──────────────
@@ -1431,6 +1433,14 @@ class MainWindow(QMainWindow):
         except Exception:
             logger.exception("Failed to process recorded actions")
 
+    def _on_recording_state_changed(self, is_recording: bool) -> None:
+        """Update tray icon when recording starts/stops."""
+        self._tray.update_state(
+            is_running=self._engine.isRunning(),
+            is_paused=False,
+            is_recording=is_recording,
+        )
+
     def _on_settings(self) -> None:
         dialog = SettingsDialog(self._config, self)
         dialog.config_saved.connect(self._handle_settings_saved)
@@ -1444,8 +1454,20 @@ class MainWindow(QMainWindow):
             # Apply theme immediately
             theme_pref = config.get("ui", {}).get("theme", "auto")
             self.setStyleSheet(get_theme(theme_pref))
-            self._status_label.setText("Cài đặt đã lưu")
-            logger.info("Settings saved")
+            # Re-register hotkeys without restart
+            if hasattr(self, '_hk_mgr') and self._hk_mgr:
+                self._hk_mgr.stop()
+            from main import setup_global_hotkeys
+            self._hk_mgr = setup_global_hotkeys(config)
+            # Update status bar hotkey display
+            hk = config.get('hotkeys', {})
+            self._hotkey_label.setText(
+                f"  Chạy: {hk.get('start_stop', 'F6')}  |  "
+                f"Dừng tạm: {hk.get('pause_resume', 'F7')}  |  "
+                f"Dừng: {hk.get('emergency_stop', 'F8')}  |  "
+                f"Ghi: {hk.get('record', 'F9')}")
+            self._status_label.setText("Cài đặt đã lưu ✅")
+            logger.info("Settings saved — hotkeys re-registered")
         except Exception:
             logger.exception("Failed to save settings")
 

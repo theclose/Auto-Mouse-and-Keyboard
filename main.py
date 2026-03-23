@@ -141,6 +141,7 @@ def main() -> None:
 
     # Show main window
     window = MainWindow()
+    window._hk_mgr = _hk_mgr  # Enable restart-free hotkey rebind
     window.show()
 
     logger.info("AutoPilot started")

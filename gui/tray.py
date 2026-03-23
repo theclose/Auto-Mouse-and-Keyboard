@@ -1,6 +1,7 @@
 """
 System tray integration.
-Provides a tray icon with quick controls and minimize-to-tray behavior.
+Provides a tray icon with quick controls, minimize-to-tray behavior,
+and color-coded state indication (recording/running/paused/idle).
 """
 
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
@@ -8,11 +9,20 @@ from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 from PyQt6.QtCore import pyqtSignal, QObject
 from typing import Optional
 
+# Icon color palette
+_ICON_COLORS = {
+    "blue": "#6C63FF",    # idle
+    "green": "#4CAF50",   # running
+    "yellow": "#FFC107",  # paused
+    "red": "#F44336",     # recording
+}
 
-def _create_default_icon() -> QIcon:
-    """Create a simple colored 'A' icon when no icon file is available."""
+
+def _create_icon(color: str = "blue") -> QIcon:
+    """Create a colored 'A' icon with the specified state color."""
+    bg = QColor(_ICON_COLORS.get(color, _ICON_COLORS["blue"]))
     pixmap = QPixmap(64, 64)
-    pixmap.fill(QColor(108, 99, 255))
+    pixmap.fill(bg)
     painter = QPainter(pixmap)
     painter.setPen(QColor(255, 255, 255))
     font = QFont("Segoe UI")
@@ -27,6 +37,7 @@ def _create_default_icon() -> QIcon:
 class TrayManager(QObject):
     """
     Manages the system tray icon and its context menu.
+    Icon color indicates state: 🔵idle 🟢running 🟡paused 🔴recording.
     """
 
     show_requested = pyqtSignal()
@@ -37,8 +48,8 @@ class TrayManager(QObject):
 
     def __init__(self, parent: QObject | None = None, icon: Optional[QIcon] = None) -> None:
         super().__init__(parent)
-        self._icon = icon or _create_default_icon()
-        self._tray = QSystemTrayIcon(self._icon, parent)
+        self._icons = {c: _create_icon(c) for c in _ICON_COLORS}
+        self._tray = QSystemTrayIcon(self._icons["blue"], parent)
 
         # Context menu
         menu = QMenu()
@@ -90,19 +101,27 @@ class TrayManager(QObject):
             QSystemTrayIcon.MessageIcon.Information, duration_ms,
         )
 
-    def update_state(self, is_running: bool, is_paused: bool) -> None:
-        """Update menu items based on engine state."""
+    def update_state(self, is_running: bool, is_paused: bool,
+                     is_recording: bool = False) -> None:
+        """Update icon color and menu items based on app state."""
         self._play_action.setEnabled(not is_running or is_paused)
         self._pause_action.setEnabled(is_running and not is_paused)
         self._stop_action.setEnabled(is_running)
 
-        if is_running and not is_paused:
-            self.set_tooltip("AutoMacro – Running")
+        if is_recording:
+            self._tray.setIcon(self._icons["red"])
+            self.set_tooltip("AutoMacro – 🔴 Recording")
+        elif is_running and not is_paused:
+            self._tray.setIcon(self._icons["green"])
+            self.set_tooltip("AutoMacro – ▶ Running")
         elif is_paused:
-            self.set_tooltip("AutoMacro – Paused")
+            self._tray.setIcon(self._icons["yellow"])
+            self.set_tooltip("AutoMacro – ⏸ Paused")
         else:
+            self._tray.setIcon(self._icons["blue"])
             self.set_tooltip("AutoMacro – Idle")
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self.show_requested.emit()
+

@@ -19,6 +19,7 @@ class RecordingPanel(QWidget):
     """
 
     recording_finished = pyqtSignal(list)
+    recording_state_changed = pyqtSignal(bool)  # True=recording, False=stopped
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -141,6 +142,7 @@ class RecordingPanel(QWidget):
             self._status_label.setText(
                 "🔴 Đang ghi... thực hiện thao tác của bạn")
             self._update_timer.start()
+            self.recording_state_changed.emit(True)
 
     def _toggle_pause(self) -> None:
         """Toggle pause/resume (#5)."""
@@ -176,6 +178,7 @@ class RecordingPanel(QWidget):
         self._keyboard_check.setEnabled(True)
         self._context_check.setEnabled(True)
         self._status_label.setText(f"✅ Đã ghi {len(actions)} hành động")
+        self.recording_state_changed.emit(False)
         self.recording_finished.emit(actions)
 
     def _update_preview(self) -> None:

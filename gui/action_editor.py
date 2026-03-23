@@ -231,6 +231,8 @@ class ActionEditorDialog(QDialog):
             "wait_for_color": lambda: self._build_pixel_params(atype),
             "take_screenshot": self._build_screenshot_params,
             "if_pixel_color": lambda: self._build_pixel_params(atype),
+            "if_image_found": self._build_if_image_found_params,
+            "loop_block": self._build_loop_block_params,
             "if_variable": self._build_if_variable_params,
             "set_variable": self._build_set_variable_params,
             "split_string": self._build_split_string_params,
@@ -400,6 +402,34 @@ class ActionEditorDialog(QDialog):
             lambda: self._start_coordinate_picker(x_spin, y_spin)
         )
         self._params_layout.addRow("", pick_btn)
+
+    def _build_if_image_found_params(self) -> None:
+        """Builder for IfImageFound — image path, confidence, timeout, ELSE."""
+        self._add_image_params()
+
+        timeout = QSpinBox()
+        timeout.setRange(0, 120000)
+        timeout.setSuffix(" ms")
+        timeout.setValue(5000)
+        self._params_layout.addRow("Timeout:", timeout)
+        self._param_widgets["timeout_ms"] = timeout
+
+        # 3.1: ELSE action (optional)
+        else_action = QLineEdit()
+        else_action.setPlaceholderText('Optional ELSE: {"type":"log_to_file","params":{"message":"Image not found"}}')
+        else_action.setToolTip("Action to execute when image is NOT found (JSON)")
+        self._params_layout.addRow("Else Action:", else_action)
+        self._param_widgets["else_action_json"] = else_action
+
+    def _build_loop_block_params(self) -> None:
+        """Builder for LoopBlock — iterations count."""
+        iterations = QSpinBox()
+        iterations.setRange(0, 999999)
+        iterations.setValue(1)
+        iterations.setSpecialValueText("∞ Infinite")
+        iterations.setToolTip("0 = infinite loop (until stopped)")
+        self._params_layout.addRow("Iterations:", iterations)
+        self._param_widgets["iterations"] = iterations
 
     def _build_if_variable_params(self) -> None:
         var_name = QLineEdit()

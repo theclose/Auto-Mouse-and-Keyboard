@@ -95,13 +95,22 @@ class IfImageFound(Action):
     """
 
     def __init__(self, image_path: str = "", confidence: float = 0.8,
-                 timeout_ms: int = 5000, **kwargs: Any) -> None:
+                 timeout_ms: int = 5000, else_action_json: str = "",
+                 **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.image_path = image_path
         self.confidence = confidence
         self.timeout_ms = timeout_ms
         self._then_actions: list[Action] = []
         self._else_actions: list[Action] = []
+        # Parse inline else action from action_editor
+        if else_action_json and else_action_json.strip():
+            try:
+                import json
+                data = json.loads(else_action_json)
+                self._else_actions.append(Action.from_dict(data))
+            except Exception:
+                pass
 
     def add_then_action(self, action: Action) -> None:
         self._then_actions.append(action)
@@ -172,16 +181,37 @@ class IfPixelColor(Action):
 
     def __init__(self, x: int = 0, y: int = 0,
                  r: int = 0, g: int = 0, b: int = 0,
-                 tolerance: int = 10, **kwargs: Any) -> None:
+                 tolerance: int = 10, color: str = "",
+                 timeout_ms: int = 5000, else_action_json: str = "",
+                 **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.x = x
         self.y = y
-        self.r = r
-        self.g = g
-        self.b = b
+        # Support both r,g,b and color string from action_editor
+        if color and not any([r, g, b]):
+            self.r, self.g, self.b = self._parse_color_str(color)
+        else:
+            self.r, self.g, self.b = r, g, b
         self.tolerance = tolerance
         self._then_actions: list[Action] = []
         self._else_actions: list[Action] = []
+        if else_action_json and else_action_json.strip():
+            try:
+                import json
+                data = json.loads(else_action_json)
+                self._else_actions.append(Action.from_dict(data))
+            except Exception:
+                pass
+
+    @staticmethod
+    def _parse_color_str(color: str) -> tuple[int, int, int]:
+        c = color.strip()
+        if c.startswith('#') and len(c) == 7:
+            return (int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16))
+        parts = c.split(',')
+        if len(parts) == 3:
+            return (int(parts[0]), int(parts[1]), int(parts[2]))
+        return (0, 0, 0)
 
     def add_then_action(self, action: Action) -> None:
         self._then_actions.append(action)
@@ -243,13 +273,21 @@ class IfVariable(Action):
     """
 
     def __init__(self, var_name: str = "", operator: str = "==",
-                 compare_value: str = "", **kwargs: Any) -> None:
+                 compare_value: str = "", else_action_json: str = "",
+                 **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.var_name = var_name
         self.operator = operator
         self.compare_value = compare_value
         self._then_actions: list[Action] = []
         self._else_actions: list[Action] = []
+        if else_action_json and else_action_json.strip():
+            try:
+                import json
+                data = json.loads(else_action_json)
+                self._else_actions.append(Action.from_dict(data))
+            except Exception:
+                pass
 
     def add_then_action(self, action: Action) -> None:
         self._then_actions.append(action)

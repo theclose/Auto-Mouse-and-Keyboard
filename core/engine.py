@@ -314,8 +314,8 @@ class MacroEngine(QThread):
                 "Macro file has invalid format (missing 'actions' key)"
             )
 
-        # 1.2: Schema validation
-        version = data.get("version", "1.0")
+        # 1.2: Schema validation (version kept for future migration)
+        _version = data.get("version", "1.0")  # noqa: F841
         settings = data.get("settings", {})
         if not isinstance(settings, dict):
             settings = {}

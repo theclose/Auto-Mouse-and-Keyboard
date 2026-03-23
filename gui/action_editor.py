@@ -203,6 +203,7 @@ class ActionEditorDialog(QDialog):
             self._load_action(action)
 
     def _setup_ui(self) -> None:
+        """Build the editor UI: type combo, param area, buttons."""
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
@@ -417,6 +418,7 @@ class ActionEditorDialog(QDialog):
         self._help_popup.setFocus()
 
     def _build_mouse_params(self, atype: str) -> None:
+        """Create widgets for mouse action parameters."""
         self._add_xy_params()
         if atype in ("mouse_click", "mouse_move"):
             self._add_duration_param()
@@ -430,11 +432,13 @@ class ActionEditorDialog(QDialog):
             self._param_widgets["context_image"] = ctx_img
 
     def _build_drag_params(self) -> None:
+        """Create widgets for mouse drag parameters."""
         self._add_xy_params()
         self._add_duration_param()
         self._add_button_param()
 
     def _build_scroll_params(self) -> None:
+        """Create widgets for scroll action parameters."""
         self._add_xy_params()
         clicks = QSpinBox()
         clicks.setRange(-100, 100)
@@ -443,17 +447,20 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["clicks"] = clicks
 
     def _build_key_press_params(self) -> None:
+        """Create widgets for single key press."""
         key_edit = QLineEdit("enter")
         self._params_layout.addRow("Phím:", key_edit)
         self._param_widgets["key"] = key_edit
 
     def _build_key_combo_params(self) -> None:
+        """Create widgets for key combination."""
         keys_edit = QLineEdit("ctrl+c")
         keys_edit.setPlaceholderText("VD: ctrl+shift+s")
         self._params_layout.addRow("Tổ hợp phím (+):", keys_edit)
         self._param_widgets["keys_str"] = keys_edit
 
     def _build_type_text_params(self) -> None:
+        """Create widgets for text typing action."""
         text_edit = QLineEdit()
         text_edit.setPlaceholderText("Nội dung cần gõ...")
         self._params_layout.addRow("Nội dung:", text_edit)
@@ -467,6 +474,7 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["interval"] = interval
 
     def _build_delay_params(self) -> None:
+        """Create widgets for delay duration."""
         dur = QSpinBox()
         dur.setRange(0, 300000)
         dur.setSuffix(" ms")
@@ -475,6 +483,7 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["duration_ms"] = dur
 
     def _build_image_params(self, atype: str) -> None:
+        """Create widgets for image-based action parameters."""
         self._add_image_params()
         if atype in ("wait_for_image", "click_on_image"):
             timeout = QSpinBox()
@@ -487,6 +496,7 @@ class ActionEditorDialog(QDialog):
             self._add_button_param()
 
     def _build_screenshot_params(self) -> None:
+        """Create widgets for screenshot parameters."""
         # Save directory
         dir_layout = QHBoxLayout()
         dir_edit = QLineEdit("macros/screenshots")
@@ -521,11 +531,13 @@ class ActionEditorDialog(QDialog):
             self._param_widgets[key] = spin
 
     def _browse_dir(self, line_edit: QLineEdit) -> None:
+        """Open directory browser and fill target QLineEdit."""
         path = QFileDialog.getExistingDirectory(self, "Chọn thư mục")
         if path:
             line_edit.setText(path)
 
     def _build_pixel_params(self, atype: str) -> None:
+        """Create widgets for pixel color check parameters."""
         self._add_xy_params()
         for color_name, default_val in [("r", 255), ("g", 0), ("b", 0)]:
             spin = QSpinBox()
@@ -558,6 +570,7 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["else_action_json"] = else_action
 
     def _add_xy_params(self) -> None:
+        """Add standard X/Y coordinate fields with coordinate picker."""
         x_spin = QSpinBox()
         x_spin.setRange(0, 9999)
         self._params_layout.addRow("X:", x_spin)
@@ -610,6 +623,7 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["iterations"] = iterations
 
     def _build_if_variable_params(self) -> None:
+        """Create widgets for variable conditional."""
         var_name = QLineEdit()
         var_name.setPlaceholderText("VD: counter, row")
         self._params_layout.addRow("Biến:", var_name)
@@ -633,6 +647,7 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["else_action_json"] = else_action
 
     def _build_set_variable_params(self) -> None:
+        """Create widgets for set-variable action."""
         var_name = QLineEdit()
         var_name.setPlaceholderText("VD: counter, row")
         self._params_layout.addRow("Biến:", var_name)
@@ -650,6 +665,7 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["operation"] = operation
 
     def _build_split_string_params(self) -> None:
+        """Create widgets for string split action."""
         src = QLineEdit()
         src.setPlaceholderText("Tên biến nguồn")
         self._params_layout.addRow("Biến nguồn:", src)
@@ -671,6 +687,7 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["target_var"] = target
 
     def _build_comment_params(self) -> None:
+        """Create widgets for comment label text."""
         text = QLineEdit()
         text.setPlaceholderText("Nhãn mục, VD: 'Giai đoạn đăng nhập'")
         self._params_layout.addRow("Ghi chú:", text)
@@ -687,6 +704,7 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["exact_match"] = exact
 
     def _build_log_params(self) -> None:
+        """Create widgets for log-to-file action."""
         msg = QLineEdit()
         msg.setPlaceholderText("Nội dung (hỗ trợ ${var})")
         self._params_layout.addRow("Nội dung:", msg)
@@ -722,6 +740,7 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["var_name"] = var_name
 
     def _build_write_file_params(self) -> None:
+        """Create widgets for write-to-file action."""
         path = QLineEdit()
         path.setPlaceholderText("Đường dẫn file xuất")
         self._params_layout.addRow("Đường dẫn:", path)
@@ -755,6 +774,7 @@ class ActionEditorDialog(QDialog):
         self._params_layout.addRow("", encrypt_btn)
 
     def _build_run_macro_params(self) -> None:
+        """Create widgets for run-macro sub-routine."""
         path = QLineEdit()
         path.setPlaceholderText("Đường dẫn file macro .json")
         self._params_layout.addRow("File macro:", path)
@@ -772,6 +792,7 @@ class ActionEditorDialog(QDialog):
         self._params_layout.addRow("", browse_btn)
 
     def _build_capture_text_params(self) -> None:
+        """Create widgets for OCR capture-text action."""
         self._add_xy_params()
 
         w_spin = QSpinBox()

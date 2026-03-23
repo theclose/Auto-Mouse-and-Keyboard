@@ -163,6 +163,7 @@ class MainWindow(QMainWindow):
     # Toolbar
     # ------------------------------------------------------------------ #
     def _setup_toolbar(self) -> None:
+        """Build the main toolbar with action buttons."""
         # --- Row 1: File & Edit actions ---
         tb = QToolBar("File & Edit")
         tb.setIconSize(QSize(20, 20))
@@ -260,6 +261,7 @@ class MainWindow(QMainWindow):
     # Central Widget
     # ------------------------------------------------------------------ #
     def _setup_central(self) -> None:
+        """Build the central widget: action table + tree + log panel."""
         central = QWidget()
         self.setCentralWidget(central)
         layout = QHBoxLayout(central)
@@ -636,12 +638,14 @@ class MainWindow(QMainWindow):
         self._app_log.appendPlainText(text)
 
     def _clear_log(self) -> None:
+        """Clear contents of the execution log widget."""
         self._app_log.clear()
 
     # ------------------------------------------------------------------ #
     # Status Bar
     # ------------------------------------------------------------------ #
     def _setup_statusbar(self) -> None:
+        """Build the status bar with stats and memory labels."""
         self._statusbar = QStatusBar()
         self.setStatusBar(self._statusbar)
         self._status_label = QLabel("Sẵn sàng")
@@ -669,6 +673,7 @@ class MainWindow(QMainWindow):
     # System Tray
     # ------------------------------------------------------------------ #
     def _setup_tray(self) -> None:
+        """Initialize the system tray icon and menu."""
         self._tray = TrayManager(self)
         self._tray.show_requested.connect(self._show_from_tray)
         self._tray.play_requested.connect(self._on_play)
@@ -751,6 +756,7 @@ class MainWindow(QMainWindow):
     # Engine connections
     # ------------------------------------------------------------------ #
     def _connect_engine(self) -> None:
+        """Wire engine signals to UI callback slots."""
         self._engine.started_signal.connect(self._on_engine_started)
         self._engine.stopped_signal.connect(self._on_engine_stopped)
         self._engine.error_signal.connect(self._on_engine_error)
@@ -780,6 +786,7 @@ class MainWindow(QMainWindow):
         self._stop_btn.setEnabled(locked)
 
     def _on_engine_started(self) -> None:
+        """Handle engine start: lock UI, show running status."""
         self._set_ui_locked(True)
         self._status_label.setText("▶ Đang chạy")
         self.setWindowTitle("▶ Đang chạy... — AutoMacro (by TungDo)")
@@ -792,6 +799,7 @@ class MainWindow(QMainWindow):
                     self._loop_spin.value() or '∞')
 
     def _on_engine_stopped(self) -> None:
+        """Handle engine stop: unlock UI, reset status."""
         self._set_ui_locked(False)
         self._status_label.setText("⏹ Đã dừng")
         self._action_label.setText("Đang chờ")
@@ -809,6 +817,7 @@ class MainWindow(QMainWindow):
         logger.info("Engine stopped")
 
     def _on_engine_error(self, msg: str) -> None:
+        """Handle engine error: show warning dialog."""
         self._status_label.setText(f"⚠ Lỗi: {msg[:80]}")
         logger.error("Engine error: %s", msg)
         # P1 #2: Error popup — chủ động thông báo, không để user phải tự phát hiện
@@ -818,6 +827,7 @@ class MainWindow(QMainWindow):
             "Kiểm tra action và thử lại.")
 
     def _on_engine_progress(self, current: int, total: int) -> None:
+        """Update progress bar with current step."""
         self._progress_bar.setMaximum(total)
         self._progress_bar.setValue(current)
         # Highlight current action row
@@ -825,6 +835,7 @@ class MainWindow(QMainWindow):
             self._table.selectRow(current - 1)
 
     def _on_engine_action(self, name: str) -> None:
+        """Display the currently executing action name."""
         self._action_label.setText(f"▶ {name}")
         ts = _dt.datetime.now().strftime("%H:%M:%S")
         self._exec_log.addItem(f"[{ts}] {name}")
@@ -834,6 +845,7 @@ class MainWindow(QMainWindow):
             self._exec_log.takeItem(0)
 
     def _on_engine_loop(self, current: int, total: int) -> None:
+        """Display current loop iteration count."""
         if total < 0:
             self._loop_label.setText(f"Vòng lặp: {current} / ∞")
         else:
@@ -864,6 +876,7 @@ class MainWindow(QMainWindow):
     }
 
     def _refresh_table(self) -> None:
+        """Rebuild the action table/tree from the _actions list."""
         self._table.blockSignals(True)
         self._table.setSortingEnabled(False)
         self._table.setRowCount(0)                   # clear stale items
@@ -1065,6 +1078,7 @@ class MainWindow(QMainWindow):
     # Toolbar handlers
     # ------------------------------------------------------------------ #
     def _on_new(self) -> None:
+        """Create a new empty macro, prompting to save if dirty."""
         if self._actions:
             r = QMessageBox.question(
                 self, "Macro mới",
@@ -1081,6 +1095,7 @@ class MainWindow(QMainWindow):
         self._autosave.mark_clean()
 
     def _on_open(self) -> None:
+        """Open a macro file from disk."""
         path, _ = QFileDialog.getOpenFileName(
             self, "Mở Macro", self._macro_dir,
             "JSON Macros (*.json);;All Files (*)")
@@ -1107,6 +1122,7 @@ class MainWindow(QMainWindow):
                     "Không thể mở file macro.", e))
 
     def _on_save(self) -> None:
+        """Save the current macro to disk."""
         if not self._current_file:
             path, _ = QFileDialog.getSaveFileName(
                 self, "Lưu Macro", self._macro_dir,
@@ -1200,6 +1216,7 @@ class MainWindow(QMainWindow):
                     "Không thể mở file macro.", e))
 
     def _on_add_action(self) -> None:
+        """Open the action editor to add a new action."""
         dialog = ActionEditorDialog(self, macro_dir=self._macro_dir)
         # Use signal instead of get_action() — fires DURING exec() event loop,
         # before any dialog close lifecycle can corrupt the result.
@@ -1220,6 +1237,7 @@ class MainWindow(QMainWindow):
             logger.exception("Failed to add action")
 
     def _on_edit_action(self) -> None:
+        """Open the action editor to edit the selected action."""
         row = self._selected_row()
         if row < 0:
             return
@@ -1246,6 +1264,7 @@ class MainWindow(QMainWindow):
             logger.exception("Failed to edit action at row %d", row)
 
     def _on_delete_action(self) -> None:
+        """Delete selected actions with confirmation."""
         rows = self._selected_rows()
         if not rows:
             return
@@ -1267,6 +1286,7 @@ class MainWindow(QMainWindow):
             logger.info("Deleted %d action(s)", len(rows))
 
     def _on_move_up(self) -> None:
+        """Move selected actions up in the list."""
         try:
             row = self._selected_row()
             if row <= 0:
@@ -1280,6 +1300,7 @@ class MainWindow(QMainWindow):
             logger.exception("Failed to move action up")
 
     def _on_move_down(self) -> None:
+        """Move selected actions down in the list."""
         try:
             row = self._selected_row()
             if row < 0 or row >= len(self._actions) - 1:
@@ -1293,6 +1314,7 @@ class MainWindow(QMainWindow):
             logger.exception("Failed to move action down")
 
     def _on_duplicate(self) -> None:
+        """Duplicate selected actions."""
         try:
             row = self._selected_row()
             if row < 0:
@@ -1352,6 +1374,7 @@ class MainWindow(QMainWindow):
             logger.exception("Failed to paste actions")
 
     def _on_play(self) -> None:
+        """Start or resume macro execution."""
         if not self._actions:
             self._status_label.setText("Chưa có action để chạy")
             logger.info("Play blocked: no actions")
@@ -1419,6 +1442,7 @@ class MainWindow(QMainWindow):
                     self._speed_spin.value())
 
     def _on_pause(self) -> None:
+        """Pause macro execution."""
         if self._engine.is_running:
             if self._engine.is_paused:
                 self._engine.resume()
@@ -1433,6 +1457,7 @@ class MainWindow(QMainWindow):
                 logger.info("Paused by user")
 
     def _on_stop(self) -> None:
+        """Stop macro execution."""
         logger.info("Stop requested by user")
         self._engine.stop()
 
@@ -1537,6 +1562,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_settings(self) -> None:
+        """Open the settings dialog."""
         dialog = SettingsDialog(self._config, self)
         dialog.config_saved.connect(self._handle_settings_saved)
         dialog.exec()

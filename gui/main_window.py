@@ -652,7 +652,10 @@ class MainWindow(QMainWindow):
         for r in range(self._table.rowCount()):
             item = self._table.item(r, 0)
             if item:
-                idx = int(item.text()) - 1  # "#" column = 1-based index
+                try:
+                    idx = int(item.text()) - 1  # "#" column = 1-based
+                except (ValueError, TypeError):
+                    continue  # skip if column shifted after drag
                 if 0 <= idx < len(self._pre_drag_order):
                     new_order.append(self._pre_drag_order[idx])
         if len(new_order) == len(self._pre_drag_order) and \

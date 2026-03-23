@@ -27,8 +27,22 @@ _ACTION_REGISTRY: dict[str, type["Action"]] = {}
 
 
 def register_action(action_type: str) -> Any:
-    """Decorator to register an Action subclass in the global registry."""
+    """Decorator to register an Action subclass in the global registry.
+
+    WARNING: If `action_type` is already registered by a DIFFERENT class,
+    a warning is logged. The last registration wins (Python import order).
+    This was the root cause of the else_action_json crash: scheduler.py
+    overwrote flow_control.py's registration silently.
+    """
     def decorator(cls: type["Action"]) -> type["Action"]:
+        existing = _ACTION_REGISTRY.get(action_type)
+        if existing is not None and existing is not cls:
+            logger.warning(
+                "⚠️  DUPLICATE registration for '%s': %s.%s OVERWRITES %s.%s",
+                action_type,
+                cls.__module__, cls.__name__,
+                existing.__module__, existing.__name__,
+            )
         _ACTION_REGISTRY[action_type] = cls
         cls.ACTION_TYPE = action_type
         return cls
@@ -46,6 +60,18 @@ def get_action_class(action_type: str) -> type["Action"]:
 def get_all_action_types() -> list[str]:
     """Return a sorted list of all registered action type strings."""
     return sorted(_ACTION_REGISTRY.keys())
+
+
+def audit_registry() -> dict[str, str]:
+    """Return {type_name: 'module.ClassName'} for all registered actions.
+
+    Call at startup to log the full registry for diagnostics.
+    Example output: {'mouse_click': 'modules.mouse.MouseClick', ...}
+    """
+    return {
+        atype: f"{cls.__module__}.{cls.__name__}"
+        for atype, cls in sorted(_ACTION_REGISTRY.items())
+    }
 
 
 # ---------------------------------------------------------------------------

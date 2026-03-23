@@ -1,6 +1,48 @@
 """
-Scheduler – loop and conditional logic for macro execution.
-Provides wrapper actions for repeat loops and image-based conditionals.
+Scheduler — Flow Control & Variable Actions (Composite Pattern).
+
+This module registers **7 action types** that handle flow control and
+variable manipulation in macros. These are the "composite" / "control flow"
+actions, as opposed to the "atomic" actions in modules/ (mouse, keyboard, etc).
+
+╔══════════════════════════════════════════════════════════════════════╗
+║  IMPORTANT: These 7 types are the ONLY registrations for their     ║
+║  action_type strings. Do NOT create duplicate @register_action()   ║
+║  for these types in modules/ — it will cause silent overwrite.     ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Registered Action Types:
+    ┌──────────────────┬───────────────┬──────────────────────────────┐
+    │ Type String      │ Class         │ Description                  │
+    ├──────────────────┼───────────────┼──────────────────────────────┤
+    │ loop_block       │ LoopBlock     │ Repeat sub-actions N times   │
+    │ if_image_found   │ IfImageFound  │ Conditional: image on screen │
+    │ if_pixel_color   │ IfPixelColor  │ Conditional: pixel matches   │
+    │ if_variable      │ IfVariable    │ Conditional: variable check  │
+    │ set_variable     │ SetVariable   │ Set/compute context variable │
+    │ split_string     │ SplitString   │ Split variable by delimiter  │
+    │ comment          │ Comment       │ No-op label / section marker │
+    └──────────────────┴───────────────┴──────────────────────────────┘
+
+Architecture Notes:
+    - LoopBlock, IfImageFound, IfPixelColor, IfVariable implement the
+      Composite Pattern: they contain child Action lists (_sub_actions,
+      _then_actions, _else_actions) and execute them recursively.
+    - Child actions are serialized in to_dict() as nested lists.
+    - The engine runs a flat list, but composite actions handle their
+      own recursion inside execute(). Phase 3 (TreeView) will make
+      this explicit in the GUI.
+
+Action Editor Compatibility:
+    - Conditional actions accept `else_action_json` kwarg from the
+      Action Editor's _collect_params() (inline JSON for else branch).
+    - IfPixelColor also accepts `color` string ('#RRGGBB' or 'R,G,B')
+      as alternative to separate r, g, b integer params.
+
+See Also:
+    - core/action.py — Action base class, registry, serialization
+    - gui/action_editor.py — UI builders for each action type
+    - core/engine.py — Macro execution engine (flat list runner)
 """
 
 import logging

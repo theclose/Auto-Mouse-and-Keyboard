@@ -144,6 +144,12 @@ def main() -> None:
     window._hk_mgr = _hk_mgr  # Enable restart-free hotkey rebind
     window.show()
 
+    # Audit: log all registered action types for diagnostics
+    from core.action import audit_registry
+    registry = audit_registry()
+    logger.info("Action registry: %d types registered", len(registry))
+    logger.debug("Registry details: %s", registry)
+
     logger.info("AutoPilot started")
     exit_code = app.exec()
 

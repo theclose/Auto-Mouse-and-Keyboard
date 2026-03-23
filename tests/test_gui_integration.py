@@ -111,6 +111,34 @@ class TestActionEditorSignal:
             f"Extra: {selectable_types - expected_types}"
         )
 
+    def test_all_action_types_have_builders(self) -> None:
+        """REGRESSION: Every action type MUST have a builder that produces
+        at least one param widget. Prevents if_image_found/loop_block bug."""
+        from gui.action_editor import ActionEditorDialog, ACTION_CATEGORIES
+        # Types that legitimately have zero custom params
+        NO_PARAMS_TYPES = {"comment"}
+
+        missing_builders = []
+        for _, actions in ACTION_CATEGORIES:
+            for atype, label in actions:
+                if atype in NO_PARAMS_TYPES:
+                    continue
+                dialog = ActionEditorDialog()
+                # Select the action type in the combo
+                for i in range(dialog._type_combo.count()):
+                    data = dialog._type_combo.itemData(
+                        i, Qt.ItemDataRole.UserRole)
+                    if data == atype:
+                        dialog._type_combo.setCurrentIndex(i)
+                        break
+                if len(dialog._param_widgets) == 0:
+                    missing_builders.append(f"{atype} ({label})")
+
+        assert not missing_builders, (
+            f"Action types with NO param widgets (missing builder): "
+            f"{missing_builders}"
+        )
+
     def test_category_headers_not_selectable(self) -> None:
         """Category headers (bold items) should have no UserRole data."""
         from gui.action_editor import ActionEditorDialog, ACTION_CATEGORIES

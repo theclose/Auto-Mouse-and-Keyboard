@@ -249,6 +249,10 @@ class ActionEditorDialog(QDialog):
         builder = builders.get(atype)
         if builder:
             builder()
+        elif atype:
+            import logging
+            logging.getLogger(__name__).warning(
+                "No param builder registered for action type '%s'", atype)
 
         # Restore cached x,y values if new type also has them
         for key in ("x", "y"):

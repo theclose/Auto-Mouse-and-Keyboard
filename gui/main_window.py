@@ -52,6 +52,7 @@ import modules.keyboard    # noqa: F401
 import modules.image       # noqa: F401
 import modules.pixel       # noqa: F401
 import modules.system      # noqa: F401
+import modules.flow_control  # noqa: F401  — 7 flow control action types
 import core.scheduler       # noqa: F401
 from core.autosave import AutoSaveManager
 

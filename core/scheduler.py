@@ -128,6 +128,19 @@ class LoopBlock(Action):
         n = "∞" if self.iterations == 0 else str(self.iterations)
         return f"Loop ×{n} ({len(self._sub_actions)} actions)"
 
+    # -- composite interface (v3.0) --
+    @property
+    def is_composite(self) -> bool:
+        return True
+
+    @property
+    def children(self) -> list[Action]:
+        return list(self._sub_actions)
+
+    @children.setter
+    def children(self, value: list[Action]) -> None:
+        self._sub_actions = list(value)
+
 
 @register_action("if_image_found")
 class IfImageFound(Action):
@@ -215,6 +228,31 @@ class IfImageFound(Action):
     def get_display_name(self) -> str:
         name = self.image_path.split("\\")[-1].split("/")[-1] or "?"
         return f"If '{name}' found → {len(self._then_actions)} actions"
+
+    # -- composite interface (v3.0) --
+    @property
+    def is_composite(self) -> bool:
+        return True
+
+    @property
+    def children(self) -> list[Action]:
+        return list(self._then_actions) + list(self._else_actions)
+
+    @property
+    def then_children(self) -> list[Action]:
+        return list(self._then_actions)
+
+    @then_children.setter
+    def then_children(self, value: list[Action]) -> None:
+        self._then_actions = list(value)
+
+    @property
+    def else_children(self) -> list[Action]:
+        return list(self._else_actions)
+
+    @else_children.setter
+    def else_children(self, value: list[Action]) -> None:
+        self._else_actions = list(value)
 
 
 @register_action("if_pixel_color")
@@ -305,6 +343,31 @@ class IfPixelColor(Action):
     def get_display_name(self) -> str:
         return (f"If pixel({self.x},{self.y}) = RGB({self.r},{self.g},{self.b})"
                 f" → {len(self._then_actions)} actions")
+
+    # -- composite interface (v3.0) --
+    @property
+    def is_composite(self) -> bool:
+        return True
+
+    @property
+    def children(self) -> list[Action]:
+        return list(self._then_actions) + list(self._else_actions)
+
+    @property
+    def then_children(self) -> list[Action]:
+        return list(self._then_actions)
+
+    @then_children.setter
+    def then_children(self, value: list[Action]) -> None:
+        self._then_actions = list(value)
+
+    @property
+    def else_children(self) -> list[Action]:
+        return list(self._else_actions)
+
+    @else_children.setter
+    def else_children(self, value: list[Action]) -> None:
+        self._else_actions = list(value)
 
 
 @register_action("if_variable")
@@ -401,6 +464,31 @@ class IfVariable(Action):
 
     def get_display_name(self) -> str:
         return f"If ${{{self.var_name}}} {self.operator} {self.compare_value}"
+
+    # -- composite interface (v3.0) --
+    @property
+    def is_composite(self) -> bool:
+        return True
+
+    @property
+    def children(self) -> list[Action]:
+        return list(self._then_actions) + list(self._else_actions)
+
+    @property
+    def then_children(self) -> list[Action]:
+        return list(self._then_actions)
+
+    @then_children.setter
+    def then_children(self, value: list[Action]) -> None:
+        self._then_actions = list(value)
+
+    @property
+    def else_children(self) -> list[Action]:
+        return list(self._else_actions)
+
+    @else_children.setter
+    def else_children(self, value: list[Action]) -> None:
+        self._else_actions = list(value)
 
 
 @register_action("set_variable")

@@ -99,6 +99,46 @@ class Action(ABC):
         self.enabled = enabled
         self.on_error = on_error              # "stop" | "skip" | "retry:N"
 
+    # -- composite interface (v3.0) ------------------------------------------
+    @property
+    def is_composite(self) -> bool:
+        """True if this action can contain child actions.
+        Override in composite subclasses (LoopBlock, If*, etc).
+        """
+        return False
+
+    @property
+    def children(self) -> list['Action']:
+        """All child actions (flat list). For If* actions, returns then+else.
+        Override in composite subclasses.
+        """
+        return []
+
+    @children.setter
+    def children(self, value: list['Action']) -> None:
+        """Set children. Override in composites. Default: no-op."""
+        pass
+
+    @property
+    def then_children(self) -> list['Action']:
+        """THEN branch children for conditional actions. Default: same as children."""
+        return self.children
+
+    @then_children.setter
+    def then_children(self, value: list['Action']) -> None:
+        """Set THEN branch. Override in conditionals."""
+        pass
+
+    @property
+    def else_children(self) -> list['Action']:
+        """ELSE branch children for conditional actions. Default: empty."""
+        return []
+
+    @else_children.setter
+    def else_children(self, value: list['Action']) -> None:
+        """Set ELSE branch. Override in conditionals."""
+        pass
+
     # -- abstract interface --------------------------------------------------
     @abstractmethod
     def execute(self) -> bool:

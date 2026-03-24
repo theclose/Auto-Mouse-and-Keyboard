@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-_VAR_PATTERN = re.compile(r'\$\{(\w+)\}')
+_VAR_PATTERN = re.compile(r"\$\{(\w+)\}")
 
 
 class ExecutionContext:
@@ -44,8 +44,7 @@ class ExecutionContext:
             return dict(self._variables)
 
     # -- Image result chaining -----------------------------------------------
-    def set_image_match(self, template_path: str,
-                        bbox: tuple[int, int, int, int]) -> None:
+    def set_image_match(self, template_path: str, bbox: tuple[int, int, int, int]) -> None:
         """Store last successful image match result."""
         with self._lock:
             self._last_image_match = (template_path, bbox)
@@ -57,8 +56,7 @@ class ExecutionContext:
             if len(history) > 10:
                 history.pop(0)
 
-    def get_image_match(self, template_path: str = ""
-                        ) -> Optional[tuple[int, int, int, int]]:
+    def get_image_match(self, template_path: str = "") -> Optional[tuple[int, int, int, int]]:
         """Get last image match bbox. If template_path given, only if it matches."""
         with self._lock:
             if self._last_image_match is None:
@@ -68,8 +66,7 @@ class ExecutionContext:
                 return None
             return bbox
 
-    def get_image_center(self, template_path: str = ""
-                         ) -> Optional[tuple[int, int]]:
+    def get_image_center(self, template_path: str = "") -> Optional[tuple[int, int]]:
         """Get center (cx, cy) of last image match."""
         bbox = self.get_image_match(template_path)
         if bbox is None:
@@ -78,8 +75,7 @@ class ExecutionContext:
         return x + w // 2, y + h // 2
 
     # -- Smart ROI -----------------------------------------------------------
-    def suggest_roi(self, template_path: str,
-                    margin: int = 150) -> Optional[tuple[int, int, int, int]]:
+    def suggest_roi(self, template_path: str, margin: int = 150) -> Optional[tuple[int, int, int, int]]:
         """Suggest a search region based on where this template was found before."""
         with self._lock:
             history = self._roi_history.get(template_path)
@@ -98,16 +94,21 @@ class ExecutionContext:
             roi_h = avg_h + margin * 2
             return (roi_x, roi_y, roi_w, roi_h)
 
-    def suggest_roi_cached(self, template_path: str,
-                           margin: int = 150) -> Optional[tuple[int, int, int, int]]:
-        """Cached version — uses last result if template hasn't changed."""
-        cached_key = getattr(self, '_roi_cache_key', None)
-        cached_val = getattr(self, '_roi_cache_val', None)
-        if cached_key == template_path and cached_val is not None:
+    def suggest_roi_cached(self, template_path: str, margin: int = 150) -> Optional[tuple[int, int, int, int]]:
+        """Cached version — uses last result if template hasn't changed.
+        P1-5: TTL of 300s (5 min) to prevent stale ROI in long-running macros.
+        """
+        cached_key = getattr(self, "_roi_cache_key", None)
+        cached_val = getattr(self, "_roi_cache_val", None)
+        cached_time = getattr(self, "_roi_cache_time", 0.0)
+        if (
+            cached_key == template_path and cached_val is not None and (time.perf_counter() - cached_time) < 300
+        ):  # 5 min TTL
             return cached_val
         result = self.suggest_roi(template_path, margin)
         self._roi_cache_key = template_path
         self._roi_cache_val = result
+        self._roi_cache_time = time.perf_counter()
         return result
 
     # -- Pixel result --------------------------------------------------------
@@ -145,6 +146,8 @@ class ExecutionContext:
     # -- Checkpoint / Resume (1.1) -------------------------------------------
     def snapshot(self) -> dict:
         """Capture full context state for checkpoint/resume."""
+        from core.engine_context import get_speed
+
         with self._lock:
             return {
                 "variables": dict(self._variables),
@@ -153,6 +156,7 @@ class ExecutionContext:
                 "error_count": self.error_count,
                 "last_image_match": self._last_image_match,
                 "last_pixel_color": self._last_pixel_color,
+                "speed_factor": get_speed(),  # P2-1
             }
 
     def restore(self, snapshot: dict) -> None:
@@ -164,35 +168,40 @@ class ExecutionContext:
         self.iteration_count = snapshot.get("iteration_count", 0)
         self.action_count = snapshot.get("action_count", 0)
         self.error_count = snapshot.get("error_count", 0)
-        logger.info("Context restored from checkpoint (vars=%d, iter=%d)",
-                     len(self._variables), self.iteration_count)
+        # P2-1: Restore speed factor
+        if "speed_factor" in snapshot:
+            from core.engine_context import set_speed
+
+            set_speed(snapshot["speed_factor"])
+        logger.info("Context restored from checkpoint (vars=%d, iter=%d)", len(self._variables), self.iteration_count)
 
     # -- Template interpolation ----------------------------------------------
     def interpolate(self, text: str) -> str:
         """Replace ${var_name} patterns with variable values.
-        
+
         Built-in system vars: __timestamp__, __iteration__, __action_count__,
         __error_count__, __last_img_x__, __last_img_y__
         """
+
         def _replace(m: re.Match) -> str:
             name = m.group(1)
             # System variables (computed on demand)
-            if name == '__timestamp__':
+            if name == "__timestamp__":
                 return str(int(time.time()))
-            elif name == '__iteration__':
+            elif name == "__iteration__":
                 return str(self.iteration_count)
-            elif name == '__action_count__':
+            elif name == "__action_count__":
                 return str(self.action_count)
-            elif name == '__error_count__':
+            elif name == "__error_count__":
                 return str(self.error_count)
-            elif name == '__last_img_x__':
+            elif name == "__last_img_x__":
                 c = self.get_image_center()
-                return str(c[0]) if c else '0'
-            elif name == '__last_img_y__':
+                return str(c[0]) if c else "0"
+            elif name == "__last_img_y__":
                 c = self.get_image_center()
-                return str(c[1]) if c else '0'
+                return str(c[1]) if c else "0"
             # User variables
             val = self.get_var(name)
             return str(val) if val is not None else m.group(0)
-        return _VAR_PATTERN.sub(_replace, text)
 
+        return _VAR_PATTERN.sub(_replace, text)

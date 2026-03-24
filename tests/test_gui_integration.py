@@ -182,6 +182,7 @@ class TestRefreshTable:
         from gui.action_tree_model import ActionTreeModel
         mw._tree_model = ActionTreeModel(mw._actions)
         mw._view_toggle_btn = QPushButton()
+        mw._minimap = MagicMock()
         return mw
 
     def test_empty_table(self) -> None:

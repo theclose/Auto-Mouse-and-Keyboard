@@ -3,11 +3,12 @@ Screen capture module.
 Uses mss for fast screenshots (~10x faster than PIL).
 Thread-safe singleton with auto-recovery on stale handle.
 """
+
 from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import cv2
 import mss

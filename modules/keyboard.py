@@ -6,8 +6,9 @@ Provides key press, key combo, text typing, and hotkey actions.
 import ctypes
 import logging
 import time
-import pyautogui
 from typing import Any
+
+import pyautogui
 
 from core.action import Action, register_action
 
@@ -34,6 +35,7 @@ class _KEYBDINPUT(ctypes.Structure):
 
 class _MOUSEINPUT(ctypes.Structure):
     """Placeholder for union sizing – matches MOUSEINPUT in WinUser.h."""
+
     _fields_ = [
         ("dx", ctypes.c_long),
         ("dy", ctypes.c_long),
@@ -71,9 +73,7 @@ def _send_unicode_string(text: str, interval: float = 0.02) -> None:
             inputs[idx].union.ki.dwFlags = _KEYEVENTF_UNICODE
             inputs[idx + 1].type = _INPUT_KEYBOARD
             inputs[idx + 1].union.ki.wScan = code
-            inputs[idx + 1].union.ki.dwFlags = (
-                _KEYEVENTF_UNICODE | _KEYEVENTF_KEYUP
-            )
+            inputs[idx + 1].union.ki.dwFlags = _KEYEVENTF_UNICODE | _KEYEVENTF_KEYUP
         ctypes.windll.user32.SendInput(n, inputs, _sizeof_input)
     else:
         # Per-char with interval: reuse a single 2-element array
@@ -120,9 +120,13 @@ class KeyCombo(Action):
     Keys are specified as a list: ["ctrl", "c"]
     """
 
-    def __init__(self, keys: list[str] | None = None, **kwargs: Any) -> None:
+    def __init__(self, keys: "list[str] | str | None" = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.keys = list(keys) if keys else ["ctrl", "c"]
+        # B7: Handle string input from recorder (e.g. "ctrl+c" → ["ctrl","c"])
+        if isinstance(keys, str):
+            self.keys = [k.strip() for k in keys.split("+") if k.strip()]
+        else:
+            self.keys = list(keys) if keys else ["ctrl", "c"]
 
     def execute(self) -> bool:
         pyautogui.hotkey(*self.keys)
@@ -133,7 +137,12 @@ class KeyCombo(Action):
         return {"keys": self.keys}
 
     def _set_params(self, params: dict[str, Any]) -> None:
-        self.keys = params.get("keys", ["ctrl", "c"])
+        raw = params.get("keys", ["ctrl", "c"])
+        # B7: Handle legacy string format in saved macros
+        if isinstance(raw, str):
+            self.keys = [k.strip() for k in raw.split("+") if k.strip()]
+        else:
+            self.keys = list(raw)
 
     def get_display_name(self) -> str:
         return f"Combo [{'+'.join(self.keys)}]"
@@ -150,10 +159,11 @@ class TypeText(Action):
 
     def execute(self) -> bool:
         from core.engine_context import get_context
+
         text = self.text
         # Template interpolation: ${var_name} → value
         ctx = get_context()
-        if ctx and '${' in text:
+        if ctx and "${" in text:
             text = ctx.interpolate(text)
         if text.isascii():
             pyautogui.typewrite(text, interval=self.interval)
@@ -181,9 +191,13 @@ class HotKey(Action):
     Alias for KeyCombo but with a friendlier name for the UI.
     """
 
-    def __init__(self, keys: list[str] | None = None, **kwargs: Any) -> None:
+    def __init__(self, keys: "list[str] | str | None" = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.keys = list(keys) if keys else []
+        # B7: Handle string input from recorder
+        if isinstance(keys, str):
+            self.keys = [k.strip() for k in keys.split("+") if k.strip()]
+        else:
+            self.keys = list(keys) if keys else []
 
     def execute(self) -> bool:
         if self.keys:
@@ -195,7 +209,11 @@ class HotKey(Action):
         return {"keys": self.keys}
 
     def _set_params(self, params: dict[str, Any]) -> None:
-        self.keys = params.get("keys", [])
+        raw = params.get("keys", [])
+        if isinstance(raw, str):
+            self.keys = [k.strip() for k in raw.split("+") if k.strip()]
+        else:
+            self.keys = list(raw)
 
     def get_display_name(self) -> str:
         return f"Hotkey [{'+'.join(self.keys)}]" if self.keys else "Hotkey []"
@@ -203,11 +221,41 @@ class HotKey(Action):
 
 # List of all supported special key names for UI dropdowns
 SPECIAL_KEYS = [
-    "enter", "tab", "space", "backspace", "delete", "escape",
-    "up", "down", "left", "right",
-    "home", "end", "pageup", "pagedown",
-    "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
-    "shift", "ctrl", "alt", "win",
-    "capslock", "numlock", "printscreen", "insert",
-    "volumeup", "volumedown", "volumemute",
+    "enter",
+    "tab",
+    "space",
+    "backspace",
+    "delete",
+    "escape",
+    "up",
+    "down",
+    "left",
+    "right",
+    "home",
+    "end",
+    "pageup",
+    "pagedown",
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "f10",
+    "f11",
+    "f12",
+    "shift",
+    "ctrl",
+    "alt",
+    "win",
+    "capslock",
+    "numlock",
+    "printscreen",
+    "insert",
+    "volumeup",
+    "volumedown",
+    "volumemute",
 ]

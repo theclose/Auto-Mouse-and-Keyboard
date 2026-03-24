@@ -7,12 +7,12 @@ encrypted in macro JSON files but decrypted at runtime.
 
 import base64
 import logging
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
 try:
     import win32crypt
+
     _HAS_DPAPI = True
 except ImportError:
     _HAS_DPAPI = False
@@ -30,7 +30,7 @@ def encrypt(plaintext: str) -> str:
             None,  # optional entropy
             None,  # reserved
             None,  # prompt struct
-            0,     # flags
+            0,  # flags
         )
         return "DPAPI:" + base64.b64encode(blob).decode("ascii")
     except Exception as e:
@@ -44,9 +44,7 @@ def decrypt(ciphertext: str) -> str:
         return ciphertext
     try:
         blob = base64.b64decode(ciphertext[6:])
-        _, plaintext_bytes = win32crypt.CryptUnprotectData(
-            blob, None, None, None, 0
-        )
+        _, plaintext_bytes = win32crypt.CryptUnprotectData(blob, None, None, None, 0)
         return plaintext_bytes.decode("utf-8")
     except Exception as e:
         logger.error("Decryption failed: %s", e)

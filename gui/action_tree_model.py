@@ -13,10 +13,11 @@ import logging
 from typing import Any, Optional
 
 from PyQt6.QtCore import (
-    QAbstractItemModel, QModelIndex, Qt, QMimeData,
-    QPersistentModelIndex,
+    QAbstractItemModel,
+    QMimeData,
+    QModelIndex,
+    Qt,
 )
-from PyQt6.QtGui import QIcon
 
 from core.action import Action
 
@@ -33,23 +34,38 @@ _COLUMN_HEADERS = ["✓", "Loại", "Chi tiết", "Delay"]
 
 # Icons for action types (matches main_window._TYPE_ICONS)
 _TYPE_ICONS: dict[str, str] = {
-    "mouse_click": "🖱", "mouse_double_click": "🖱",
-    "mouse_right_click": "🖱", "mouse_move": "🖱",
-    "mouse_drag": "🖱", "mouse_scroll": "🖱",
-    "key_press": "⌨", "key_combo": "⌨",
-    "type_text": "⌨", "hotkey": "⌨",
+    "mouse_click": "🖱",
+    "mouse_double_click": "🖱",
+    "mouse_right_click": "🖱",
+    "mouse_move": "🖱",
+    "mouse_drag": "🖱",
+    "mouse_scroll": "🖱",
+    "key_press": "⌨",
+    "key_combo": "⌨",
+    "type_text": "⌨",
+    "hotkey": "⌨",
     "delay": "⏱",
-    "wait_for_image": "🖼", "click_on_image": "🖼",
-    "image_exists": "🖼", "take_screenshot": "📸",
-    "check_pixel_color": "🎨", "wait_for_color": "🎨",
+    "wait_for_image": "🖼",
+    "click_on_image": "🖼",
+    "image_exists": "🖼",
+    "take_screenshot": "📸",
+    "check_pixel_color": "🎨",
+    "wait_for_color": "🎨",
     "loop_block": "🔁",
-    "if_image_found": "❓", "if_pixel_color": "🎯", "if_variable": "📏",
-    "set_variable": "📊", "split_string": "✂️",
+    "if_image_found": "❓",
+    "if_pixel_color": "🎯",
+    "if_variable": "📏",
+    "set_variable": "📊",
+    "split_string": "✂️",
     "comment": "💬",
-    "activate_window": "🖥", "log_to_file": "📝",
-    "read_clipboard": "📋", "read_file_line": "📂",
+    "activate_window": "🖥",
+    "log_to_file": "📝",
+    "read_clipboard": "📋",
+    "read_file_line": "📂",
     "write_to_file": "💾",
-    "secure_type_text": "🔒", "run_macro": "▶️", "capture_text": "🔍",
+    "secure_type_text": "🔒",
+    "run_macro": "▶️",
+    "capture_text": "🔍",
 }
 
 
@@ -58,15 +74,17 @@ class _TreeNode:
 
     Maintains parent/children relationships for efficient QModelIndex lookup.
     """
-    __slots__ = ('action', 'parent', 'children', 'row', 'branch_label')
 
-    def __init__(self, action: Action, parent: Optional['_TreeNode'] = None,
-                 row: int = 0, branch_label: str = "") -> None:
+    __slots__ = ("action", "parent", "children", "row", "branch_label")
+
+    def __init__(
+        self, action: Action, parent: Optional["_TreeNode"] = None, row: int = 0, branch_label: str = ""
+    ) -> None:
         self.action = action
         self.parent = parent
         self.row = row  # row within parent's children list
         self.branch_label = branch_label  # "THEN", "ELSE", or ""
-        self.children: list['_TreeNode'] = []
+        self.children: list["_TreeNode"] = []
 
     def child_count(self) -> int:
         return len(self.children)
@@ -82,8 +100,7 @@ class ActionTreeModel(QAbstractItemModel):
     When actions change externally, call rebuild() to re-sync.
     """
 
-    def __init__(self, actions: list[Action],
-                 parent: Any = None) -> None:
+    def __init__(self, actions: list[Action], parent: Any = None) -> None:
         super().__init__(parent)
         self._actions = actions  # Reference to MainWindow._actions
         self._root_nodes: list[_TreeNode] = []
@@ -121,43 +138,32 @@ class ActionTreeModel(QAbstractItemModel):
             node = self._build_node(action, parent=None, row=i)
             self._root_nodes.append(node)
 
-    def _build_node(self, action: Action,
-                    parent: _TreeNode | None,
-                    row: int,
-                    branch_label: str = "") -> _TreeNode:
+    def _build_node(self, action: Action, parent: _TreeNode | None, row: int, branch_label: str = "") -> _TreeNode:
         """Recursively build a tree node from an action."""
-        node = _TreeNode(action, parent=parent, row=row,
-                         branch_label=branch_label)
+        node = _TreeNode(action, parent=parent, row=row, branch_label=branch_label)
 
         if action.is_composite:
             # For If* actions, show THEN/ELSE branches as separate groups
             if action.has_branches:
                 for j, child in enumerate(action.then_children):
-                    child_node = self._build_node(
-                        child, parent=node, row=j, branch_label="THEN"
-                    )
+                    child_node = self._build_node(child, parent=node, row=j, branch_label="THEN")
                     node.children.append(child_node)
                 for j, child in enumerate(action.else_children):
                     child_node = self._build_node(
-                        child, parent=node,
-                        row=len(action.then_children) + j,
-                        branch_label="ELSE"
+                        child, parent=node, row=len(action.then_children) + j, branch_label="ELSE"
                     )
                     node.children.append(child_node)
             else:
                 # LoopBlock: direct children
                 for j, child in enumerate(action.children):
-                    child_node = self._build_node(
-                        child, parent=node, row=j
-                    )
+                    child_node = self._build_node(child, parent=node, row=j)
                     node.children.append(child_node)
         return node
 
     # ------------------------------------------------------------------ #
     # QAbstractItemModel required overrides
     # ------------------------------------------------------------------ #
-    def index(self, row: int, column: int,
-              parent: QModelIndex = QModelIndex()) -> QModelIndex:
+    def index(self, row: int, column: int, parent: QModelIndex = QModelIndex()) -> QModelIndex:
         if not self.hasIndex(row, column, parent):
             return QModelIndex()
 
@@ -221,8 +227,7 @@ class ActionTreeModel(QAbstractItemModel):
 
         elif role == Qt.ItemDataRole.CheckStateRole:
             if col == COL_ENABLED:
-                return (Qt.CheckState.Checked if action.enabled
-                        else Qt.CheckState.Unchecked)
+                return Qt.CheckState.Checked if action.enabled else Qt.CheckState.Unchecked
 
         elif role == Qt.ItemDataRole.ToolTipRole:
             if col == COL_TYPE and action.is_composite:
@@ -232,22 +237,23 @@ class ActionTreeModel(QAbstractItemModel):
         elif role == Qt.ItemDataRole.ForegroundRole:
             if not action.enabled:
                 from PyQt6.QtGui import QColor
+
                 return QColor(120, 120, 140)
             if node.branch_label == "ELSE":
                 from PyQt6.QtGui import QColor
+
                 return QColor(255, 160, 100)  # Orange for ELSE branch
 
         elif role == Qt.ItemDataRole.BackgroundRole:
             if action.is_composite:
                 from PyQt6.QtGui import QColor
+
                 return QColor(40, 42, 70, 50)  # Subtle highlight for composites
 
         return None
 
-    def headerData(self, section: int, orientation: Qt.Orientation,
-                   role: int = Qt.ItemDataRole.DisplayRole) -> Any:
-        if orientation == Qt.Orientation.Horizontal and \
-                role == Qt.ItemDataRole.DisplayRole:
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
+        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             if 0 <= section < len(_COLUMN_HEADERS):
                 return _COLUMN_HEADERS[section]
         return None
@@ -256,8 +262,7 @@ class ActionTreeModel(QAbstractItemModel):
         if not index.isValid():
             return Qt.ItemFlag.ItemIsDropEnabled  # Allow drops on root
 
-        default = (Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
-                   | Qt.ItemFlag.ItemIsDragEnabled)
+        default = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled
 
         node: _TreeNode = index.internalPointer()  # type: ignore
         if node and node.action.is_composite:
@@ -271,17 +276,14 @@ class ActionTreeModel(QAbstractItemModel):
     # ------------------------------------------------------------------ #
     # Editable: toggle enabled via checkbox
     # ------------------------------------------------------------------ #
-    def setData(self, index: QModelIndex, value: Any,
-                role: int = Qt.ItemDataRole.EditRole) -> bool:
+    def setData(self, index: QModelIndex, value: Any, role: int = Qt.ItemDataRole.EditRole) -> bool:
         if not index.isValid():
             return False
 
-        if role == Qt.ItemDataRole.CheckStateRole and \
-                index.column() == COL_ENABLED:
+        if role == Qt.ItemDataRole.CheckStateRole and index.column() == COL_ENABLED:
             node: _TreeNode = index.internalPointer()  # type: ignore
             if node:
-                checked = (value == Qt.CheckState.Checked.value
-                           or value == Qt.CheckState.Checked)
+                checked = value == Qt.CheckState.Checked.value or value == Qt.CheckState.Checked
                 node.action.enabled = checked
                 self.dataChanged.emit(index, index, [role])
                 return True
@@ -305,8 +307,8 @@ class ActionTreeModel(QAbstractItemModel):
                 path = self._index_path(idx)
                 rows.append(path)
         import json
-        mime.setData("application/x-action-tree-rows",
-                     json.dumps(rows).encode())
+
+        mime.setData("application/x-action-tree-rows", json.dumps(rows).encode())
         return mime
 
     def _index_path(self, index: QModelIndex) -> list[int]:

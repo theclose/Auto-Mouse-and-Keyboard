@@ -4,7 +4,9 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![PyQt6](https://img.shields.io/badge/UI-PyQt6-41cd52.svg)](https://pypi.org/project/PyQt6/)
-[![Tests](https://img.shields.io/badge/Tests-448%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-558%20passing-brightgreen.svg)](#testing)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Linting: Ruff](https://img.shields.io/badge/linting-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 
 ## Features
 
@@ -34,6 +36,25 @@ python main.py
 python -m pytest tests/ -q
 ```
 
+## Development Setup
+
+```bash
+# Install dev dependencies (linting, testing, type checking)
+pip install -r requirements-dev.txt
+
+# Format code (Black)
+python -m black core/ gui/ modules/ main.py
+
+# Lint (Ruff)
+python -m ruff check core/ gui/ modules/ main.py
+
+# Type check (Mypy)
+python -m mypy core/ gui/ modules/ main.py --ignore-missing-imports
+
+# Run full test suite
+python -m pytest tests/ -q
+```
+
 ## Architecture
 
 ```
@@ -44,19 +65,21 @@ AutoMacro/
 │   ├── engine.py          # Threaded macro executor
 │   ├── scheduler.py       # 7 flow control actions (composite pattern)
 │   ├── recorder.py        # Mouse + keyboard recording
+│   ├── undo_commands.py   # Undo/redo stack (including sub-actions)
+│   ├── smart_hints.py     # Recursive macro analysis engine
 │   └── ...                # autosave, crash_handler, retry, secure, etc.
 ├── gui/                   # PyQt6 user interface
 │   ├── main_window.py     # Main app window
 │   ├── action_editor.py   # Action create/edit dialog
-│   ├── action_tree_model.py # v3.0 tree view model
-│   └── ...                # styles, tray, settings, etc.
+│   ├── action_tree_model.py # Tree view model (nested composites)
+│   └── ...                # styles, tray, settings, panels, etc.
 ├── modules/               # 24 atomic action types
 │   ├── mouse.py           # 6 mouse actions
 │   ├── keyboard.py        # 4 keyboard actions
 │   ├── image.py           # 4 image actions
 │   ├── pixel.py           # 2 pixel actions
 │   └── system.py          # 8 system actions
-└── tests/                 # 448 tests across 15 files
+└── tests/                 # 558 tests across 27 files
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design documentation.
@@ -74,22 +97,19 @@ python -m pytest tests/test_action_tree_model.py -v
 python -m pytest tests/test_benchmarks.py --benchmark-only
 ```
 
-**Current status:** 448 tests, 15 files, 0 failures.
+**Current status:** 558 tests, 27 files, 0 failures.
 
 ## Building
 
 ```bash
 # Build standalone EXE (PyInstaller)
-python -m PyInstaller AutoMacro.spec
+python -m PyInstaller autopilot.spec
 ```
 
 ## Contributing
 
-1. All action types use `@register_action("type_name")` — see `core/action.py`
-2. Never duplicate `action_type` strings across files
-3. Run `python -m pytest tests/ -q` before committing
-4. Follow the Composite Pattern for flow control actions
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ## License
 
-© TungDo — All rights reserved.
+MIT License — © TungDo

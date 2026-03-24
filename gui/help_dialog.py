@@ -9,10 +9,13 @@ Provides:
 """
 
 from PyQt6.QtWidgets import (
-    QDialog, QTabWidget, QVBoxLayout, QTextBrowser, QPushButton,
+    QDialog,
     QHBoxLayout,
+    QPushButton,
+    QTabWidget,
+    QTextBrowser,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import Qt
 
 from gui.action_editor import ACTION_CATEGORIES
 
@@ -48,7 +51,8 @@ class HelpDialog(QDialog):
     def _quick_start_tab(self) -> QTextBrowser:
         tb = QTextBrowser()
         tb.setOpenExternalLinks(True)
-        tb.setHtml("""
+        tb.setHtml(
+            """
         <h2>🚀 Bắt Đầu Nhanh — 5 Bước</h2>
         <ol>
             <li><b>Tạo macro:</b> Click <code>📄 Mới</code> hoặc nhấn <code>Ctrl+N</code></li>
@@ -68,7 +72,8 @@ class HelpDialog(QDialog):
 
         <h3>🎯 Ghi macro tự động</h3>
         <p>Sử dụng panel <b>Ghi</b> ở bên phải để ghi lại thao tác chuột/bàn phím tự động.</p>
-        """)
+        """
+        )
         return tb
 
     def _action_ref_tab(self) -> QTextBrowser:
@@ -77,10 +82,7 @@ class HelpDialog(QDialog):
         for cat_name, actions in ACTION_CATEGORIES:
             lines.append(f"<h3>{cat_name}</h3><table border='0' cellpadding='4'>")
             for atype, label in actions:
-                lines.append(
-                    f"<tr><td><code>{atype}</code></td>"
-                    f"<td><b>{label}</b></td></tr>"
-                )
+                lines.append(f"<tr><td><code>{atype}</code></td>" f"<td><b>{label}</b></td></tr>")
             lines.append("</table>")
         lines.append(f"<p><i>Tổng: {sum(len(a) for _, a in ACTION_CATEGORIES)} action types</i></p>")
         tb.setHtml("\n".join(lines))
@@ -88,7 +90,8 @@ class HelpDialog(QDialog):
 
     def _shortcuts_tab(self) -> QTextBrowser:
         tb = QTextBrowser()
-        tb.setHtml("""
+        tb.setHtml(
+            """
         <h2>⌨ Phím Tắt</h2>
 
         <h3>Điều khiển</h3>
@@ -122,12 +125,14 @@ class HelpDialog(QDialog):
             <tr><td><code>Ctrl+G</code></td><td>Chọn tọa độ XY</td></tr>
             <tr><td><code>F1</code></td><td>Mở hướng dẫn</td></tr>
         </table>
-        """)
+        """
+        )
         return tb
 
     def _faq_tab(self) -> QTextBrowser:
         tb = QTextBrowser()
-        tb.setHtml("""
+        tb.setHtml(
+            """
         <h2>❓ Câu Hỏi Thường Gặp</h2>
 
         <h3>1. Macro không tìm thấy ảnh (Image Not Found)?</h3>
@@ -154,5 +159,6 @@ class HelpDialog(QDialog):
            • Tham chiếu biến bằng cú pháp <code>${tên_biến}</code><br>
            • Dùng <code>If Variable</code> để rẽ nhánh điều kiện<br>
            • Xem giá trị realtime trong panel <b>🔍 Variables</b></p>
-        """)
+        """
+        )
         return tb

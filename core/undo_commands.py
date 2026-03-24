@@ -16,8 +16,7 @@ from core.action import Action
 class AddActionCommand(QUndoCommand):
     """Undo-able: insert a single action at a position."""
 
-    def __init__(self, actions: list[Action], pos: int,
-                 action: Action) -> None:
+    def __init__(self, actions: list[Action], pos: int, action: Action) -> None:
         super().__init__(f"Add {action.get_display_name()}")
         self._actions = actions
         self._pos = pos
@@ -33,8 +32,7 @@ class AddActionCommand(QUndoCommand):
 class EditActionCommand(QUndoCommand):
     """Undo-able: replace action at a row."""
 
-    def __init__(self, actions: list[Action], row: int,
-                 old_action: Action, new_action: Action) -> None:
+    def __init__(self, actions: list[Action], row: int, old_action: Action, new_action: Action) -> None:
         super().__init__(f"Edit {new_action.get_display_name()}")
         self._actions = actions
         self._row = row
@@ -51,18 +49,13 @@ class EditActionCommand(QUndoCommand):
 class DeleteActionsCommand(QUndoCommand):
     """Undo-able: delete one or more actions by row indices."""
 
-    def __init__(self, actions: list[Action],
-                 rows: list[int]) -> None:
+    def __init__(self, actions: list[Action], rows: list[int]) -> None:
         count = len(rows)
-        text = (f"Delete {actions[rows[0]].get_display_name()}"
-                if count == 1
-                else f"Delete {count} actions")
+        text = f"Delete {actions[rows[0]].get_display_name()}" if count == 1 else f"Delete {count} actions"
         super().__init__(text)
         self._actions = actions
         # Store (row, action) pairs sorted ascending for undo re-insertion
-        self._deleted: list[tuple[int, Action]] = [
-            (r, actions[r]) for r in sorted(rows)
-        ]
+        self._deleted: list[tuple[int, Action]] = [(r, actions[r]) for r in sorted(rows)]
 
     def redo(self) -> None:
         # Delete in reverse order so indices don't shift
@@ -78,11 +71,9 @@ class DeleteActionsCommand(QUndoCommand):
 class MoveActionCommand(QUndoCommand):
     """Undo-able: swap two adjacent actions."""
 
-    def __init__(self, actions: list[Action],
-                 from_row: int, to_row: int) -> None:
+    def __init__(self, actions: list[Action], from_row: int, to_row: int) -> None:
         direction = "up" if to_row < from_row else "down"
-        super().__init__(
-            f"Move {actions[from_row].get_display_name()} {direction}")
+        super().__init__(f"Move {actions[from_row].get_display_name()} {direction}")
         self._actions = actions
         self._from = from_row
         self._to = to_row
@@ -100,10 +91,8 @@ class MoveActionCommand(QUndoCommand):
 class DuplicateActionCommand(QUndoCommand):
     """Undo-able: insert a duplicate after the source row."""
 
-    def __init__(self, actions: list[Action], source_row: int,
-                 duplicate: Action) -> None:
-        super().__init__(
-            f"Duplicate {actions[source_row].get_display_name()}")
+    def __init__(self, actions: list[Action], source_row: int, duplicate: Action) -> None:
+        super().__init__(f"Duplicate {actions[source_row].get_display_name()}")
         self._actions = actions
         self._insert_pos = source_row + 1
         self._dup = duplicate
@@ -118,8 +107,7 @@ class DuplicateActionCommand(QUndoCommand):
 class ToggleEnabledCommand(QUndoCommand):
     """Undo-able: toggle enabled for selected rows. Self-inverse."""
 
-    def __init__(self, actions: list[Action],
-                 rows: list[int]) -> None:
+    def __init__(self, actions: list[Action], rows: list[int]) -> None:
         super().__init__(f"Toggle {len(rows)} action(s)")
         self._actions = actions
         self._rows = list(rows)
@@ -138,8 +126,7 @@ class ToggleEnabledCommand(QUndoCommand):
 class AddBatchCommand(QUndoCommand):
     """Undo-able: append a batch of recorded actions."""
 
-    def __init__(self, actions: list[Action],
-                 batch: list[Action]) -> None:
+    def __init__(self, actions: list[Action], batch: list[Action]) -> None:
         super().__init__(f"Record {len(batch)} actions")
         self._actions = actions
         self._batch = batch
@@ -149,15 +136,13 @@ class AddBatchCommand(QUndoCommand):
         self._actions.extend(self._batch)
 
     def undo(self) -> None:
-        del self._actions[self._insert_pos:]
+        del self._actions[self._insert_pos :]
 
 
 class ReorderActionsCommand(QUndoCommand):
     """Undo-able: reorder actions (e.g. via drag-drop)."""
 
-    def __init__(self, actions: list[Action],
-                 old_order: list[Action],
-                 new_order: list[Action]) -> None:
+    def __init__(self, actions: list[Action], old_order: list[Action], new_order: list[Action]) -> None:
         super().__init__("Reorder actions (drag)")
         self._actions = actions
         self._old_order = list(old_order)
@@ -169,3 +154,50 @@ class ReorderActionsCommand(QUndoCommand):
     def undo(self) -> None:
         self._actions[:] = self._old_order
 
+
+class CompositeChildrenCommand(QUndoCommand):
+    """Undo-able: snapshot a composite action's children before/after mutation.
+
+    Usage:
+        cmd = CompositeChildrenCommand(parent_action, "Delete sub-action")
+        # ... mutate parent_action's children ...
+        cmd.capture_new_state()
+        undo_stack.push(cmd)
+    """
+
+    def __init__(self, parent_action: Action, description: str) -> None:
+        super().__init__(description)
+        self._parent = parent_action
+        # Snapshot BEFORE state
+        self._old_subs = list(parent_action._sub_actions) if hasattr(parent_action, "_sub_actions") else None
+        self._old_then = list(parent_action._then_actions) if hasattr(parent_action, "_then_actions") else None
+        self._old_else = list(parent_action._else_actions) if hasattr(parent_action, "_else_actions") else None
+        # AFTER state — set via capture_new_state()
+        self._new_subs: list[Action] | None = None
+        self._new_then: list[Action] | None = None
+        self._new_else: list[Action] | None = None
+
+    def capture_new_state(self) -> None:
+        """Call AFTER mutating children to capture the new state."""
+        p = self._parent
+        if hasattr(p, "_sub_actions"):
+            self._new_subs = list(p._sub_actions)
+        if hasattr(p, "_then_actions"):
+            self._new_then = list(p._then_actions)
+        if hasattr(p, "_else_actions"):
+            self._new_else = list(p._else_actions)
+
+    def redo(self) -> None:
+        self._apply(self._new_subs, self._new_then, self._new_else)
+
+    def undo(self) -> None:
+        self._apply(self._old_subs, self._old_then, self._old_else)
+
+    def _apply(self, subs: list[Action] | None, then: list[Action] | None, else_: list[Action] | None) -> None:
+        p = self._parent
+        if subs is not None and hasattr(p, "_sub_actions"):
+            p._sub_actions = list(subs)
+        if then is not None and hasattr(p, "_then_actions"):
+            p._then_actions = list(then)
+        if else_ is not None and hasattr(p, "_else_actions"):
+            p._else_actions = list(else_)

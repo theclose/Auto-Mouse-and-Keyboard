@@ -3,12 +3,19 @@ Recording panel – a compact widget with Record/Pause/Stop controls,
 live preview of captured actions, and recording options.
 """
 
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QCheckBox, QListWidget, QListWidgetItem,
-)
-from PyQt6.QtCore import QTimer, pyqtSignal
 from typing import Optional
+
+from PyQt6.QtCore import QTimer, pyqtSignal
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from core.recorder import Recorder
 
@@ -58,8 +65,7 @@ class RecordingPanel(QWidget):
         opt2_layout = QHBoxLayout()
         self._context_check = QCheckBox("Chụp ảnh ngữ cảnh click")
         self._context_check.setChecked(False)
-        self._context_check.setToolTip(
-            "Chụp ảnh 80×80px quanh mỗi click để dùng cho Image Matching")
+        self._context_check.setToolTip("Chụp ảnh 80×80px quanh mỗi click để dùng cho Image Matching")
         self._context_check.setAccessibleName("Chụp ảnh ngữ cảnh")
         opt2_layout.addWidget(self._context_check)
         opt2_layout.addStretch()
@@ -116,13 +122,12 @@ class RecordingPanel(QWidget):
         self._pause_btn.setToolTip(f"Tạm dừng/tiếp tục ghi ({pause})")
         self._stop_btn.setToolTip(f"Dừng ghi ({stop})")
 
-
     # -- External hotkey trigger (called from MainWindow) --------------------
     def toggle_recording(self) -> None:
         """Toggle recording on/off — called by F9 hotkey."""
         if self._recorder.is_recording:
             self._stop_recording()
-        elif hasattr(self, '_countdown_timer') and self._countdown_timer.isActive():
+        elif hasattr(self, "_countdown_timer") and self._countdown_timer.isActive():
             self._stop_recording()  # Cancel countdown
         elif self._record_btn.isEnabled():
             self._start_recording()
@@ -137,7 +142,7 @@ class RecordingPanel(QWidget):
         self._preview_list.clear()
         self._record_btn.setEnabled(False)
         self._pause_btn.setEnabled(False)  # enabled after countdown
-        self._stop_btn.setEnabled(True)   # Allow cancel during countdown
+        self._stop_btn.setEnabled(True)  # Allow cancel during countdown
         self._mouse_check.setEnabled(False)
         self._keyboard_check.setEnabled(False)
         self._context_check.setEnabled(False)
@@ -146,23 +151,20 @@ class RecordingPanel(QWidget):
         self._countdown_timer = QTimer()
         self._countdown_timer.setInterval(1000)
         self._countdown_timer.timeout.connect(self._countdown_tick)
-        self._status_label.setText(
-            "⏱ Bắt đầu ghi sau 3... (click Dừng để hủy)")
+        self._status_label.setText("⏱ Bắt đầu ghi sau 3... (click Dừng để hủy)")
         self._countdown_timer.start()
 
     def _countdown_tick(self) -> None:
         """Handle countdown tick."""
         self._countdown_remaining -= 1
         if self._countdown_remaining > 0:
-            self._status_label.setText(
-                f"⏱ Bắt đầu ghi sau {self._countdown_remaining}...")
+            self._status_label.setText(f"⏱ Bắt đầu ghi sau {self._countdown_remaining}...")
         else:
             self._countdown_timer.stop()
             self._stop_btn.setEnabled(True)
             self._pause_btn.setEnabled(True)
             self._recorder.start()
-            self._status_label.setText(
-                "🔴 Đang ghi... thực hiện thao tác của bạn")
+            self._status_label.setText("🔴 Đang ghi... thực hiện thao tác của bạn")
             self._update_timer.start()
             self.recording_state_changed.emit(True)
 
@@ -171,8 +173,7 @@ class RecordingPanel(QWidget):
         if self._recorder.is_paused:
             self._recorder.resume()
             self._pause_btn.setText("⏸ Tạm dừng")
-            self._status_label.setText(
-                f"🔴 Đang ghi... {self._recorder.action_count} actions")
+            self._status_label.setText(f"🔴 Đang ghi... {self._recorder.action_count} actions")
         else:
             self._recorder.pause()
             self._pause_btn.setText("▶ Tiếp tục")
@@ -180,7 +181,7 @@ class RecordingPanel(QWidget):
 
     def _stop_recording(self) -> None:
         # Cancel countdown if still running
-        if hasattr(self, '_countdown_timer') and self._countdown_timer.isActive():
+        if hasattr(self, "_countdown_timer") and self._countdown_timer.isActive():
             self._countdown_timer.stop()
             self._record_btn.setEnabled(True)
             self._stop_btn.setEnabled(False)
@@ -212,21 +213,19 @@ class RecordingPanel(QWidget):
             for action in new_actions:
                 # Improved preview: show type + detail (#8)
                 name = action.get_display_name()
-                atype = getattr(action, 'ACTION_TYPE', '')
-                if hasattr(action, 'x') and hasattr(action, 'y'):
+                if hasattr(action, "x") and hasattr(action, "y"):
                     name += f"  ({action.x}, {action.y})"
-                if hasattr(action, 'duration_ms'):
+                if hasattr(action, "duration_ms"):
                     name += f"  [{action.duration_ms}ms]"
                 item = QListWidgetItem(name)
                 self._preview_list.addItem(item)
             self._preview_list.scrollToBottom()
-            self._status_label.setText(
-                f"🔴 Đang ghi... {count} hành động")
+            self._status_label.setText(f"🔴 Đang ghi... {count} hành động")
 
     def cleanup(self) -> None:
         """Stop all timers and recorder — call before destroy."""
         self._update_timer.stop()
-        if hasattr(self, '_countdown_timer'):
+        if hasattr(self, "_countdown_timer"):
             self._countdown_timer.stop()
         if self._recorder.is_recording:
             self._recorder.stop()

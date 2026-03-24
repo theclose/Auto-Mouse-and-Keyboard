@@ -15,15 +15,22 @@ if TYPE_CHECKING:
 
 _ctx = threading.local()
 
+# P0-2: Speed factor uses shared variable (not thread-local) for runtime updates
+_speed_lock = threading.Lock()
+_global_speed: float = 1.0
+
 
 def set_speed(factor: float) -> None:
-    """Set playback speed for the current thread (0.1 – 10.0)."""
-    _ctx.speed_factor = max(0.1, min(10.0, factor))
+    """Set playback speed (0.1 – 10.0). Thread-safe, callable mid-run."""
+    global _global_speed
+    with _speed_lock:
+        _global_speed = max(0.1, min(10.0, factor))
 
 
 def get_speed() -> float:
-    """Get current speed factor (default 1.0)."""
-    return getattr(_ctx, 'speed_factor', 1.0)
+    """Get current speed factor (default 1.0). Thread-safe."""
+    with _speed_lock:
+        return _global_speed
 
 
 def set_stop_event(event: threading.Event) -> None:
@@ -33,7 +40,7 @@ def set_stop_event(event: threading.Event) -> None:
 
 def get_stop_event() -> threading.Event | None:
     """Get the stop event (None if not set)."""
-    return getattr(_ctx, 'stop_event', None)
+    return getattr(_ctx, "stop_event", None)
 
 
 def is_stopped() -> bool:
@@ -42,14 +49,14 @@ def is_stopped() -> bool:
     return ev is not None and ev.is_set()
 
 
-def set_context(ctx: 'ExecutionContext') -> None:
+def set_context(ctx: "ExecutionContext") -> None:
     """Set execution context for the current thread."""
     _ctx.exec_context = ctx
 
 
-def get_context() -> 'ExecutionContext | None':
+def get_context() -> "ExecutionContext | None":
     """Get execution context (None if not set)."""
-    return getattr(_ctx, 'exec_context', None)
+    return getattr(_ctx, "exec_context", None)
 
 
 def scaled_sleep(seconds: float) -> None:
@@ -78,6 +85,6 @@ def emit_nested_step(path: list[int], display_name: str) -> None:
         path: Index path, e.g. [2, 0] = parent action #2 → child #0
         display_name: Human-readable name of the child action
     """
-    fn = getattr(_ctx, 'nested_callback', None)
+    fn = getattr(_ctx, "nested_callback", None)
     if fn is not None:
         fn(path, display_name)

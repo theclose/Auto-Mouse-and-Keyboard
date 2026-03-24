@@ -16,8 +16,11 @@ import numpy as np
 
 from core.action import Action, register_action
 from modules.screen import (
-    capture_full_screen, capture_full_screen_gray, capture_region,
-    capture_region_gray, save_screenshot,
+    capture_full_screen,
+    capture_full_screen_gray,
+    capture_region,
+    capture_region_gray,
+    save_screenshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,8 +142,7 @@ class ImageFinder:
             logger.error("Cannot read template image: %s", template_path)
             return None
 
-        deadline = time.perf_counter() + (timeout_ms / 1000.0) \
-            if timeout_ms > 0 else 0
+        deadline = time.perf_counter() + (timeout_ms / 1000.0) if timeout_ms > 0 else 0
         poll_interval = 0.1
         consecutive_misses = 0
 
@@ -155,17 +157,16 @@ class ImageFinder:
 
             # Check engine stop event (C1 fix)
             from core.engine_context import is_stopped
+
             if is_stopped():
                 logger.debug("find_on_screen interrupted by stop event")
                 return None
 
             consecutive_misses += 1
-            poll_interval = (min(poll_interval * 1.5, 0.5)
-                             if consecutive_misses > 5 else 0.1)
+            poll_interval = min(poll_interval * 1.5, 0.5) if consecutive_misses > 5 else 0.1
             time.sleep(poll_interval)
 
-        logger.debug("Image not found: %s (conf < %.3f)",
-                     template_path, confidence)
+        logger.debug("Image not found: %s (conf < %.3f)", template_path, confidence)
         return None
 
     def _match_template(
@@ -191,9 +192,7 @@ class ImageFinder:
 
         # Multi-scale only if "close" (>50% threshold) — skip obvious misses
         if max_val > confidence * 0.5:
-            return self._match_multi_scale(
-                screen, template, confidence, region, max_val,
-                (max_loc[0], max_loc[1]))
+            return self._match_multi_scale(screen, template, confidence, region, max_val, (max_loc[0], max_loc[1]))
         return None
 
     def _match_multi_scale(
@@ -214,8 +213,7 @@ class ImageFinder:
             sh = max(1, int(t_h * scale))
             if sw >= screen.shape[1] or sh >= screen.shape[0]:
                 continue
-            scaled_t = cv2.resize(template, (sw, sh),
-                                  interpolation=cv2.INTER_AREA)
+            scaled_t = cv2.resize(template, (sw, sh), interpolation=cv2.INTER_AREA)
             res = cv2.matchTemplate(screen, scaled_t, self.method)
             _, mv, _, ml = cv2.minMaxLoc(res)
             if mv > best_val:
@@ -228,8 +226,7 @@ class ImageFinder:
             if region:
                 x += region[0]
                 y += region[1]
-            logger.debug("Image found (scale=%.2f) at (%d,%d) conf=%.3f",
-                         best_scale, x, y, best_val)
+            logger.debug("Image found (scale=%.2f) at (%d,%d) conf=%.3f", best_scale, x, y, best_val)
             return (x, y, sw, sh)
         return None
 
@@ -266,9 +263,7 @@ class ImageFinder:
         logger.debug("Found %d instances of %s", len(boxes), template_path)
         return boxes
 
-    def get_center(
-        self, bbox: tuple[int, int, int, int]
-    ) -> tuple[int, int]:
+    def get_center(self, bbox: tuple[int, int, int, int]) -> tuple[int, int]:
         """Return the center (x, y) of a bounding box."""
         x, y, w, h = bbox
         return x + w // 2, y + h // 2
@@ -286,8 +281,9 @@ def get_image_finder() -> ImageFinder:
     return _finder_instance
 
 
-def _nms(boxes: list[tuple[int, int, int, int]], t_w: int, t_h: int,
-         overlap_thresh: float = 0.3) -> list[tuple[int, int, int, int]]:
+def _nms(
+    boxes: list[tuple[int, int, int, int]], t_w: int, t_h: int, overlap_thresh: float = 0.3
+) -> list[tuple[int, int, int, int]]:
     """Simple non-max suppression to remove overlapping detections."""
     if not boxes:
         return []
@@ -298,8 +294,7 @@ def _nms(boxes: list[tuple[int, int, int, int]], t_w: int, t_h: int,
         bx, by = box[0], box[1]
         is_overlap = False
         for existing in filtered:
-            if abs(bx - existing[0]) < dx_thresh and \
-               abs(by - existing[1]) < dy_thresh:
+            if abs(bx - existing[0]) < dx_thresh and abs(by - existing[1]) < dy_thresh:
                 is_overlap = True
                 break
         if not is_overlap:
@@ -311,12 +306,12 @@ def _nms(boxes: list[tuple[int, int, int, int]], t_w: int, t_h: int,
 # Action wrappers for macro usage
 # ---------------------------------------------------------------------------
 
+
 @register_action("wait_for_image")
 class WaitForImage(Action):
     """Wait until an image appears on screen (with timeout)."""
 
-    def __init__(self, image_path: str = "", confidence: float = 0.8,
-                 timeout_ms: int = 10000, **kwargs: Any) -> None:
+    def __init__(self, image_path: str = "", confidence: float = 0.8, timeout_ms: int = 10000, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.image_path = image_path
         self.confidence = confidence
@@ -324,6 +319,7 @@ class WaitForImage(Action):
 
     def execute(self) -> bool:
         from core.engine_context import get_context
+
         finder = get_image_finder()
         ctx = get_context()
         # Use smart ROI if available
@@ -369,8 +365,14 @@ class WaitForImage(Action):
 class ClickOnImage(Action):
     """Find an image on screen and click its center."""
 
-    def __init__(self, image_path: str = "", confidence: float = 0.8,
-                 timeout_ms: int = 10000, button: str = "left", **kwargs: Any) -> None:
+    def __init__(
+        self,
+        image_path: str = "",
+        confidence: float = 0.8,
+        timeout_ms: int = 10000,
+        button: str = "left",
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.image_path = image_path
         self.confidence = confidence
@@ -379,7 +381,9 @@ class ClickOnImage(Action):
 
     def execute(self) -> bool:
         import pyautogui
+
         from core.engine_context import get_context
+
         finder = get_image_finder()
         ctx = get_context()
         # Try cached result from context first (Breakthrough 5)
@@ -399,11 +403,9 @@ class ClickOnImage(Action):
             region=region,
         )
         if result is None and region is not None:
-            result = finder.find_on_screen(
-                self.image_path, confidence=self.confidence, timeout_ms=0)
+            result = finder.find_on_screen(self.image_path, confidence=self.confidence, timeout_ms=0)
         if result is None:
-            logger.warning("ClickOnImage: image not found: %s",
-                           self.image_path)
+            logger.warning("ClickOnImage: image not found: %s", self.image_path)
             return False
         if ctx:
             ctx.set_image_match(self.image_path, result)
@@ -474,10 +476,16 @@ class ImageExists(Action):
 class TakeScreenshot(Action):
     """Capture a screenshot during macro execution and save to disk."""
 
-    def __init__(self, save_dir: str = "", filename_pattern: str = "",
-                 region_x: int = 0, region_y: int = 0,
-                 region_w: int = 0, region_h: int = 0,
-                 **kwargs: Any) -> None:
+    def __init__(
+        self,
+        save_dir: str = "",
+        filename_pattern: str = "",
+        region_x: int = 0,
+        region_y: int = 0,
+        region_w: int = 0,
+        region_h: int = 0,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.save_dir = save_dir or "macros/screenshots"
         self.filename_pattern = filename_pattern or "screenshot_%Y%m%d_%H%M%S.png"
@@ -488,6 +496,7 @@ class TakeScreenshot(Action):
 
     def execute(self) -> bool:
         import os
+
         os.makedirs(self.save_dir, exist_ok=True)
         filename = time.strftime(self.filename_pattern)
         filepath = os.path.join(self.save_dir, filename)
@@ -499,8 +508,7 @@ class TakeScreenshot(Action):
             counter += 1
         region = None
         if self.region_w > 0 and self.region_h > 0:
-            region = (self.region_x, self.region_y,
-                      self.region_w, self.region_h)
+            region = (self.region_x, self.region_y, self.region_w, self.region_h)
         save_screenshot(filepath, region)
         logger.info("Screenshot saved: %s", filepath)
         return True
@@ -517,8 +525,7 @@ class TakeScreenshot(Action):
 
     def _set_params(self, params: dict[str, Any]) -> None:
         self.save_dir = params.get("save_dir", "macros/screenshots")
-        self.filename_pattern = params.get("filename_pattern",
-                                            "screenshot_%Y%m%d_%H%M%S.png")
+        self.filename_pattern = params.get("filename_pattern", "screenshot_%Y%m%d_%H%M%S.png")
         self.region_x = params.get("region_x", 0)
         self.region_y = params.get("region_y", 0)
         self.region_w = params.get("region_w", 0)
@@ -528,4 +535,3 @@ class TakeScreenshot(Action):
         if self.region_w > 0:
             return f"Screenshot ({self.region_w}×{self.region_h})"
         return "Screenshot (Full Screen)"
-

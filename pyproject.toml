@@ -31,10 +31,20 @@ include = ["core*", "gui*", "modules*"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 
-[tool.flake8]
-max-line-length = 120
-ignore = ["E501", "W503", "W504", "E402", "W391"]
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E402", "E501", "E701"]
 
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
+warn_unused_imports = false
+

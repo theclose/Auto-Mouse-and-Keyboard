@@ -40,13 +40,12 @@ def _validate_path(path: str, operation: str = "access") -> str:
     resolved = os.path.realpath(path)
 
     # Block obvious traversal attempts
-    if '..' in os.path.normpath(path).split(os.sep):
+    if ".." in os.path.normpath(path).split(os.sep):
         logger.warning("Path traversal blocked: %s", path)
-        raise ValueError(
-            f"Path traversal not allowed: {path}"
-        )
+        raise ValueError(f"Path traversal not allowed: {path}")
 
     return resolved
+
 
 _user32 = ctypes.windll.user32
 
@@ -55,21 +54,22 @@ _user32 = ctypes.windll.user32
 # Window Management (G5)
 # ---------------------------------------------------------------------------
 
+
 @register_action("activate_window")
 class ActivateWindow(Action):
     """Bring a window to the foreground by title (partial match)."""
 
-    def __init__(self, window_title: str = "", exact_match: bool = False,
-                 **kwargs: Any) -> None:
+    def __init__(self, window_title: str = "", exact_match: bool = False, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.window_title = window_title
         self.exact_match = exact_match
 
     def execute(self) -> bool:
         from core.engine_context import get_context
+
         title = self.window_title
         ctx = get_context()
-        if ctx and '${' in title:
+        if ctx and "${" in title:
             title = ctx.interpolate(title)
 
         if self.exact_match:
@@ -109,8 +109,7 @@ class ActivateWindow(Action):
         # Strategy 3: AttachThreadInput workaround
         try:
             _kernel32 = ctypes.windll.kernel32
-            fg_thread = _user32.GetWindowThreadProcessId(
-                _user32.GetForegroundWindow(), None)
+            fg_thread = _user32.GetWindowThreadProcessId(_user32.GetForegroundWindow(), None)
             target_thread = _user32.GetWindowThreadProcessId(hwnd, None)
             if fg_thread != target_thread:
                 _user32.AttachThreadInput(fg_thread, target_thread, True)
@@ -165,21 +164,22 @@ class ActivateWindow(Action):
 # Log to File (G10)
 # ---------------------------------------------------------------------------
 
+
 @register_action("log_to_file")
 class LogToFile(Action):
     """Write a message to a log file. Supports ${var} interpolation."""
 
-    def __init__(self, message: str = "", file_path: str = "",
-                 **kwargs: Any) -> None:
+    def __init__(self, message: str = "", file_path: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.message = message
         self.file_path = file_path or "macros/macro_log.txt"
 
     def execute(self) -> bool:
         from core.engine_context import get_context
+
         ctx = get_context()
         msg = self.message
-        if ctx and '${' in msg:
+        if ctx and "${" in msg:
             msg = ctx.interpolate(msg)
 
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -222,6 +222,7 @@ class LogToFile(Action):
 # Clipboard → Variable (G8)
 # ---------------------------------------------------------------------------
 
+
 @register_action("read_clipboard")
 class ReadClipboard(Action):
     """Read clipboard text and store it in a context variable."""
@@ -232,6 +233,7 @@ class ReadClipboard(Action):
 
     def execute(self) -> bool:
         from core.engine_context import get_context
+
         # Win32 clipboard read (thread-safe)
         _user32.OpenClipboard(0)
         try:
@@ -263,15 +265,15 @@ class ReadClipboard(Action):
 # File I/O (G13)
 # ---------------------------------------------------------------------------
 
+
 @register_action("read_file_line")
 class ReadFileLine(Action):
     """Read a specific line from a file into a variable.
-    
+
     Uses per-instance cache with mtime invalidation — O(1) per read after first load.
     """
 
-    def __init__(self, file_path: str = "", line_number: str = "1",
-                 var_name: str = "line", **kwargs: Any) -> None:
+    def __init__(self, file_path: str = "", line_number: str = "1", var_name: str = "line", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.file_path = file_path
         self.line_number = line_number  # Can be ${var} for dynamic
@@ -307,13 +309,14 @@ class ReadFileLine(Action):
 
     def execute(self) -> bool:
         from core.engine_context import get_context
+
         ctx = get_context()
         path = self.file_path
         line_str = self.line_number
         if ctx:
-            if '${' in path:
+            if "${" in path:
                 path = ctx.interpolate(path)
-            if '${' in line_str:
+            if "${" in line_str:
                 line_str = ctx.interpolate(line_str)
 
         try:
@@ -330,12 +333,10 @@ class ReadFileLine(Action):
             content = lines[line_num - 1].rstrip("\n\r")
             if ctx:
                 ctx.set_var(self.var_name, content)
-            logger.info("Read line %d → ${%s} = '%s'",
-                        line_num, self.var_name, content[:50])
+            logger.info("Read line %d → ${%s} = '%s'", line_num, self.var_name, content[:50])
             return True
         else:
-            logger.warning("Line %d out of range (file has %d lines)",
-                           line_num, len(lines))
+            logger.warning("Line %d out of range (file has %d lines)", line_num, len(lines))
             return False
 
     def _get_params(self) -> dict[str, Any]:
@@ -359,8 +360,7 @@ class ReadFileLine(Action):
 class WriteToFile(Action):
     """Write/append text to a file. Supports ${var} interpolation."""
 
-    def __init__(self, file_path: str = "", text: str = "",
-                 mode: str = "append", **kwargs: Any) -> None:
+    def __init__(self, file_path: str = "", text: str = "", mode: str = "append", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.file_path = file_path
         self.text = text
@@ -368,13 +368,14 @@ class WriteToFile(Action):
 
     def execute(self) -> bool:
         from core.engine_context import get_context
+
         ctx = get_context()
         text = self.text
         path = self.file_path
         if ctx:
-            if '${' in text:
+            if "${" in text:
                 text = ctx.interpolate(text)
-            if '${' in path:
+            if "${" in path:
                 path = ctx.interpolate(path)
 
         # Security: validate path
@@ -415,27 +416,30 @@ class WriteToFile(Action):
 # Secure Text Input (G2) — DPAPI encrypted
 # ---------------------------------------------------------------------------
 
+
 @register_action("secure_type_text")
 class SecureTypeText(Action):
     """Type text that is stored encrypted in the macro file.
     Uses Windows DPAPI for encryption — tied to machine + user account.
     """
 
-    def __init__(self, encrypted_text: str = "", interval: float = 0.02,
-                 **kwargs: Any) -> None:
+    def __init__(self, encrypted_text: str = "", interval: float = 0.02, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.encrypted_text = encrypted_text
         self.interval = interval
 
     def execute(self) -> bool:
         import pyautogui
+
         from core.secure import decrypt, is_encrypted
+
         # Decrypt at runtime
         text = decrypt(self.encrypted_text) if is_encrypted(self.encrypted_text) else self.encrypted_text
         if text.isascii():
             pyautogui.typewrite(text, interval=self.interval)
         else:
             from modules.keyboard import _send_unicode_string
+
             _send_unicode_string(text, self.interval)
         logger.debug("Typed secure text (len=%d)", len(text))
         return True
@@ -458,6 +462,9 @@ class SecureTypeText(Action):
 # Run Sub-Macro (G3)
 # ---------------------------------------------------------------------------
 
+_MAX_MACRO_DEPTH = 10  # Prevent infinite recursion (A→B→A)
+
+
 @register_action("run_macro")
 class RunMacro(Action):
     """Execute another macro file as a sub-routine."""
@@ -467,44 +474,64 @@ class RunMacro(Action):
         self.macro_path = macro_path
 
     def execute(self) -> bool:
-        from core.engine_context import get_context, is_stopped
         from core.engine import MacroEngine
+        from core.engine_context import get_context, is_stopped
 
         ctx = get_context()
         path = self.macro_path
-        if ctx and '${' in path:
+        if ctx and "${" in path:
             path = ctx.interpolate(path)
+
+        # Recursion depth guard
+        depth = int(ctx.get_var("__macro_depth__", 0)) if ctx else 0
+        if depth >= _MAX_MACRO_DEPTH:
+            logger.error(
+                "RunMacro: max depth %d exceeded — possible " "circular reference in '%s'", _MAX_MACRO_DEPTH, path
+            )
+            return False
+        if ctx:
+            ctx.set_var("__macro_depth__", depth + 1)
 
         # Security: validate macro path
         try:
             path = _validate_path(path, "run_macro")
         except ValueError as e:
             logger.error("RunMacro blocked: %s", e)
+            if ctx:
+                ctx.set_var("__macro_depth__", depth)
             return False
 
         # Ensure it's a .json macro file
-        if not path.endswith('.json'):
+        if not path.endswith(".json"):
             logger.error("RunMacro: not a .json file: %s", path)
+            if ctx:
+                ctx.set_var("__macro_depth__", depth)
             return False
 
         try:
             actions, settings = MacroEngine.load_macro(path)
         except (ValueError, FileNotFoundError) as e:
             logger.error("RunMacro failed to load '%s': %s", path, e)
+            if ctx:
+                ctx.set_var("__macro_depth__", depth)
             return False
 
-        logger.info("RunMacro: executing '%s' (%d actions)",
-                     path, len(actions))
+        logger.info("RunMacro: executing '%s' (%d actions, depth=%d)", path, len(actions), depth + 1)
 
-        for action in actions:
-            if is_stopped():
-                return True
-            success = action.run()
+        try:
+            for action in actions:
+                if is_stopped():
+                    return True
+                success = action.run()
+                if ctx:
+                    ctx.record_action(success)
+                if not success:
+                    logger.warning("RunMacro: sub-action failed in '%s'", path)
+                    return False
+        finally:
+            # Always restore depth on exit (even on error)
             if ctx:
-                ctx.record_action(success)
-            if not success:
-                logger.warning("RunMacro: sub-action failed in '%s'", path)
-                return False
+                ctx.set_var("__macro_depth__", depth)
 
         logger.info("RunMacro: completed '%s'", path)
         return True
@@ -524,15 +551,23 @@ class RunMacro(Action):
 # OCR Text Capture (G16)
 # ---------------------------------------------------------------------------
 
+
 @register_action("capture_text")
 class CaptureText(Action):
     """Capture text from a screen region using OCR (pytesseract).
     Stores the result in a context variable.
     """
 
-    def __init__(self, x: int = 0, y: int = 0, width: int = 200,
-                 height: int = 50, var_name: str = "ocr_text",
-                 lang: str = "eng", **kwargs: Any) -> None:
+    def __init__(
+        self,
+        x: int = 0,
+        y: int = 0,
+        width: int = 200,
+        height: int = 50,
+        var_name: str = "ocr_text",
+        lang: str = "eng",
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.x = x
         self.y = y
@@ -550,7 +585,8 @@ class CaptureText(Action):
                 "CaptureText requires pytesseract and Pillow.\n"
                 "Install: pip install pytesseract Pillow\n"
                 "Also install Tesseract OCR: https://github.com/tesseract-ocr/tesseract\n"
-                "Windows: https://github.com/UB-Mannheim/tesseract/wiki")
+                "Windows: https://github.com/UB-Mannheim/tesseract/wiki"
+            )
             return False
 
         from core.engine_context import get_context
@@ -561,14 +597,13 @@ class CaptureText(Action):
 
         # OCR
         try:
-            text = pytesseract.image_to_string(
-                screenshot, lang=self.lang
-            ).strip()
+            text = pytesseract.image_to_string(screenshot, lang=self.lang).strip()
         except pytesseract.TesseractNotFoundError:
             logger.error(
                 "Tesseract executable not found!\n"
                 "Install from: https://github.com/UB-Mannheim/tesseract/wiki\n"
-                "Then set path: pytesseract.pytesseract.tesseract_cmd = r'C:\\...\\tesseract.exe'")
+                "Then set path: pytesseract.pytesseract.tesseract_cmd = r'C:\\...\\tesseract.exe'"
+            )
             return False
         except Exception as e:
             logger.error("OCR failed: %s", e)
@@ -578,16 +613,19 @@ class CaptureText(Action):
         if ctx:
             ctx.set_var(self.var_name, text)
 
-        logger.info("OCR(%d,%d,%dx%d) → ${%s} = '%s'",
-                     self.x, self.y, self.width, self.height,
-                     self.var_name, text[:50])
+        logger.info(
+            "OCR(%d,%d,%dx%d) → ${%s} = '%s'", self.x, self.y, self.width, self.height, self.var_name, text[:50]
+        )
         return True
 
     def _get_params(self) -> dict[str, Any]:
         return {
-            "x": self.x, "y": self.y,
-            "width": self.width, "height": self.height,
-            "var_name": self.var_name, "lang": self.lang,
+            "x": self.x,
+            "y": self.y,
+            "width": self.width,
+            "height": self.height,
+            "var_name": self.var_name,
+            "lang": self.lang,
         }
 
     def _set_params(self, params: dict[str, Any]) -> None:
@@ -599,6 +637,4 @@ class CaptureText(Action):
         self.lang = params.get("lang", "eng")
 
     def get_display_name(self) -> str:
-        return (f"OCR({self.x},{self.y} {self.width}×{self.height})"
-                f" → ${{{self.var_name}}}")
-
+        return f"OCR({self.x},{self.y} {self.width}×{self.height})" f" → ${{{self.var_name}}}"

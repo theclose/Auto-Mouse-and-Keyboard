@@ -10,13 +10,24 @@ Features:
 - Works on multi-monitor setups
 """
 
-from PyQt6.QtWidgets import QWidget, QApplication
-from PyQt6.QtCore import Qt, QPoint, QRect, QTimer, pyqtSignal
-from PyQt6.QtGui import (
-    QPainter, QColor, QPen, QFont, QPixmap, QCursor,
-    QGuiApplication, QPaintEvent, QMouseEvent, QKeyEvent, QCloseEvent, QImage,
-)
 from typing import Optional
+
+from PyQt6.QtCore import QPoint, QRect, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import (
+    QCloseEvent,
+    QColor,
+    QCursor,
+    QFont,
+    QGuiApplication,
+    QImage,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPen,
+    QPixmap,
+)
+from PyQt6.QtWidgets import QApplication, QWidget
 
 
 class CoordinatePickerOverlay(QWidget):
@@ -37,10 +48,10 @@ class CoordinatePickerOverlay(QWidget):
     cancelled = pyqtSignal()
 
     # Magnifier settings
-    MAG_SIZE = 120        # magnifier diameter
-    MAG_ZOOM = 4          # zoom factor
-    MAG_OFFSET = 30       # distance from cursor
-    CAPTURE_RADIUS = 15   # pixels around cursor to capture (MAG_SIZE / MAG_ZOOM / 2)
+    MAG_SIZE = 120  # magnifier diameter
+    MAG_ZOOM = 4  # zoom factor
+    MAG_OFFSET = 30  # distance from cursor
+    CAPTURE_RADIUS = 15  # pixels around cursor to capture (MAG_SIZE / MAG_ZOOM / 2)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -52,11 +63,7 @@ class CoordinatePickerOverlay(QWidget):
         self._update_timer.timeout.connect(self._track_mouse)
 
         # Window setup: frameless, always on top, transparent
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCursor(Qt.CursorShape.BlankCursor)
 
@@ -100,8 +107,8 @@ class CoordinatePickerOverlay(QWidget):
         # 3) Crosshair lines (full screen width/height)
         crosshair_pen = QPen(QColor(108, 99, 255, 200), 1, Qt.PenStyle.DashLine)
         painter.setPen(crosshair_pen)
-        painter.drawLine(mx, 0, mx, self.height())   # vertical
-        painter.drawLine(0, my, self.width(), my)     # horizontal
+        painter.drawLine(mx, 0, mx, self.height())  # vertical
+        painter.drawLine(0, my, self.width(), my)  # horizontal
 
         # 4) Center target circle
         target_pen = QPen(QColor(108, 99, 255), 2, Qt.PenStyle.SolidLine)
@@ -138,15 +145,14 @@ class CoordinatePickerOverlay(QWidget):
         # Capture region around cursor from frozen screenshot
         screen_geo = self.geometry()
         capture_rect = QRect(
-            self._mouse_pos.x() - screen_geo.x() - r,
-            self._mouse_pos.y() - screen_geo.y() - r,
-            r * 2, r * 2
+            self._mouse_pos.x() - screen_geo.x() - r, self._mouse_pos.y() - screen_geo.y() - r, r * 2, r * 2
         )
         captured = self._screenshot.copy(capture_rect)
 
         # Scale up
         zoomed = captured.scaled(
-            mag, mag,
+            mag,
+            mag,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.FastTransformation,
         )
@@ -159,9 +165,9 @@ class CoordinatePickerOverlay(QWidget):
         # Clip to circle and draw zoomed image
         painter.save()
         from PyQt6.QtGui import QPainterPath
+
         clip_path = QPainterPath()
-        clip_path.addEllipse(float(mag_x), float(mag_y),
-                             float(mag), float(mag))
+        clip_path.addEllipse(float(mag_x), float(mag_y), float(mag), float(mag))
         painter.setClipPath(clip_path)
         painter.drawPixmap(mag_x, mag_y, zoomed)
 
@@ -186,8 +192,7 @@ class CoordinatePickerOverlay(QWidget):
         if self._screenshot_image is not None:
             sx = abs_x - screen_geo.x()
             sy = abs_y - screen_geo.y()
-            if 0 <= sx < self._screenshot_image.width() and \
-               0 <= sy < self._screenshot_image.height():
+            if 0 <= sx < self._screenshot_image.width() and 0 <= sy < self._screenshot_image.height():
                 pixel = self._screenshot_image.pixelColor(sx, sy)
                 color_hex = pixel.name()
 
@@ -225,8 +230,7 @@ class CoordinatePickerOverlay(QWidget):
             swatch_y = box_y + (box_h - swatch_size) // 2
             painter.setBrush(QColor(color_hex))
             painter.setPen(QPen(QColor(255, 255, 255, 100), 1))
-            painter.drawRoundedRect(swatch_x, swatch_y,
-                                    swatch_size, swatch_size, 2, 2)
+            painter.drawRoundedRect(swatch_x, swatch_y, swatch_size, swatch_size, 2, 2)
 
         # Draw text
         painter.setPen(QColor(232, 232, 240))
@@ -238,8 +242,7 @@ class CoordinatePickerOverlay(QWidget):
         painter.setPen(QColor(160, 160, 184))
         hint = "Click to pick  •  Escape to cancel"
         hint_w = painter.fontMetrics().horizontalAdvance(hint)
-        painter.drawText((self.width() - hint_w) // 2,
-                         self.height() - 30, hint)
+        painter.drawText((self.width() - hint_w) // 2, self.height() - 30, hint)
 
     def mousePressEvent(self, event: Optional[QMouseEvent]) -> None:
         if event and event.button() == Qt.MouseButton.LeftButton:
@@ -248,6 +251,11 @@ class CoordinatePickerOverlay(QWidget):
             abs_y = self._mouse_pos.y()
             self.close()
             self.coordinate_picked.emit(abs_x, abs_y)
+        elif event and event.button() == Qt.MouseButton.RightButton:
+            # Treat right-click as cancel to prevent stuck overlay
+            self._update_timer.stop()
+            self.close()
+            self.cancelled.emit()
 
     def keyPressEvent(self, event: Optional[QKeyEvent]) -> None:
         if event and event.key() == Qt.Key.Key_Escape:

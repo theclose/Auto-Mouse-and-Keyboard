@@ -8,15 +8,13 @@ import logging.handlers
 import os
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 # Set up logging before any other imports
 LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True)
 
-_log_formatter = logging.Formatter(
-    "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
+_log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 # Rotating log: 5MB per file, keep 3 backups (total max ~20MB)
 _file_handler = logging.handlers.RotatingFileHandler(
@@ -40,14 +38,16 @@ logger = logging.getLogger("AutoPilot")
 def setup_global_hotkeys(config: dict[str, Any]) -> Any:
     """Register system-wide hotkeys using Win32 RegisterHotKey."""
     try:
-        from core.hotkey_manager import HotkeyManager
         from PyQt6.QtCore import QTimer
+
+        from core.hotkey_manager import HotkeyManager
 
         hotkeys = config.get("hotkeys", {})
         hk_mgr = HotkeyManager()
 
         def _find_main_window() -> Any:
             from PyQt6.QtWidgets import QApplication
+
             app = QApplication.instance()
             if app and isinstance(app, QApplication):
                 for widget in app.topLevelWidgets():
@@ -64,7 +64,7 @@ def setup_global_hotkeys(config: dict[str, Any]) -> Any:
             w = _find_main_window()
             if w:
                 # If recording, pause/resume recording instead of engine
-                if hasattr(w, '_rec_panel') and w._rec_panel._recorder.is_recording:
+                if hasattr(w, "_rec_panel") and w._rec_panel._recorder.is_recording:
                     QTimer.singleShot(0, w._rec_panel._toggle_pause)
                     return
                 QTimer.singleShot(0, w._on_pause)
@@ -73,14 +73,14 @@ def setup_global_hotkeys(config: dict[str, Any]) -> Any:
             w = _find_main_window()
             if w:
                 # If recording, stop recording
-                if hasattr(w, '_rec_panel') and w._rec_panel._recorder.is_recording:
+                if hasattr(w, "_rec_panel") and w._rec_panel._recorder.is_recording:
                     QTimer.singleShot(0, w._rec_panel._stop_recording)
                     return
                 QTimer.singleShot(0, w._on_stop)
 
         def toggle_record() -> None:
             w = _find_main_window()
-            if w and hasattr(w, '_rec_panel'):
+            if w and hasattr(w, "_rec_panel"):
                 QTimer.singleShot(0, w._rec_panel.toggle_recording)
 
         start_key = hotkeys.get("start_stop", "F6")
@@ -94,8 +94,9 @@ def setup_global_hotkeys(config: dict[str, Any]) -> Any:
         hk_mgr.register(record_key, toggle_record)
         hk_mgr.start()
 
-        logger.info("Global hotkeys (Win32): Start=%s, Pause=%s, Stop=%s, Record=%s",
-                    start_key, pause_key, stop_key, record_key)
+        logger.info(
+            "Global hotkeys (Win32): Start=%s, Pause=%s, Stop=%s, Record=%s", start_key, pause_key, stop_key, record_key
+        )
         return hk_mgr  # Keep reference to prevent GC
     except Exception as e:
         logger.warning("Failed to set up global hotkeys: %s", e)
@@ -110,12 +111,14 @@ def main() -> None:
     # so Qt doesn't call SetProcessDpiAwarenessContext() again
     try:
         import ctypes
+
         awareness = ctypes.c_void_p(-4)  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
         ctypes.windll.user32.SetProcessDpiAwarenessContext(awareness)
     except (AttributeError, OSError):
         pass  # non-Windows or already set
 
     from PyQt6.QtWidgets import QApplication
+
     from gui.main_window import MainWindow
     from gui.settings_dialog import load_config
 
@@ -125,6 +128,7 @@ def main() -> None:
 
     # --- Tier 1: CrashHandler (replaces simple excepthook) ---
     from core.crash_handler import CrashHandler
+
     CrashHandler.install()
 
     # --- Tier 1: MemoryManager for 24/7 stability ---
@@ -146,6 +150,7 @@ def main() -> None:
 
     # Audit: log all registered action types for diagnostics
     from core.action import audit_registry
+
     registry = audit_registry()
     logger.info("Action registry: %d types registered", len(registry))
     logger.debug("Registry details: %s", registry)
@@ -161,4 +166,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

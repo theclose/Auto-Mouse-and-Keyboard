@@ -4,17 +4,18 @@ Provides a tray icon with quick controls, minimize-to-tray behavior,
 and color-coded state indication (recording/running/paused/idle).
 """
 
-from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
-from PyQt6.QtCore import pyqtSignal, QObject
 from typing import Optional
+
+from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
 # Icon color palette
 _ICON_COLORS = {
-    "blue": "#6C63FF",    # idle
-    "green": "#4CAF50",   # running
+    "blue": "#6C63FF",  # idle
+    "green": "#4CAF50",  # running
     "yellow": "#FFC107",  # paused
-    "red": "#F44336",     # recording
+    "red": "#F44336",  # recording
 }
 
 
@@ -97,12 +98,13 @@ class TrayManager(QObject):
 
     def show_message(self, title: str, message: str, duration_ms: int = 3000) -> None:
         self._tray.showMessage(
-            title, message,
-            QSystemTrayIcon.MessageIcon.Information, duration_ms,
+            title,
+            message,
+            QSystemTrayIcon.MessageIcon.Information,
+            duration_ms,
         )
 
-    def update_state(self, is_running: bool, is_paused: bool,
-                     is_recording: bool = False) -> None:
+    def update_state(self, is_running: bool, is_paused: bool, is_recording: bool = False) -> None:
         """Update icon color and menu items based on app state."""
         self._play_action.setEnabled(not is_running or is_paused)
         self._pause_action.setEnabled(is_running and not is_paused)
@@ -114,7 +116,7 @@ class TrayManager(QObject):
         elif is_running and not is_paused:
             self._tray.setIcon(self._icons["green"])
             self.set_tooltip("AutoMacro – ▶ Running")
-        elif is_paused:
+        elif is_running and is_paused:
             self._tray.setIcon(self._icons["yellow"])
             self.set_tooltip("AutoMacro – ⏸ Paused")
         else:
@@ -124,4 +126,3 @@ class TrayManager(QObject):
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self.show_requested.emit()
-

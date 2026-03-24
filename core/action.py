@@ -5,20 +5,27 @@ executed, and composed into macro sequences.
 """
 
 import logging
-import time
 from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
 _id_counter = 0
 
+
 def _next_id() -> str:
     """Fast lightweight ID (no cryptographic overhead)."""
     global _id_counter
     _id_counter += 1
     return f"{_id_counter:06x}"
-from typing import Any
 
+
+def reset_id_counter() -> None:
+    """P2-2: Reset ID counter between sessions to keep IDs compact."""
+    global _id_counter
+    _id_counter = 0
+
+
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Action Registry – maps type strings to Action subclasses
@@ -34,26 +41,29 @@ def register_action(action_type: str) -> Any:
     This was the root cause of the else_action_json crash: scheduler.py
     overwrote flow_control.py's registration silently.
     """
+
     def decorator(cls: type["Action"]) -> type["Action"]:
         existing = _ACTION_REGISTRY.get(action_type)
         if existing is not None and existing is not cls:
             logger.warning(
                 "⚠️  DUPLICATE registration for '%s': %s.%s OVERWRITES %s.%s",
                 action_type,
-                cls.__module__, cls.__name__,
-                existing.__module__, existing.__name__,
+                cls.__module__,
+                cls.__name__,
+                existing.__module__,
+                existing.__name__,
             )
         _ACTION_REGISTRY[action_type] = cls
         cls.ACTION_TYPE = action_type
         return cls
+
     return decorator
 
 
 def get_action_class(action_type: str) -> type["Action"]:
     """Look up an Action class by its type string."""
     if action_type not in _ACTION_REGISTRY:
-        raise ValueError(f"Unknown action type: '{action_type}'. "
-                         f"Available: {list(_ACTION_REGISTRY.keys())}")
+        raise ValueError(f"Unknown action type: '{action_type}'. " f"Available: {list(_ACTION_REGISTRY.keys())}")
     return _ACTION_REGISTRY[action_type]
 
 
@@ -68,10 +78,7 @@ def audit_registry() -> dict[str, str]:
     Call at startup to log the full registry for diagnostics.
     Example output: {'mouse_click': 'modules.mouse.MouseClick', ...}
     """
-    return {
-        atype: f"{cls.__module__}.{cls.__name__}"
-        for atype, cls in sorted(_ACTION_REGISTRY.items())
-    }
+    return {atype: f"{cls.__module__}.{cls.__name__}" for atype, cls in sorted(_ACTION_REGISTRY.items())}
 
 
 # ---------------------------------------------------------------------------
@@ -89,15 +96,20 @@ class Action(ABC):
 
     ACTION_TYPE: str = ""  # Set by @register_action
 
-    def __init__(self, delay_after: int = 0, repeat_count: int = 1,
-                 description: str = "", enabled: bool = True,
-                 on_error: str = "stop"):
+    def __init__(
+        self,
+        delay_after: int = 0,
+        repeat_count: int = 1,
+        description: str = "",
+        enabled: bool = True,
+        on_error: str = "stop",
+    ):
         self.id = _next_id()
-        self.delay_after = delay_after        # ms to wait after execution
+        self.delay_after = delay_after  # ms to wait after execution
         self.repeat_count = max(1, repeat_count)
         self.description = description
         self.enabled = enabled
-        self.on_error = on_error              # "stop" | "skip" | "retry:N"
+        self.on_error = on_error  # "stop" | "skip" | "retry:N"
 
     # -- composite interface (v3.0) ------------------------------------------
     @property
@@ -108,34 +120,34 @@ class Action(ABC):
         return False
 
     @property
-    def children(self) -> list['Action']:
+    def children(self) -> list["Action"]:
         """All child actions (flat list). For If* actions, returns then+else.
         Override in composite subclasses.
         """
         return []
 
     @children.setter
-    def children(self, value: list['Action']) -> None:
+    def children(self, value: list["Action"]) -> None:
         """Set children. Override in composites. Default: no-op."""
         pass
 
     @property
-    def then_children(self) -> list['Action']:
+    def then_children(self) -> list["Action"]:
         """THEN branch children for conditional actions. Default: same as children."""
         return self.children
 
     @then_children.setter
-    def then_children(self, value: list['Action']) -> None:
+    def then_children(self, value: list["Action"]) -> None:
         """Set THEN branch. Override in conditionals."""
         pass
 
     @property
-    def else_children(self) -> list['Action']:
+    def else_children(self) -> list["Action"]:
         """ELSE branch children for conditional actions. Default: empty."""
         return []
 
     @else_children.setter
-    def else_children(self, value: list['Action']) -> None:
+    def else_children(self, value: list["Action"]) -> None:
         """Set ELSE branch. Override in conditionals."""
         pass
 
@@ -213,12 +225,13 @@ class Action(ABC):
         if not self.enabled:
             return True
         # Fast path: on_error='stop' (default, ~95% of actions)
-        if self.on_error == 'stop':
+        if self.on_error == "stop":
             for _ in range(self.repeat_count):
                 if not self.execute():
                     return False
                 if self.delay_after > 0:
                     from core.engine_context import scaled_sleep
+
                     scaled_sleep(self.delay_after / 1000.0)
             return True
         # Slow path: skip/retry requires policy handling
@@ -228,6 +241,7 @@ class Action(ABC):
                 return False
             if self.delay_after > 0:
                 from core.engine_context import scaled_sleep
+
                 scaled_sleep(self.delay_after / 1000.0)
         return True
 
@@ -242,26 +256,23 @@ class Action(ABC):
                 if success:
                     return True
                 if self.on_error == "skip":
-                    logger.warning("Action failed (skip): %s",
-                                   self.get_display_name())
+                    logger.warning("Action failed (skip): %s", self.get_display_name())
                     return True  # skip = treat as success
                 if retries > 0 and attempt < attempts - 1:
-                    logger.warning("Action failed, retry %d/%d: %s",
-                                   attempt + 1, retries,
-                                   self.get_display_name())
+                    logger.warning("Action failed, retry %d/%d: %s", attempt + 1, retries, self.get_display_name())
                     from core.engine_context import scaled_sleep
+
                     scaled_sleep(1.0)  # 1s between retries
                     continue
                 return False  # stop
             except Exception as exc:
-                logger.error("Action error: %s — %s",
-                             self.get_display_name(), exc)
+                logger.error("Action error: %s — %s", self.get_display_name(), exc)
                 if self.on_error == "skip":
                     return True
                 if retries > 0 and attempt < attempts - 1:
-                    logger.warning("Retry %d/%d after error",
-                                   attempt + 1, retries)
+                    logger.warning("Retry %d/%d after error", attempt + 1, retries)
                     from core.engine_context import scaled_sleep
+
                     scaled_sleep(1.0)
                     continue
                 return False
@@ -284,7 +295,8 @@ class DelayAction(Action):
         self._dynamic_ms: str = ""  # e.g. "${delay_var}"
 
     def execute(self) -> bool:
-        from core.engine_context import scaled_sleep, get_context
+        from core.engine_context import get_context, scaled_sleep
+
         ms = self.duration_ms
         if self._dynamic_ms:
             ctx = get_context()
@@ -311,4 +323,3 @@ class DelayAction(Action):
         if self._dynamic_ms:
             return f"Delay {self._dynamic_ms}"
         return f"Delay {self.duration_ms} ms"
-

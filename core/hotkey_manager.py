@@ -18,7 +18,7 @@ logger = logging.getLogger("HotkeyManager")
 WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012
 WM_APP = 0x8000
-WM_APP_REGISTER = WM_APP + 1   # custom: trigger pending registration
+WM_APP_REGISTER = WM_APP + 1  # custom: trigger pending registration
 MOD_ALT = 0x0001
 MOD_CONTROL = 0x0002
 MOD_SHIFT = 0x0004
@@ -27,14 +27,33 @@ MOD_NOREPEAT = 0x4000
 
 # Virtual key codes
 VK_CODES: dict[str, int] = {
-    "F1": 0x70, "F2": 0x71, "F3": 0x72, "F4": 0x73,
-    "F5": 0x74, "F6": 0x75, "F7": 0x76, "F8": 0x77,
-    "F9": 0x78, "F10": 0x79, "F11": 0x7A, "F12": 0x7B,
-    "ESC": 0x1B, "SPACE": 0x20, "RETURN": 0x0D, "TAB": 0x09,
-    "BACK": 0x08, "DELETE": 0x2E, "INSERT": 0x2D,
-    "HOME": 0x24, "END": 0x23,
-    "PAGEUP": 0x21, "PAGEDOWN": 0x22,
-    "LEFT": 0x25, "UP": 0x26, "RIGHT": 0x27, "DOWN": 0x28,
+    "F1": 0x70,
+    "F2": 0x71,
+    "F3": 0x72,
+    "F4": 0x73,
+    "F5": 0x74,
+    "F6": 0x75,
+    "F7": 0x76,
+    "F8": 0x77,
+    "F9": 0x78,
+    "F10": 0x79,
+    "F11": 0x7A,
+    "F12": 0x7B,
+    "ESC": 0x1B,
+    "SPACE": 0x20,
+    "RETURN": 0x0D,
+    "TAB": 0x09,
+    "BACK": 0x08,
+    "DELETE": 0x2E,
+    "INSERT": 0x2D,
+    "HOME": 0x24,
+    "END": 0x23,
+    "PAGEUP": 0x21,
+    "PAGEDOWN": 0x22,
+    "LEFT": 0x25,
+    "UP": 0x26,
+    "RIGHT": 0x27,
+    "DOWN": 0x28,
 }
 # Add A-Z and 0-9
 for c in range(ord("A"), ord("Z") + 1):
@@ -107,8 +126,7 @@ class HotkeyManager:
             self._pending.append((hotkey, modifiers, vk_code, callback, hid))
         # If already running, wake the listener thread to process pending
         if self._running and self._thread_id:
-            ctypes.windll.user32.PostThreadMessageW(
-                self._thread_id, WM_APP_REGISTER, 0, 0)
+            ctypes.windll.user32.PostThreadMessageW(self._thread_id, WM_APP_REGISTER, 0, 0)
         return hid
 
     def start(self) -> None:
@@ -116,9 +134,7 @@ class HotkeyManager:
         if self._running:
             return
         self._running = True
-        self._thread = threading.Thread(
-            target=self._message_loop, daemon=True, name="HotkeyListener"
-        )
+        self._thread = threading.Thread(target=self._message_loop, daemon=True, name="HotkeyListener")
         self._thread.start()
 
     def stop(self) -> None:
@@ -126,8 +142,7 @@ class HotkeyManager:
         self._running = False
         # Post WM_QUIT to wake the listener thread so it can exit
         if self._thread_id:
-            ctypes.windll.user32.PostThreadMessageW(
-                self._thread_id, WM_QUIT, 0, 0)
+            ctypes.windll.user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
         if self._thread:
             self._thread.join(timeout=2.0)
             self._thread = None
@@ -140,9 +155,7 @@ class HotkeyManager:
             pending = list(self._pending)
             self._pending.clear()
         for hotkey, modifiers, vk_code, callback, hid in pending:
-            if ctypes.windll.user32.RegisterHotKey(
-                None, hid, modifiers, vk_code
-            ):
+            if ctypes.windll.user32.RegisterHotKey(None, hid, modifiers, vk_code):
                 self._hotkeys[hid] = callback
                 logger.info("Registered: %s (id=%d)", hotkey, hid)
             else:
@@ -168,9 +181,7 @@ class HotkeyManager:
 
         msg = wintypes.MSG()
         while self._running:
-            if ctypes.windll.user32.PeekMessageW(
-                ctypes.byref(msg), None, 0, 0, 1
-            ):
+            if ctypes.windll.user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1):
                 if msg.message == WM_HOTKEY:
                     hid = msg.wParam
                     if hid in self._hotkeys:
@@ -188,4 +199,3 @@ class HotkeyManager:
 
         # Unregister from this thread before exiting
         self._unregister_all()
-

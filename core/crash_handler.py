@@ -10,6 +10,7 @@ Catches unhandled exceptions, shows a user-friendly dialog with:
 Prevents silent crashes during 24/7 operation.
 """
 
+import logging
 import platform
 import subprocess
 import sys
@@ -18,13 +19,17 @@ from datetime import datetime
 from types import TracebackType
 from typing import Any
 
-from PyQt6.QtWidgets import (
-    QApplication, QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QTextEdit, QStyle,
-)
 from PyQt6.QtGui import QFont
-
-import logging
+from PyQt6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QStyle,
+    QTextEdit,
+    QVBoxLayout,
+)
 
 logger = logging.getLogger("CrashHandler")
 
@@ -32,8 +37,9 @@ logger = logging.getLogger("CrashHandler")
 class CrashDialog(QDialog):
     """Dialog shown on unhandled exceptions."""
 
-    def __init__(self, exctype: type[BaseException], value: BaseException,
-                 tb: TracebackType | None, parent: Any = None) -> None:
+    def __init__(
+        self, exctype: type[BaseException], value: BaseException, tb: TracebackType | None, parent: Any = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("AutoMacro – Error")
         self.setMinimumSize(550, 350)
@@ -51,17 +57,14 @@ class CrashDialog(QDialog):
         icon_label = QLabel()
         style = self.style()
         assert style is not None
-        icon = style.standardIcon(
-            QStyle.StandardPixmap.SP_MessageBoxCritical)
+        icon = style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxCritical)
         icon_label.setPixmap(icon.pixmap(40, 40))
         header.addWidget(icon_label)
 
         msg = QVBoxLayout()
         title = QLabel("Oops! AutoMacro encountered a problem.")
         title.setObjectName("crashTitle")
-        desc = QLabel(
-            f"Error: {exctype.__name__}: {value}\n"
-            "You can restart the application or close it.")
+        desc = QLabel(f"Error: {exctype.__name__}: {value}\n" "You can restart the application or close it.")
         desc.setWordWrap(True)
         msg.addWidget(title)
         msg.addWidget(desc)
@@ -94,17 +97,45 @@ class CrashDialog(QDialog):
         btns.addWidget(close_btn)
         layout.addLayout(btns)
 
-    def _copy(self) -> None:
-        report = (
+    def _build_report(self) -> str:
+        """Build crash report string with version and system info."""
+        try:
+            from version import VERSION
+        except ImportError:
+            VERSION = "unknown"
+        return (
             f"AutoMacro Crash Report\n"
             f"Date: {datetime.now()}\n"
+            f"Version: {VERSION}\n"
             f"OS: {platform.system()} {platform.release()}\n"
             f"Python: {platform.python_version()}\n\n"
             f"Traceback:\n{self._tb_text}"
         )
+
+    def _copy(self) -> None:
+        report = self._build_report()
         clipboard = QApplication.clipboard()
-        assert clipboard is not None
-        clipboard.setText(report)
+        if clipboard is not None:
+            clipboard.setText(report)
+        else:
+            # Fallback: write to crash log file
+            self._write_crash_log(report)
+
+    @staticmethod
+    def _write_crash_log(report: str) -> None:
+        """Write crash report to a log file as fallback."""
+        try:
+            import os
+
+            log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = os.path.join(log_dir, f"crash_{ts}.txt")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(report)
+            logger.info("Crash report saved to %s", path)
+        except Exception:
+            pass  # Best-effort
 
     def _restart(self) -> None:
         logger.info("Restarting application...")
@@ -127,8 +158,7 @@ class CrashHandler:
         logger.info("CrashHandler installed")
 
     @classmethod
-    def _handle(cls, exctype: type[BaseException], value: BaseException,
-                tb: TracebackType | None) -> None:
+    def _handle(cls, exctype: type[BaseException], value: BaseException, tb: TracebackType | None) -> None:
         if cls._handling:
             sys.__excepthook__(exctype, value, tb)
             return
@@ -136,8 +166,7 @@ class CrashHandler:
         cls._handling = True
         try:
             try:
-                logger.critical(
-                    "Uncaught exception!", exc_info=(exctype, value, tb))
+                logger.critical("Uncaught exception!", exc_info=(exctype, value, tb))
             except Exception:
                 pass
 

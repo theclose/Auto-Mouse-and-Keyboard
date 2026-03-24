@@ -380,10 +380,12 @@ LIGHT_THEME = _build_theme(LIGHT_COLORS)
 
 # ── Theme helpers ────────────────────────────────────────────
 
+
 def get_system_theme() -> str:
     """Detect Windows dark/light theme setting. Returns 'dark' or 'light'."""
     try:
         import winreg
+
         key = winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,
             r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize",
@@ -395,11 +397,21 @@ def get_system_theme() -> str:
         return "dark"
 
 
-def get_theme(preference: str = "auto") -> str:
-    """Return QSS string based on preference ('auto', 'dark', 'light')."""
+def get_theme(preference: str = "auto", font_size: int = 10) -> str:
+    """Return QSS string based on preference ('auto', 'dark', 'light').
+
+    Args:
+        preference: 'auto', 'dark', or 'light'
+        font_size: Font size in pt (8-16, default 10)
+    """
+    font_size = max(8, min(16, font_size))
     if preference == "light":
-        return LIGHT_THEME
+        qss = LIGHT_THEME
     elif preference == "dark":
-        return DARK_THEME
+        qss = DARK_THEME
     else:
-        return LIGHT_THEME if get_system_theme() == "light" else DARK_THEME
+        qss = LIGHT_THEME if get_system_theme() == "light" else DARK_THEME
+    # Apply font size (replace default 10pt)
+    if font_size != 10:
+        qss = qss.replace("font-size: 10pt;", f"font-size: {font_size}pt;")
+    return qss

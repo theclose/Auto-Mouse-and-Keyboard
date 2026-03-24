@@ -14,8 +14,8 @@ Usage:
 import logging
 import threading
 import time
-from contextlib import contextmanager
 from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 logger = logging.getLogger("Profiler")

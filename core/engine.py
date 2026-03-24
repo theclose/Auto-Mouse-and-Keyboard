@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QThread, QObject, pyqtSignal, QMutex, QWaitCondition
+from PyQt6.QtCore import QMutex, QObject, QThread, QWaitCondition, pyqtSignal
 
 from core.action import Action
 from core.execution_context import ExecutionContext
@@ -43,11 +43,11 @@ class MacroEngine(QThread):
     step_signal = pyqtSignal(int, str)  # L6: (action_index, display_name)
     nested_step_signal = pyqtSignal(list, str)  # v3.0: ([path_indices], display_name)
 
-    def __init__(self, parent: 'QObject | None' = None) -> None:
+    def __init__(self, parent: "QObject | None" = None) -> None:
         super().__init__(parent)
 
         self._actions: list[Action] = []
-        self._loop_count: int = 1          # 0 = infinite
+        self._loop_count: int = 1  # 0 = infinite
         self._loop_delay_ms: int = 0
         self._stop_on_error: bool = False
         self._speed_factor: float = 1.0
@@ -69,8 +69,7 @@ class MacroEngine(QThread):
         """Set the action list to execute (deep copy for thread safety)."""
         self._actions = copy.deepcopy(actions)
 
-    def set_loop(self, count: int = 1, delay_ms: int = 0,
-                 stop_on_error: bool = False) -> None:
+    def set_loop(self, count: int = 1, delay_ms: int = 0, stop_on_error: bool = False) -> None:
         """Configure looping. count=0 means infinite."""
         self._loop_count = max(0, count)
         self._loop_delay_ms = max(0, delay_ms)
@@ -121,11 +120,13 @@ class MacroEngine(QThread):
 
     def resume_from_checkpoint(self, checkpoint: dict | None = None) -> None:
         """1.1: Set resume point for next run. Uses last checkpoint if not specified."""
-        cp = checkpoint or getattr(self, '_last_checkpoint', None)
+        cp = checkpoint or getattr(self, "_last_checkpoint", None)
         if cp:
             self._resume_from_idx = cp.get("action_idx", 0)
-            if self._exec_ctx and "context" in cp:
-                self._exec_ctx.restore(cp["context"])
+            # B10: Safe access — _exec_ctx only exists after run() starts
+            exec_ctx = getattr(self, "_exec_ctx", None)
+            if exec_ctx and "context" in cp:
+                exec_ctx.restore(cp["context"])
             logger.info("Will resume from action #%d", self._resume_from_idx)
         else:
             self._resume_from_idx = 0
@@ -145,7 +146,8 @@ class MacroEngine(QThread):
         self._is_paused = False
         self._stop_event.clear()
         # Hoist imports for hot loop (OPT-3)
-        from core.engine_context import set_speed, scaled_sleep, set_stop_event, set_context
+        from core.engine_context import scaled_sleep, set_context, set_speed, set_stop_event
+
         self._scaled_sleep = scaled_sleep
         set_speed(self._speed_factor)
         set_stop_event(self._stop_event)
@@ -157,11 +159,14 @@ class MacroEngine(QThread):
         self._resume_from_idx = 0
         # v3.0: register nested callback for composite actions
         from core.engine_context import set_nested_callback
+
         set_nested_callback(self._on_nested_step)
         self.started_signal.emit()
-        logger.info("Engine started – %d actions, %s loops",
-                    len(self._actions),
-                    "∞" if self._loop_count == 0 else self._loop_count)
+        logger.info(
+            "Engine started – %d actions, %s loops",
+            len(self._actions),
+            "∞" if self._loop_count == 0 else self._loop_count,
+        )
 
         try:
             loop_iter = 0
@@ -196,16 +201,14 @@ class MacroEngine(QThread):
         self._mutex.unlock()
         return not self._is_stopped
 
-    def _execute_single_action(self, idx: int, action: 'Action') -> bool:
+    def _execute_single_action(self, idx: int, action: "Action") -> bool:
         """Execute one action. Returns False if engine should stop."""
         # 1.1: Skip actions before resume point
         if idx < self._resume_from_idx:
             return True
         self.progress_signal.emit(idx + 1, len(self._actions))
         self.action_signal.emit(action.get_display_name())
-        logger.info("Executing [%d/%d]: %s",
-                     idx + 1, len(self._actions),
-                     action.get_display_name())
+        logger.info("Executing [%d/%d]: %s", idx + 1, len(self._actions), action.get_display_name())
         # 1.1: Save checkpoint before execution
         if self._exec_ctx:
             self._last_checkpoint = {
@@ -215,11 +218,12 @@ class MacroEngine(QThread):
 
         try:
             success = action.run()
+            if success is None:
+                success = True  # Defensive: treat None as success
             if self._exec_ctx:
                 self._exec_ctx.record_action(success)
             if not success:
-                self.error_signal.emit(
-                    f"Action failed: {action.get_display_name()}")
+                self.error_signal.emit(f"Action failed: {action.get_display_name()}")
                 if self._stop_on_error:
                     logger.info("Stopping on error (stop_on_error=True)")
                     return False
@@ -252,11 +256,13 @@ class MacroEngine(QThread):
         """Interruptible sleep for loop delay. Returns False if stopped."""
         if self._loop_delay_ms <= 0:
             return True
+        from core.engine_context import scaled_sleep
+
         sleep_end = time.perf_counter() + self._loop_delay_ms / 1000.0
         while time.perf_counter() < sleep_end:
             if self._is_stopped:
                 return False
-            self._scaled_sleep(min(0.1, sleep_end - time.perf_counter()))
+            scaled_sleep(min(0.1, sleep_end - time.perf_counter()))
         return True
 
     def _on_nested_step(self, path: list[int], display_name: str) -> None:
@@ -272,10 +278,9 @@ class MacroEngine(QThread):
     MACRO_VERSION = "1.1"
 
     @staticmethod
-    def save_macro(filepath: str, actions: list[Action],
-                   name: str = "Untitled",
-                   loop_count: int = 1,
-                   loop_delay_ms: int = 0) -> None:
+    def save_macro(
+        filepath: str, actions: list[Action], name: str = "Untitled", loop_count: int = 1, loop_delay_ms: int = 0
+    ) -> None:
         """Save a macro to a JSON file."""
         data = {
             "name": name,
@@ -288,8 +293,7 @@ class MacroEngine(QThread):
         }
         path = Path(filepath)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False),
-                        encoding="utf-8")
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         logger.info("Macro saved to %s (%d actions)", filepath, len(actions))
 
     @staticmethod
@@ -308,14 +312,10 @@ class MacroEngine(QThread):
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"Macro file is corrupt (invalid JSON): {exc}"
-            ) from exc
+            raise ValueError(f"Macro file is corrupt (invalid JSON): {exc}") from exc
 
         if not isinstance(data, dict) or "actions" not in data:
-            raise ValueError(
-                "Macro file has invalid format (missing 'actions' key)"
-            )
+            raise ValueError("Macro file has invalid format (missing 'actions' key)")
 
         # 1.2: Schema validation (version kept for future migration)
         _version = data.get("version", "1.0")  # noqa: F841
@@ -340,10 +340,8 @@ class MacroEngine(QThread):
             try:
                 actions.append(Action.from_dict(a))
             except (ValueError, KeyError, TypeError) as exc:
-                logger.warning("Skipping invalid action #%d (%s): %s",
-                              i, a.get('type', '?'), exc)
+                logger.warning("Skipping invalid action #%d (%s): %s", i, a.get("type", "?"), exc)
 
         settings["name"] = name
-        logger.info("Macro loaded from %s (%d actions)",
-                    filepath, len(actions))
+        logger.info("Macro loaded from %s (%d actions)", filepath, len(actions))
         return actions, settings

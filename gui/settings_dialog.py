@@ -7,15 +7,24 @@ import json
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QPushButton, QComboBox, QSpinBox, QDoubleSpinBox,
-    QCheckBox, QLineEdit, QTabWidget, QWidget, QMessageBox,
-    QLabel,
-)
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QKeySequence
-
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 DEFAULT_CONFIG = {
     "hotkeys": {
@@ -29,6 +38,7 @@ DEFAULT_CONFIG = {
         "typing_speed": 50,
         "image_confidence": 0.8,
         "failsafe_enabled": True,
+        "speed_factor": 1.0,
     },
     "ui": {
         "theme": "dark",
@@ -46,16 +56,56 @@ DEFAULT_CONFIG = {
 
 # Keys that are dangerous for Emergency Stop (easy to press accidentally)
 _DANGEROUS_ESTOP_KEYS = {
-    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
-    "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
-    "SPACE", "RETURN", "TAB", "BACK", "ESC", "0", "1", "2", "3", "4",
-    "5", "6", "7", "8", "9",
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z",
+    "SPACE",
+    "RETURN",
+    "TAB",
+    "BACK",
+    "ESC",
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
 }
 
 # Qt Key constants that are modifier-only (should be ignored as main key)
 _MODIFIER_QT_KEYS = {
-    Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_Alt,
-    Qt.Key.Key_Meta, Qt.Key.Key_AltGr,
+    Qt.Key.Key_Control,
+    Qt.Key.Key_Shift,
+    Qt.Key.Key_Alt,
+    Qt.Key.Key_Meta,
+    Qt.Key.Key_AltGr,
 }
 
 
@@ -76,8 +126,7 @@ def load_config(path: str = "config.json") -> dict[str, Any]:
 def save_config(config: dict[str, Any], path: str = "config.json") -> None:
     """Save config to file."""
     p = Path(path)
-    p.write_text(json.dumps(config, indent=2, ensure_ascii=False),
-                 encoding="utf-8")
+    p.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _deep_merge(defaults: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
@@ -93,6 +142,7 @@ def _deep_merge(defaults: dict[str, Any], overrides: dict[str, Any]) -> dict[str
 # ---------------------------------------------------------------------------
 # Press-to-Bind Widget
 # ---------------------------------------------------------------------------
+
 
 class HotkeyEdit(QLineEdit):
     """Press-to-bind hotkey capture widget.
@@ -159,8 +209,10 @@ class HotkeyEdit(QLineEdit):
 # Settings Dialog
 # ---------------------------------------------------------------------------
 
+
 class SettingsDialog(QDialog):
     """Settings configuration dialog with tabbed layout."""
+
     config_saved = pyqtSignal(object)  # emits config dict before accept
 
     def __init__(self, config: dict[str, Any], parent: Any = None) -> None:
@@ -187,10 +239,12 @@ class SettingsDialog(QDialog):
         hint.setStyleSheet("color: #888; font-size: 12px; margin-bottom: 4px;")
         hk_layout.addRow(hint)
 
-        for key, label in [("start_stop", "Chạy / Dừng:"),
-                           ("pause_resume", "Tạm dừng / Tiếp:"),
-                           ("emergency_stop", "Dừng khẩn cấp:"),
-                           ("record", "Ghi:")]:
+        for key, label in [
+            ("start_stop", "Chạy / Dừng:"),
+            ("pause_resume", "Tạm dừng / Tiếp:"),
+            ("emergency_stop", "Dừng khẩn cấp:"),
+            ("record", "Ghi:"),
+        ]:
             edit = HotkeyEdit(hk.get(key, ""))
             hk_layout.addRow(label, edit)
             self._widgets[f"hotkeys.{key}"] = edit
@@ -228,6 +282,15 @@ class SettingsDialog(QDialog):
         df_layout.addRow("An toàn:", failsafe)
         self._widgets["defaults.failsafe_enabled"] = failsafe
 
+        speed_spin = QDoubleSpinBox()
+        speed_spin.setRange(0.1, 10.0)
+        speed_spin.setSingleStep(0.1)
+        speed_spin.setValue(df.get("speed_factor", 1.0))
+        speed_spin.setSuffix("×")
+        speed_spin.setToolTip("Tốc độ mặc định khi chạy macro")
+        df_layout.addRow("Tốc độ mặc định:", speed_spin)
+        self._widgets["defaults.speed_factor"] = speed_spin
+
         tabs.addTab(defaults_tab, "Mặc định")
 
         # --- UI tab ---
@@ -240,6 +303,14 @@ class SettingsDialog(QDialog):
         theme.setCurrentText(ui.get("theme", "auto"))
         ui_layout.addRow("Giao diện:", theme)
         self._widgets["ui.theme"] = theme
+
+        font_size = QSpinBox()
+        font_size.setRange(8, 16)
+        font_size.setSuffix(" pt")
+        font_size.setValue(ui.get("font_size", 10))
+        font_size.setToolTip("Kích thước chữ (8-16pt)")
+        ui_layout.addRow("Cỡ chữ:", font_size)
+        self._widgets["ui.font_size"] = font_size
 
         tray_check = QCheckBox("Thu nhỏ vào khay hệ thống")
         tray_check.setChecked(ui.get("minimize_to_tray", True))
@@ -293,8 +364,7 @@ class SettingsDialog(QDialog):
 
             # Duplicate check
             if val in seen:
-                return (f"Trùng hotkey '{val}': "
-                        f"'{labels[seen[val]]}' và '{labels[name]}'")
+                return f"Trùng hotkey '{val}': " f"'{labels[seen[val]]}' và '{labels[name]}'"
             seen[val] = name
 
         # Safety check for emergency stop
@@ -302,8 +372,10 @@ class SettingsDialog(QDialog):
         if estop_widget:
             estop_val = estop_widget.text().strip().upper()
             if estop_val in _DANGEROUS_ESTOP_KEYS:
-                return (f"⚠ '{estop_val}' dễ ấn nhầm cho Dừng khẩn cấp.\n"
-                        f"Nên dùng phím F (F1-F12) hoặc tổ hợp phím (CTRL+...).")
+                return (
+                    f"⚠ '{estop_val}' dễ ấn nhầm cho Dừng khẩn cấp.\n"
+                    f"Nên dùng phím F (F1-F12) hoặc tổ hợp phím (CTRL+...)."
+                )
 
         return None
 
@@ -351,10 +423,10 @@ class SettingsDialog(QDialog):
                 if widget:
                     widget.deleteLater()
             from PyQt6.sip import delete
+
             delete(old_layout)
         self._widgets.clear()
         self._setup_ui()
 
     def get_config(self) -> dict[str, Any]:
         return self._config
-

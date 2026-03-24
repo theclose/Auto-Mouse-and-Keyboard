@@ -92,6 +92,7 @@ class TestBenchmarks:
         mw._tree_model = ActionTreeModel(mw._actions)
         mw._filter_edit = QLineEdit()
         mw._view_toggle_btn = QPushButton()
+        mw._minimap = MagicMock()
 
         benchmark(mw._refresh_table)
 

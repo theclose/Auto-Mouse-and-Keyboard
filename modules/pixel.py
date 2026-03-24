@@ -49,21 +49,25 @@ class PixelChecker:
         return r, g, b
 
     def check_color(
-        self, x: int, y: int,
-        r: int, g: int, b: int,
+        self,
+        x: int,
+        y: int,
+        r: int,
+        g: int,
+        b: int,
         tolerance: int = 10,
     ) -> bool:
         """Check if pixel matches color within tolerance."""
         pr, pg, pb = self.get_pixel(x, y)
-        return (
-            abs(pr - r) <= tolerance
-            and abs(pg - g) <= tolerance
-            and abs(pb - b) <= tolerance
-        )
+        return abs(pr - r) <= tolerance and abs(pg - g) <= tolerance and abs(pb - b) <= tolerance
 
     def wait_for_color(
-        self, x: int, y: int,
-        r: int, g: int, b: int,
+        self,
+        x: int,
+        y: int,
+        r: int,
+        g: int,
+        b: int,
         tolerance: int = 10,
         timeout_ms: int = 10000,
         poll_ms: int = 100,
@@ -71,6 +75,7 @@ class PixelChecker:
     ) -> bool:
         """Wait for pixel color to appear or disappear (interruptible)."""
         from core.engine_context import is_stopped
+
         deadline = time.perf_counter() + timeout_ms / 1000.0
         interval = poll_ms / 1000.0
 
@@ -99,13 +104,14 @@ def get_pixel_checker() -> PixelChecker:
 # Action wrappers
 # ---------------------------------------------------------------------------
 
+
 @register_action("check_pixel_color")
 class CheckPixelColor(Action):
     """Check if a pixel matches an expected color."""
 
-    def __init__(self, x: int = 0, y: int = 0,
-                 r: int = 0, g: int = 0, b: int = 0,
-                 tolerance: int = 10, **kwargs: Any) -> None:
+    def __init__(
+        self, x: int = 0, y: int = 0, r: int = 0, g: int = 0, b: int = 0, tolerance: int = 10, **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
         self.x = x
         self.y = y
@@ -117,20 +123,24 @@ class CheckPixelColor(Action):
 
     def execute(self) -> bool:
         from core.engine_context import get_context
+
         pc = get_pixel_checker()
-        self._result = pc.check_color(
-            self.x, self.y, self.r, self.g, self.b, self.tolerance
-        )
+        self._result = pc.check_color(self.x, self.y, self.r, self.g, self.b, self.tolerance)
         # Store in context for downstream actions
         ctx = get_context()
         if ctx:
             pr, pg, pb = pc.get_pixel(self.x, self.y)
             ctx.set_pixel_color(self.x, self.y, pr, pg, pb)
-            ctx.set_var('pixel_matched', self._result)
+            ctx.set_var("pixel_matched", self._result)
         logger.info(
             "Pixel(%d,%d) check RGB(%d,%d,%d) tol=%d → %s",
-            self.x, self.y, self.r, self.g, self.b,
-            self.tolerance, self._result,
+            self.x,
+            self.y,
+            self.r,
+            self.g,
+            self.b,
+            self.tolerance,
+            self._result,
         )
         return True
 
@@ -140,8 +150,11 @@ class CheckPixelColor(Action):
 
     def _get_params(self) -> dict[str, Any]:
         return {
-            "x": self.x, "y": self.y,
-            "r": self.r, "g": self.g, "b": self.b,
+            "x": self.x,
+            "y": self.y,
+            "r": self.r,
+            "g": self.g,
+            "b": self.b,
             "tolerance": self.tolerance,
         }
 
@@ -161,9 +174,17 @@ class CheckPixelColor(Action):
 class WaitForColor(Action):
     """Wait until a pixel reaches a target color."""
 
-    def __init__(self, x: int = 0, y: int = 0,
-                 r: int = 0, g: int = 0, b: int = 0,
-                 tolerance: int = 10, timeout_ms: int = 10000, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        x: int = 0,
+        y: int = 0,
+        r: int = 0,
+        g: int = 0,
+        b: int = 0,
+        tolerance: int = 10,
+        timeout_ms: int = 10000,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.x = x
         self.y = y
@@ -176,8 +197,13 @@ class WaitForColor(Action):
     def execute(self) -> bool:
         pc = get_pixel_checker()
         found = pc.wait_for_color(
-            self.x, self.y, self.r, self.g, self.b,
-            self.tolerance, self.timeout_ms,
+            self.x,
+            self.y,
+            self.r,
+            self.g,
+            self.b,
+            self.tolerance,
+            self.timeout_ms,
         )
         if not found:
             logger.warning("WaitForColor timed out at (%d,%d)", self.x, self.y)
@@ -185,8 +211,11 @@ class WaitForColor(Action):
 
     def _get_params(self) -> dict[str, Any]:
         return {
-            "x": self.x, "y": self.y,
-            "r": self.r, "g": self.g, "b": self.b,
+            "x": self.x,
+            "y": self.y,
+            "r": self.r,
+            "g": self.g,
+            "b": self.b,
             "tolerance": self.tolerance,
             "timeout_ms": self.timeout_ms,
         }

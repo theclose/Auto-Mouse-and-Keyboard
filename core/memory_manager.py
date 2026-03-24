@@ -105,9 +105,7 @@ class MemoryManager:
         if self._running:
             return
         self._running = True
-        self._thread = threading.Thread(
-            target=self._monitor_loop, daemon=True, name="MemoryManager"
-        )
+        self._thread = threading.Thread(target=self._monitor_loop, daemon=True, name="MemoryManager")
         self._thread.start()
         logger.info(
             "Started (threshold=%dMB, interval=%ds)",
@@ -150,9 +148,7 @@ class MemoryManager:
             handle = _kernel32.GetCurrentProcess()
             counters = _PROCESS_MEMORY_COUNTERS()
             counters.cb = _PMC_SIZE
-            if _k32_get_process_memory_info(
-                handle, ctypes.byref(counters), counters.cb
-            ):
+            if _k32_get_process_memory_info(handle, ctypes.byref(counters), counters.cb):
                 return int(counters.WorkingSetSize)
             return 0
         except (OSError, ctypes.ArgumentError):

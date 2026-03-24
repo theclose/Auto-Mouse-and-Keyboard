@@ -5,14 +5,20 @@ The user draws a rectangle and the captured region is saved as a template image.
 
 import os
 import time
-
-from PyQt6.QtWidgets import QWidget, QApplication
-from PyQt6.QtCore import Qt, QRect, QPoint, pyqtSignal
-from PyQt6.QtGui import (
-    QPainter, QColor, QPen, QPixmap, QGuiApplication,
-    QPaintEvent, QMouseEvent, QKeyEvent,
-)
 from typing import Optional
+
+from PyQt6.QtCore import QPoint, QRect, Qt, pyqtSignal
+from PyQt6.QtGui import (
+    QColor,
+    QGuiApplication,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPen,
+    QPixmap,
+)
+from PyQt6.QtWidgets import QApplication, QWidget
 
 
 class ImageCaptureOverlay(QWidget):
@@ -34,10 +40,7 @@ class ImageCaptureOverlay(QWidget):
         self._screenshot: QPixmap = QPixmap()
 
         # Full-screen window flags
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setCursor(Qt.CursorShape.CrossCursor)
 
     def start(self) -> None:
@@ -60,8 +63,7 @@ class ImageCaptureOverlay(QWidget):
             painter.drawPixmap(0, 0, self._screenshot)
 
         # Semi-transparent overlay
-        painter.fillRect(self.rect(),
-                         QColor(0, 0, 0, 100))
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 100))
 
         # Draw selection rectangle
         if self._drawing:
@@ -120,8 +122,8 @@ class ImageCaptureOverlay(QWidget):
         cropped = self._screenshot.copy(rect)
         os.makedirs(self._save_dir, exist_ok=True)
 
-        # Generate unique filename using timestamp (avoids collision)
-        ts = time.strftime("%Y%m%d_%H%M%S")
+        # Generate unique filename using ms-precision timestamp (avoids collision)
+        ts = f"{time.strftime('%Y%m%d_%H%M%S')}_{int(time.time() * 1000) % 1000:03d}"
         filename = f"template_{ts}.png"
         filepath = os.path.join(self._save_dir, filename)
 

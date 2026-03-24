@@ -254,9 +254,10 @@ class TestSafeEval:
         with pytest.raises((ValueError, SyntaxError)):
             self._eval("__import__('os').system('ls')")
 
-    def test_rejects_string_literals(self) -> None:
-        with pytest.raises(ValueError):
-            self._eval("'hello'")
+    def test_supports_string_literals(self) -> None:
+        """v2: String literals are now supported."""
+        assert self._eval("'hello'") == "hello"
+        assert self._eval("'abc' + 'def'") == "abcdef"
 
     def test_rejects_variable_names(self) -> None:
         with pytest.raises(ValueError):

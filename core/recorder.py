@@ -11,7 +11,8 @@ import threading
 import time
 from typing import Any, Optional
 
-from pynput import mouse as pmouse, keyboard as pkeyboard
+from pynput import keyboard as pkeyboard
+from pynput import mouse as pmouse
 
 from core.action import Action, DelayAction, get_action_class
 
@@ -24,28 +25,41 @@ _modules_loaded = False
 def _ensure_modules() -> None:
     global _modules_loaded
     if not _modules_loaded:
-        import modules.mouse    # noqa: F401  registers mouse actions
         import modules.keyboard  # noqa: F401  registers keyboard actions
+        import modules.mouse  # noqa: F401  registers mouse actions
+
         _modules_loaded = True
 
 
 # Modifier keys that form combos (Ctrl+C, Alt+Tab, etc.)
 _MODIFIER_KEYS = {
-    pkeyboard.Key.ctrl, pkeyboard.Key.ctrl_l, pkeyboard.Key.ctrl_r,
-    pkeyboard.Key.alt, pkeyboard.Key.alt_l, pkeyboard.Key.alt_r,
-    pkeyboard.Key.shift, pkeyboard.Key.shift_l, pkeyboard.Key.shift_r,
-    pkeyboard.Key.cmd, pkeyboard.Key.cmd_l, pkeyboard.Key.cmd_r,
+    pkeyboard.Key.ctrl,
+    pkeyboard.Key.ctrl_l,
+    pkeyboard.Key.ctrl_r,
+    pkeyboard.Key.alt,
+    pkeyboard.Key.alt_l,
+    pkeyboard.Key.alt_r,
+    pkeyboard.Key.shift,
+    pkeyboard.Key.shift_l,
+    pkeyboard.Key.shift_r,
+    pkeyboard.Key.cmd,
+    pkeyboard.Key.cmd_l,
+    pkeyboard.Key.cmd_r,
 }
 
 # Canonical names for modifier display
 _MOD_NAMES = {
-    pkeyboard.Key.ctrl: "ctrl", pkeyboard.Key.ctrl_l: "ctrl",
+    pkeyboard.Key.ctrl: "ctrl",
+    pkeyboard.Key.ctrl_l: "ctrl",
     pkeyboard.Key.ctrl_r: "ctrl",
-    pkeyboard.Key.alt: "alt", pkeyboard.Key.alt_l: "alt",
+    pkeyboard.Key.alt: "alt",
+    pkeyboard.Key.alt_l: "alt",
     pkeyboard.Key.alt_r: "alt",
-    pkeyboard.Key.shift: "shift", pkeyboard.Key.shift_l: "shift",
+    pkeyboard.Key.shift: "shift",
+    pkeyboard.Key.shift_l: "shift",
     pkeyboard.Key.shift_r: "shift",
-    pkeyboard.Key.cmd: "win", pkeyboard.Key.cmd_l: "win",
+    pkeyboard.Key.cmd: "win",
+    pkeyboard.Key.cmd_l: "win",
     pkeyboard.Key.cmd_r: "win",
 }
 
@@ -64,17 +78,20 @@ class Recorder:
 
     # double-click detection threshold
     DOUBLE_CLICK_MS = 300
-    DOUBLE_CLICK_PX = 10   # max distance between 2 clicks
+    DOUBLE_CLICK_PX = 10  # max distance between 2 clicks
 
     # drag detection threshold
-    DRAG_MIN_PX = 8        # min distance for drag vs click
+    DRAG_MIN_PX = 8  # min distance for drag vs click
 
-    def __init__(self, record_mouse: bool = True,
-                 record_keyboard: bool = True,
-                 min_delay_ms: int = 50,
-                 capture_context: bool = False,
-                 macro_dir: str = "macros",
-                 ignored_hotkeys: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        record_mouse: bool = True,
+        record_keyboard: bool = True,
+        min_delay_ms: int = 50,
+        capture_context: bool = False,
+        macro_dir: str = "macros",
+        ignored_hotkeys: list[str] | None = None,
+    ) -> None:
         _ensure_modules()
         self._record_mouse = record_mouse
         self._record_keyboard = record_keyboard
@@ -144,8 +161,7 @@ class Recorder:
             )
             self._keyboard_listener.start()
 
-        logger.info("Recording started (mouse=%s, keyboard=%s)",
-                    self._record_mouse, self._record_keyboard)
+        logger.info("Recording started (mouse=%s, keyboard=%s)", self._record_mouse, self._record_keyboard)
 
     def stop(self) -> list[Action]:
         """Stop recording and return the captured actions."""
@@ -161,8 +177,7 @@ class Recorder:
             self._keyboard_listener.stop()
             self._keyboard_listener = None
 
-        logger.info("Recording stopped – captured %d actions",
-                    len(self._actions))
+        logger.info("Recording stopped – captured %d actions", len(self._actions))
         return list(self._actions)
 
     def pause(self) -> None:
@@ -207,14 +222,15 @@ class Recorder:
                 self._actions.append(DelayAction(duration_ms=elapsed_ms))
         self._last_time = now
 
-    def _capture_click_context(self, x: int, y: int,
-                                size: int = 80) -> str | None:
+    def _capture_click_context(self, x: int, y: int, size: int = 80) -> str | None:
         """Capture a small screenshot around click point as visual context."""
         if not self._capture_context:
             return None
         try:
-            import pyautogui
             from pathlib import Path as _Path
+
+            import pyautogui
+
             half = size // 2
             sx = max(0, x - half)
             sy = max(0, y - half)
@@ -234,8 +250,7 @@ class Recorder:
         if not self._is_recording or self._is_paused:
             return
 
-        btn = ("left" if button == pmouse.Button.left else
-               "right" if button == pmouse.Button.right else "middle")
+        btn = "left" if button == pmouse.Button.left else "right" if button == pmouse.Button.right else "middle"
 
         if pressed:
             # Track press for drag detection (#6)
@@ -256,8 +271,7 @@ class Recorder:
             self._record_delay()
             try:
                 cls = get_action_class("mouse_drag")
-                action = cls(x=rx, y=ry, duration=0.5,
-                             button=btn)  # type: ignore[call-arg]
+                action = cls(x=rx, y=ry, duration=0.5, button=btn)  # type: ignore[call-arg]
                 with self._actions_lock:
                     self._actions.append(action)
                 logger.debug("Recorded drag to (%d, %d)", rx, ry)
@@ -272,28 +286,27 @@ class Recorder:
 
         now = time.perf_counter()
         elapsed = (now - self._last_click_time) * 1000
-        click_dist = ((rx - self._last_click_pos[0]) ** 2 +
-                      (ry - self._last_click_pos[1]) ** 2) ** 0.5
+        click_dist = ((rx - self._last_click_pos[0]) ** 2 + (ry - self._last_click_pos[1]) ** 2) ** 0.5
 
-        if (btn == "left" and
-                btn == self._last_click_button and
-                elapsed < self.DOUBLE_CLICK_MS and
-                click_dist < self.DOUBLE_CLICK_PX):
+        if (
+            btn == "left"
+            and btn == self._last_click_button
+            and elapsed < self.DOUBLE_CLICK_MS
+            and click_dist < self.DOUBLE_CLICK_PX
+        ):
             # Double-click detected! Replace last click with double-click
             with self._actions_lock:
                 # Remove previous click action (it was a single click)
-                if self._actions and hasattr(self._actions[-1], 'ACTION_TYPE'):
+                if self._actions and hasattr(self._actions[-1], "ACTION_TYPE"):
                     if self._actions[-1].ACTION_TYPE == "mouse_click":
                         self._actions.pop()
                         # Also remove its delay if present
-                        if (self._actions and
-                                isinstance(self._actions[-1], DelayAction)):
+                        if self._actions and isinstance(self._actions[-1], DelayAction):
                             self._actions.pop()
             try:
                 ctx_path = self._capture_click_context(rx, ry)
                 cls = get_action_class("mouse_double_click")
-                action = cls(x=rx, y=ry,
-                             context_image=ctx_path or "")  # type: ignore
+                action = cls(x=rx, y=ry, context_image=ctx_path or "")  # type: ignore
                 with self._actions_lock:
                     self._actions.append(action)
                 logger.debug("Recorded double_click at (%d, %d)", rx, ry)
@@ -303,14 +316,14 @@ class Recorder:
             return
 
         # Regular single click
-        action_type = ("mouse_click" if btn == "left" else
-                       "mouse_right_click" if btn == "right" else
-                       "mouse_click")
+        action_type = "mouse_click" if btn == "left" else "mouse_right_click" if btn == "right" else "mouse_click"
         try:
             ctx_path = self._capture_click_context(rx, ry)
             cls = get_action_class(action_type)
-            action = cls(x=rx, y=ry,
-                         context_image=ctx_path or "")  # type: ignore[call-arg]
+            kwargs: dict[str, Any] = {"x": rx, "y": ry}
+            if ctx_path:
+                kwargs["context_image"] = ctx_path
+            action = cls(**kwargs)  # type: ignore[call-arg]
             with self._actions_lock:
                 self._actions.append(action)
             logger.debug("Recorded %s at (%d, %d)", action_type, rx, ry)
@@ -329,8 +342,7 @@ class Recorder:
 
         try:
             cls = get_action_class("mouse_scroll")
-            action = cls(x=int(x), y=int(y),
-                         clicks=int(dy))  # type: ignore[call-arg]
+            action = cls(x=int(x), y=int(y), clicks=int(dy))  # type: ignore[call-arg]
             with self._actions_lock:
                 self._actions.append(action)
         except (TypeError, ValueError, KeyError):
@@ -382,8 +394,7 @@ class Recorder:
                 self._actions.append(action)
             logger.debug("Recorded key_press: %s", key_name)
         except (TypeError, ValueError, KeyError):
-            logger.warning("Failed to record key: %s", key_name,
-                           exc_info=True)
+            logger.warning("Failed to record key: %s", key_name, exc_info=True)
 
     def _on_key_release(self, key: Any) -> None:
         """Track modifier release for combo detection (#3)."""
@@ -393,9 +404,7 @@ class Recorder:
     def _record_key_combo(self, key: Any) -> None:
         """Record a key combo like Ctrl+C, Alt+Tab (#3)."""
         # Build combo string: "ctrl+c", "alt+tab", "ctrl+shift+s"
-        mod_names = sorted(set(
-            _MOD_NAMES.get(m, str(m)) for m in self._active_modifiers
-        ))
+        mod_names = sorted(set(_MOD_NAMES.get(m, str(m)) for m in self._active_modifiers))
 
         # Get the key name
         try:

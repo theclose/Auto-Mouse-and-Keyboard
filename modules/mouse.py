@@ -19,16 +19,17 @@ def _pag():
     global _pyautogui
     if _pyautogui is None:
         import pyautogui
+
         pyautogui.FAILSAFE = True
         pyautogui.PAUSE = 0.005  # 5ms — minimal safe pause
         _pyautogui = pyautogui
     return _pyautogui
 
+
 import os
 
 
-def _resolve_visual(context_image: str, fallback_x: int,
-                    fallback_y: int) -> tuple[int, int]:
+def _resolve_visual(context_image: str, fallback_x: int, fallback_y: int) -> tuple[int, int]:
     """Try to find context image on screen; return match center or fallback."""
     if not context_image:
         return fallback_x, fallback_y
@@ -36,13 +37,12 @@ def _resolve_visual(context_image: str, fallback_x: int,
         return fallback_x, fallback_y
     try:
         from modules.image import get_image_finder
+
         finder = get_image_finder()
-        bbox = finder.find_on_screen(context_image, confidence=0.80,
-                                      timeout_ms=500, grayscale=True)
+        bbox = finder.find_on_screen(context_image, confidence=0.80, timeout_ms=500, grayscale=True)
         if bbox:
             cx, cy = bbox[0] + bbox[2] // 2, bbox[1] + bbox[3] // 2
-            logger.debug("Visual match at (%d, %d) for %s",
-                         cx, cy, context_image)
+            logger.debug("Visual match at (%d, %d) for %s", cx, cy, context_image)
             return cx, cy
     except Exception:
         logger.debug("Visual context lookup failed, using coordinates")
@@ -53,25 +53,50 @@ def _resolve_visual(context_image: str, fallback_x: int,
 class MouseClick(Action):
     """Left-click at (x, y) with optional visual context fallback."""
 
-    def __init__(self, x: int = 0, y: int = 0, duration: float = 0.0,
-                 context_image: str = "", **kwargs: Any) -> None:
+    def __init__(self, x: int = 0, y: int = 0, duration: float = 0.0, context_image: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.x = x
         self.y = y
         self.duration = duration
         self.context_image = context_image
+        self._dynamic_x: str = ""
+        self._dynamic_y: str = ""
+
+    def _resolve_coords(self) -> tuple[int, int]:
+        """Resolve coordinates, using ${var} if set."""
+        rx, ry = self.x, self.y
+        if self._dynamic_x or self._dynamic_y:
+            from core.engine_context import get_context
+
+            ctx = get_context()
+            if ctx:
+                if self._dynamic_x:
+                    try:
+                        rx = int(float(ctx.interpolate(self._dynamic_x)))
+                    except (ValueError, TypeError):
+                        pass
+                if self._dynamic_y:
+                    try:
+                        ry = int(float(ctx.interpolate(self._dynamic_y)))
+                    except (ValueError, TypeError):
+                        pass
+        return rx, ry
 
     def execute(self) -> bool:
-        tx, ty = _resolve_visual(self.context_image, self.x, self.y)
+        rx, ry = self._resolve_coords()
+        tx, ty = _resolve_visual(self.context_image, rx, ry)
         _pag().click(tx, ty, duration=self.duration)
         logger.debug("Clicked at (%d, %d)", tx, ty)
         return True
 
     def _get_params(self) -> dict[str, Any]:
-        d: dict[str, Any] = {"x": self.x, "y": self.y,
-                              "duration": self.duration}
+        d: dict[str, Any] = {"x": self.x, "y": self.y, "duration": self.duration}
         if self.context_image:
             d["context_image"] = self.context_image
+        if self._dynamic_x:
+            d["dynamic_x"] = self._dynamic_x
+        if self._dynamic_y:
+            d["dynamic_y"] = self._dynamic_y
         return d
 
     def _set_params(self, params: dict[str, Any]) -> None:
@@ -79,9 +104,13 @@ class MouseClick(Action):
         self.y = params.get("y", 0)
         self.duration = params.get("duration", 0.0)
         self.context_image = params.get("context_image", "")
+        self._dynamic_x = params.get("dynamic_x", "")
+        self._dynamic_y = params.get("dynamic_y", "")
 
     def get_display_name(self) -> str:
         suffix = " 📷" if self.context_image else ""
+        if self._dynamic_x or self._dynamic_y:
+            return f"Click ({self._dynamic_x or self.x}, {self._dynamic_y or self.y}){suffix}"
         return f"Click ({self.x}, {self.y}){suffix}"
 
 
@@ -89,15 +118,37 @@ class MouseClick(Action):
 class MouseDoubleClick(Action):
     """Double-click at (x, y) with optional visual context fallback."""
 
-    def __init__(self, x: int = 0, y: int = 0,
-                 context_image: str = "", **kwargs: Any) -> None:
+    def __init__(self, x: int = 0, y: int = 0, context_image: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.x = x
         self.y = y
         self.context_image = context_image
+        self._dynamic_x: str = ""
+        self._dynamic_y: str = ""
+
+    def _resolve_coords(self) -> tuple[int, int]:
+        """Resolve coordinates, using ${var} if set."""
+        rx, ry = self.x, self.y
+        if self._dynamic_x or self._dynamic_y:
+            from core.engine_context import get_context
+
+            ctx = get_context()
+            if ctx:
+                if self._dynamic_x:
+                    try:
+                        rx = int(float(ctx.interpolate(self._dynamic_x)))
+                    except (ValueError, TypeError):
+                        pass
+                if self._dynamic_y:
+                    try:
+                        ry = int(float(ctx.interpolate(self._dynamic_y)))
+                    except (ValueError, TypeError):
+                        pass
+        return rx, ry
 
     def execute(self) -> bool:
-        tx, ty = _resolve_visual(self.context_image, self.x, self.y)
+        rx, ry = self._resolve_coords()
+        tx, ty = _resolve_visual(self.context_image, rx, ry)
         _pag().doubleClick(tx, ty)
         logger.debug("Double-clicked at (%d, %d)", tx, ty)
         return True
@@ -106,15 +157,23 @@ class MouseDoubleClick(Action):
         d: dict[str, Any] = {"x": self.x, "y": self.y}
         if self.context_image:
             d["context_image"] = self.context_image
+        if self._dynamic_x:
+            d["dynamic_x"] = self._dynamic_x
+        if self._dynamic_y:
+            d["dynamic_y"] = self._dynamic_y
         return d
 
     def _set_params(self, params: dict[str, Any]) -> None:
         self.x = params.get("x", 0)
         self.y = params.get("y", 0)
         self.context_image = params.get("context_image", "")
+        self._dynamic_x = params.get("dynamic_x", "")
+        self._dynamic_y = params.get("dynamic_y", "")
 
     def get_display_name(self) -> str:
         suffix = " 📷" if self.context_image else ""
+        if self._dynamic_x or self._dynamic_y:
+            return f"Double Click ({self._dynamic_x or self.x}, {self._dynamic_y or self.y}){suffix}"
         return f"Double Click ({self.x}, {self.y}){suffix}"
 
 
@@ -122,15 +181,37 @@ class MouseDoubleClick(Action):
 class MouseRightClick(Action):
     """Right-click at (x, y) with optional visual context fallback."""
 
-    def __init__(self, x: int = 0, y: int = 0,
-                 context_image: str = "", **kwargs: Any) -> None:
+    def __init__(self, x: int = 0, y: int = 0, context_image: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.x = x
         self.y = y
         self.context_image = context_image
+        self._dynamic_x: str = ""
+        self._dynamic_y: str = ""
+
+    def _resolve_coords(self) -> tuple[int, int]:
+        """Resolve coordinates, using ${var} if set."""
+        rx, ry = self.x, self.y
+        if self._dynamic_x or self._dynamic_y:
+            from core.engine_context import get_context
+
+            ctx = get_context()
+            if ctx:
+                if self._dynamic_x:
+                    try:
+                        rx = int(float(ctx.interpolate(self._dynamic_x)))
+                    except (ValueError, TypeError):
+                        pass
+                if self._dynamic_y:
+                    try:
+                        ry = int(float(ctx.interpolate(self._dynamic_y)))
+                    except (ValueError, TypeError):
+                        pass
+        return rx, ry
 
     def execute(self) -> bool:
-        tx, ty = _resolve_visual(self.context_image, self.x, self.y)
+        rx, ry = self._resolve_coords()
+        tx, ty = _resolve_visual(self.context_image, rx, ry)
         _pag().rightClick(tx, ty)
         logger.debug("Right-clicked at (%d, %d)", tx, ty)
         return True
@@ -139,15 +220,23 @@ class MouseRightClick(Action):
         d: dict[str, Any] = {"x": self.x, "y": self.y}
         if self.context_image:
             d["context_image"] = self.context_image
+        if self._dynamic_x:
+            d["dynamic_x"] = self._dynamic_x
+        if self._dynamic_y:
+            d["dynamic_y"] = self._dynamic_y
         return d
 
     def _set_params(self, params: dict[str, Any]) -> None:
         self.x = params.get("x", 0)
         self.y = params.get("y", 0)
         self.context_image = params.get("context_image", "")
+        self._dynamic_x = params.get("dynamic_x", "")
+        self._dynamic_y = params.get("dynamic_y", "")
 
     def get_display_name(self) -> str:
         suffix = " 📷" if self.context_image else ""
+        if self._dynamic_x or self._dynamic_y:
+            return f"Right Click ({self._dynamic_x or self.x}, {self._dynamic_y or self.y}){suffix}"
         return f"Right Click ({self.x}, {self.y}){suffix}"
 
 
@@ -168,14 +257,19 @@ class MouseMove(Action):
         rx, ry = self.x, self.y
         if self._dynamic_x or self._dynamic_y:
             from core.engine_context import get_context
+
             ctx = get_context()
             if ctx:
                 if self._dynamic_x:
-                    try: rx = int(float(ctx.interpolate(self._dynamic_x)))
-                    except (ValueError, TypeError): pass
+                    try:
+                        rx = int(float(ctx.interpolate(self._dynamic_x)))
+                    except (ValueError, TypeError):
+                        pass
                 if self._dynamic_y:
-                    try: ry = int(float(ctx.interpolate(self._dynamic_y)))
-                    except (ValueError, TypeError): pass
+                    try:
+                        ry = int(float(ctx.interpolate(self._dynamic_y)))
+                    except (ValueError, TypeError):
+                        pass
         return rx, ry
 
     def execute(self) -> bool:
@@ -185,8 +279,10 @@ class MouseMove(Action):
 
     def _get_params(self) -> dict[str, Any]:
         p: dict[str, Any] = {"x": self.x, "y": self.y, "duration": self.duration}
-        if self._dynamic_x: p["dynamic_x"] = self._dynamic_x
-        if self._dynamic_y: p["dynamic_y"] = self._dynamic_y
+        if self._dynamic_x:
+            p["dynamic_x"] = self._dynamic_x
+        if self._dynamic_y:
+            p["dynamic_y"] = self._dynamic_y
         return p
 
     def _set_params(self, params: dict[str, Any]) -> None:
@@ -206,8 +302,7 @@ class MouseMove(Action):
 class MouseDrag(Action):
     """Drag from current position to (x, y). Supports ${var} in coordinates."""
 
-    def __init__(self, x: int = 0, y: int = 0,
-                 duration: float = 0.5, button: str = "left", **kwargs: Any) -> None:
+    def __init__(self, x: int = 0, y: int = 0, duration: float = 0.5, button: str = "left", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.x = x
         self.y = y
@@ -220,14 +315,19 @@ class MouseDrag(Action):
         rx, ry = self.x, self.y
         if self._dynamic_x or self._dynamic_y:
             from core.engine_context import get_context
+
             ctx = get_context()
             if ctx:
                 if self._dynamic_x:
-                    try: rx = int(float(ctx.interpolate(self._dynamic_x)))
-                    except (ValueError, TypeError): pass
+                    try:
+                        rx = int(float(ctx.interpolate(self._dynamic_x)))
+                    except (ValueError, TypeError):
+                        pass
                 if self._dynamic_y:
-                    try: ry = int(float(ctx.interpolate(self._dynamic_y)))
-                    except (ValueError, TypeError): pass
+                    try:
+                        ry = int(float(ctx.interpolate(self._dynamic_y)))
+                    except (ValueError, TypeError):
+                        pass
         return rx, ry
 
     def execute(self) -> bool:
@@ -236,10 +336,11 @@ class MouseDrag(Action):
         return True
 
     def _get_params(self) -> dict[str, Any]:
-        p: dict[str, Any] = {"x": self.x, "y": self.y,
-             "duration": self.duration, "button": self.button}
-        if self._dynamic_x: p["dynamic_x"] = self._dynamic_x
-        if self._dynamic_y: p["dynamic_y"] = self._dynamic_y
+        p: dict[str, Any] = {"x": self.x, "y": self.y, "duration": self.duration, "button": self.button}
+        if self._dynamic_x:
+            p["dynamic_x"] = self._dynamic_x
+        if self._dynamic_y:
+            p["dynamic_y"] = self._dynamic_y
         return p
 
     def _set_params(self, params: dict[str, Any]) -> None:

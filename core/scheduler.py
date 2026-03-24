@@ -53,6 +53,25 @@ from core.action import Action, register_action
 
 logger = logging.getLogger(__name__)
 
+# B5: Recursion depth guard for nested composite actions
+MAX_COMPOSITE_DEPTH = 16
+_depth_local = threading.local()
+
+
+def _get_depth() -> int:
+    return getattr(_depth_local, "depth", 0)
+
+
+def _inc_depth() -> int:
+    """Increment depth counter and return new value."""
+    d = _get_depth() + 1
+    _depth_local.depth = d
+    return d
+
+
+def _dec_depth() -> None:
+    _depth_local.depth = max(0, _get_depth() - 1)
+
 
 @register_action("loop_block")
 class LoopBlock(Action):
@@ -88,41 +107,52 @@ class LoopBlock(Action):
         Supports __break__ and __continue__ context variables for flow control.
         Returns False if any sub-action fails, True otherwise.
         """
-        from core.engine_context import is_stopped, get_context, emit_nested_step
-        self._cancel_event.clear()
-        count = 0
-        while True:
-            if self._cancel_event.is_set():
-                logger.info("LoopBlock cancelled after %d iterations", count)
-                return True
-            if is_stopped():
-                logger.info("LoopBlock stopped after %d iterations", count)
-                return True
+        from core.engine_context import emit_nested_step, get_context, is_stopped
 
-            count += 1
-            ctx = get_context()
-            if ctx:
-                ctx.iteration_count = count
-                # Check __break__ variable for programmatic break
-                if ctx.get_var('__break__'):
-                    ctx.set_var('__break__', False)
-                    logger.info("LoopBlock: break at iteration %d", count)
-                    break
+        # B5: Recursion depth guard
+        depth = _inc_depth()
+        if depth > MAX_COMPOSITE_DEPTH:
+            _dec_depth()
+            logger.error("LoopBlock: max nesting depth %d exceeded", MAX_COMPOSITE_DEPTH)
+            return False
 
-            for i, action in enumerate(self._sub_actions):
-                if self._cancel_event.is_set() or is_stopped():
+        try:
+            self._cancel_event.clear()
+            count = 0
+            while True:
+                if self._cancel_event.is_set():
+                    logger.info("LoopBlock cancelled after %d iterations", count)
                     return True
-                # Check __continue__ → skip rest of iteration
-                if ctx and ctx.get_var('__continue__'):
-                    ctx.set_var('__continue__', False)
+                if is_stopped():
+                    logger.info("LoopBlock stopped after %d iterations", count)
+                    return True
+
+                count += 1
+                ctx = get_context()
+                if ctx:
+                    ctx.iteration_count = count
+                    # Check __break__ variable for programmatic break
+                    if ctx.get_var("__break__"):
+                        ctx.set_var("__break__", False)
+                        logger.info("LoopBlock: break at iteration %d", count)
+                        break
+
+                for i, action in enumerate(self._sub_actions):
+                    if self._cancel_event.is_set() or is_stopped():
+                        return True
+                    # Check __continue__ → skip rest of iteration
+                    if ctx and ctx.get_var("__continue__"):
+                        ctx.set_var("__continue__", False)
+                        break
+                    emit_nested_step([i], action.get_display_name())
+                    success = action.run()
+                    if not success:
+                        return False
+                if self.iterations > 0 and count >= self.iterations:
                     break
-                emit_nested_step([i], action.get_display_name())
-                success = action.run()
-                if not success:
-                    return False
-            if self.iterations > 0 and count >= self.iterations:
-                break
-        return True
+            return True
+        finally:
+            _dec_depth()
 
     def _get_params(self) -> dict[str, Any]:
         """Serialize loop params including nested sub-actions."""
@@ -134,9 +164,7 @@ class LoopBlock(Action):
     def _set_params(self, params: dict[str, Any]) -> None:
         """Deserialize loop params and rebuild sub-action list."""
         self.iterations = params.get("iterations", 1)
-        self._sub_actions = [
-            Action.from_dict(a) for a in params.get("sub_actions", [])
-        ]
+        self._sub_actions = [Action.from_dict(a) for a in params.get("sub_actions", [])]
 
     def get_display_name(self) -> str:
         """Return human-readable label, e.g. 'Loop ×3 (5 actions)'."""
@@ -166,9 +194,14 @@ class IfImageFound(Action):
     else → run else_actions.
     """
 
-    def __init__(self, image_path: str = "", confidence: float = 0.8,
-                 timeout_ms: int = 5000, else_action_json: str = "",
-                 **kwargs: Any) -> None:
+    def __init__(
+        self,
+        image_path: str = "",
+        confidence: float = 0.8,
+        timeout_ms: int = 5000,
+        else_action_json: str = "",
+        **kwargs: Any,
+    ) -> None:
         """Initialize image-based conditional.
 
         Args:
@@ -187,10 +220,11 @@ class IfImageFound(Action):
         if else_action_json and else_action_json.strip():
             try:
                 import json
+
                 data = json.loads(else_action_json)
                 self._else_actions.append(Action.from_dict(data))
             except Exception:
-                pass
+                logger.debug("Failed to parse else_action_json", exc_info=True)
 
     def add_then_action(self, action: Action) -> None:
         self._then_actions.append(action)
@@ -199,14 +233,21 @@ class IfImageFound(Action):
         self._else_actions.append(action)
 
     def execute(self) -> bool:
-        from modules.image import get_image_finder
-        from core.engine_context import is_stopped, get_context, emit_nested_step
-        finder = get_image_finder()
+        from core.engine_context import emit_nested_step, get_context, is_stopped
+
+        # B6: Safe import — missing opencv/pillow shouldn't crash engine
+        try:
+            from modules.image import get_image_finder
+
+            finder = get_image_finder()
+        except (ImportError, Exception) as exc:
+            logger.error("IfImageFound: cannot import image finder: %s", exc)
+            return False
 
         # Support ${var} in image_path (e.g. "screens/${screen_id}.png")
         img_path = self.image_path
         ctx = get_context()
-        if ctx and '${' in img_path:
+        if ctx and "${" in img_path:
             img_path = ctx.interpolate(img_path)
 
         result = finder.find_on_screen(
@@ -247,12 +288,8 @@ class IfImageFound(Action):
         self.image_path = params.get("image_path", "")
         self.confidence = params.get("confidence", 0.8)
         self.timeout_ms = params.get("timeout_ms", 5000)
-        self._then_actions = [
-            Action.from_dict(a) for a in params.get("then_actions", [])
-        ]
-        self._else_actions = [
-            Action.from_dict(a) for a in params.get("else_actions", [])
-        ]
+        self._then_actions = [Action.from_dict(a) for a in params.get("then_actions", [])]
+        self._else_actions = [Action.from_dict(a) for a in params.get("else_actions", [])]
 
     def get_display_name(self) -> str:
         """Return label showing image name and THEN action count."""
@@ -298,11 +335,19 @@ class IfImageFound(Action):
 class IfPixelColor(Action):
     """Conditional: if pixel matches color → then_actions, else → else_actions."""
 
-    def __init__(self, x: int = 0, y: int = 0,
-                 r: int = 0, g: int = 0, b: int = 0,
-                 tolerance: int = 10, color: str = "",
-                 timeout_ms: int = 5000, else_action_json: str = "",
-                 **kwargs: Any) -> None:
+    def __init__(
+        self,
+        x: int = 0,
+        y: int = 0,
+        r: int = 0,
+        g: int = 0,
+        b: int = 0,
+        tolerance: int = 10,
+        color: str = "",
+        timeout_ms: int = 5000,
+        else_action_json: str = "",
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.x = x
         self.y = y
@@ -317,18 +362,19 @@ class IfPixelColor(Action):
         if else_action_json and else_action_json.strip():
             try:
                 import json
+
                 data = json.loads(else_action_json)
                 self._else_actions.append(Action.from_dict(data))
             except Exception:
-                pass
+                logger.debug("Failed to parse else_action_json", exc_info=True)
 
     @staticmethod
     def _parse_color_str(color: str) -> tuple[int, int, int]:
         """Parse '#RRGGBB' or 'R,G,B' string to (r, g, b) tuple."""
         c = color.strip()
-        if c.startswith('#') and len(c) == 7:
+        if c.startswith("#") and len(c) == 7:
             return (int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16))
-        parts = c.split(',')
+        parts = c.split(",")
         if len(parts) == 3:
             return (int(parts[0]), int(parts[1]), int(parts[2]))
         return (0, 0, 0)
@@ -340,16 +386,23 @@ class IfPixelColor(Action):
         self._else_actions.append(action)
 
     def execute(self) -> bool:
+        from core.engine_context import emit_nested_step, is_stopped
         from modules.pixel import get_pixel_checker
-        from core.engine_context import is_stopped, emit_nested_step
+
         pc = get_pixel_checker()
-        matched = pc.check_color(self.x, self.y, self.r, self.g, self.b,
-                                 self.tolerance)
+        matched = pc.check_color(self.x, self.y, self.r, self.g, self.b, self.tolerance)
         branch = self._then_actions if matched else self._else_actions
         label = "THEN" if matched else "ELSE"
-        logger.info("IfPixelColor(%d,%d) RGB(%d,%d,%d) → %s (%d actions)",
-                     self.x, self.y, self.r, self.g, self.b,
-                     label, len(branch))
+        logger.info(
+            "IfPixelColor(%d,%d) RGB(%d,%d,%d) → %s (%d actions)",
+            self.x,
+            self.y,
+            self.r,
+            self.g,
+            self.b,
+            label,
+            len(branch),
+        )
         for i, action in enumerate(branch):
             if is_stopped():
                 return True
@@ -361,8 +414,11 @@ class IfPixelColor(Action):
     def _get_params(self) -> dict[str, Any]:
         """Serialize pixel-color conditional params."""
         return {
-            "x": self.x, "y": self.y,
-            "r": self.r, "g": self.g, "b": self.b,
+            "x": self.x,
+            "y": self.y,
+            "r": self.r,
+            "g": self.g,
+            "b": self.b,
             "tolerance": self.tolerance,
             "then_actions": [a.to_dict() for a in self._then_actions],
             "else_actions": [a.to_dict() for a in self._else_actions],
@@ -376,17 +432,12 @@ class IfPixelColor(Action):
         self.g = params.get("g", 0)
         self.b = params.get("b", 0)
         self.tolerance = params.get("tolerance", 10)
-        self._then_actions = [
-            Action.from_dict(a) for a in params.get("then_actions", [])
-        ]
-        self._else_actions = [
-            Action.from_dict(a) for a in params.get("else_actions", [])
-        ]
+        self._then_actions = [Action.from_dict(a) for a in params.get("then_actions", [])]
+        self._else_actions = [Action.from_dict(a) for a in params.get("else_actions", [])]
 
     def get_display_name(self) -> str:
         """Return label showing pixel coordinates and RGB values."""
-        return (f"If pixel({self.x},{self.y}) = RGB({self.r},{self.g},{self.b})"
-                f" → {len(self._then_actions)} actions")
+        return f"If pixel({self.x},{self.y}) = RGB({self.r},{self.g},{self.b})" f" → {len(self._then_actions)} actions"
 
     # -- composite interface (v3.0) --
     @property
@@ -430,9 +481,14 @@ class IfVariable(Action):
     Operators: ==, !=, >, <, >=, <=
     """
 
-    def __init__(self, var_name: str = "", operator: str = "==",
-                 compare_value: str = "", else_action_json: str = "",
-                 **kwargs: Any) -> None:
+    def __init__(
+        self,
+        var_name: str = "",
+        operator: str = "==",
+        compare_value: str = "",
+        else_action_json: str = "",
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.var_name = var_name
         self.operator = operator
@@ -442,10 +498,11 @@ class IfVariable(Action):
         if else_action_json and else_action_json.strip():
             try:
                 import json
+
                 data = json.loads(else_action_json)
                 self._else_actions.append(Action.from_dict(data))
             except Exception:
-                pass
+                logger.debug("Failed to parse else_action_json", exc_info=True)
 
     def add_then_action(self, action: Action) -> None:
         self._then_actions.append(action)
@@ -454,41 +511,52 @@ class IfVariable(Action):
         self._else_actions.append(action)
 
     def execute(self) -> bool:
-        from core.engine_context import get_context, is_stopped, emit_nested_step
+        from core.engine_context import emit_nested_step, get_context, is_stopped
+
         ctx = get_context()
-        var_val = ctx.get_var(self.var_name) if ctx else None
+
+        # P0-1: Interpolate var_name and compare_value for dynamic comparisons
+        var_name = self.var_name
+        compare = self.compare_value
+        if ctx:
+            if "${" in var_name:
+                var_name = ctx.interpolate(var_name)
+            if "${" in compare:
+                compare = ctx.interpolate(compare)
+        var_val = ctx.get_var(var_name) if ctx else None
 
         # Try numeric comparison
         a: Any  # float or str depending on parse success
         b: Any
         try:
             a = float(var_val) if var_val is not None else 0
-            b = float(self.compare_value) if self.compare_value else 0
+            b = float(compare) if compare else 0
         except (ValueError, TypeError):
             a = str(var_val) if var_val is not None else ""
-            b = self.compare_value
+            b = compare
 
         op = self.operator
         if op == "==":
-            matched = (a == b)
+            matched = a == b
         elif op == "!=":
-            matched = (a != b)
+            matched = a != b
         elif op == ">":
-            matched = (a > b)
+            matched = a > b
         elif op == "<":
-            matched = (a < b)
+            matched = a < b
         elif op == ">=":
-            matched = (a >= b)
+            matched = a >= b
         elif op == "<=":
-            matched = (a <= b)
+            matched = a <= b
         else:
             logger.warning("Unknown operator '%s', defaulting to ==", op)
-            matched = (a == b)
+            matched = a == b
 
         branch = self._then_actions if matched else self._else_actions
         label = "THEN" if matched else "ELSE"
-        logger.info("IfVariable ${%s} %s %s → %s → %d actions",
-                     self.var_name, op, self.compare_value, label, len(branch))
+        logger.info(
+            "IfVariable ${%s} %s %s → %s → %d actions", self.var_name, op, self.compare_value, label, len(branch)
+        )
 
         for i, action in enumerate(branch):
             if is_stopped():
@@ -511,12 +579,8 @@ class IfVariable(Action):
         self.var_name = params.get("var_name", "")
         self.operator = params.get("operator", "==")
         self.compare_value = params.get("compare_value", "")
-        self._then_actions = [
-            Action.from_dict(a) for a in params.get("then_actions", [])
-        ]
-        self._else_actions = [
-            Action.from_dict(a) for a in params.get("else_actions", [])
-        ]
+        self._then_actions = [Action.from_dict(a) for a in params.get("then_actions", [])]
+        self._else_actions = [Action.from_dict(a) for a in params.get("else_actions", [])]
 
     def get_display_name(self) -> str:
         return f"If ${{{self.var_name}}} {self.operator} {self.compare_value}"
@@ -560,8 +624,7 @@ class IfVariable(Action):
 class SetVariable(Action):
     """Set or modify a context variable. Operations: set, increment, decrement, add."""
 
-    def __init__(self, var_name: str = "", value: str = "",
-                 operation: str = "set", **kwargs: Any) -> None:
+    def __init__(self, var_name: str = "", value: str = "", operation: str = "set", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.var_name = var_name
         self.value = value
@@ -569,6 +632,7 @@ class SetVariable(Action):
 
     def execute(self) -> bool:
         from core.engine_context import get_context
+
         ctx = get_context()
         if not ctx:
             logger.warning("SetVariable: no execution context")
@@ -600,7 +664,7 @@ class SetVariable(Action):
         elif self.operation == "add":
             current = ctx.get_var(self.var_name, 0)
             add_val = self.value
-            if '${' in add_val:
+            if "${" in add_val:
                 add_val = ctx.interpolate(add_val)
             try:
                 ctx.set_var(self.var_name, float(current) + float(add_val))
@@ -609,7 +673,7 @@ class SetVariable(Action):
         elif self.operation == "subtract":
             current = ctx.get_var(self.var_name, 0)
             sub_val = self.value
-            if '${' in sub_val:
+            if "${" in sub_val:
                 sub_val = ctx.interpolate(sub_val)
             try:
                 ctx.set_var(self.var_name, float(current) - float(sub_val))
@@ -618,7 +682,7 @@ class SetVariable(Action):
         elif self.operation == "multiply":
             current = ctx.get_var(self.var_name, 0)
             mul_val = self.value
-            if '${' in mul_val:
+            if "${" in mul_val:
                 mul_val = ctx.interpolate(mul_val)
             try:
                 ctx.set_var(self.var_name, float(current) * float(mul_val))
@@ -627,7 +691,7 @@ class SetVariable(Action):
         elif self.operation == "divide":
             current = ctx.get_var(self.var_name, 0)
             div_val = self.value
-            if '${' in div_val:
+            if "${" in div_val:
                 div_val = ctx.interpolate(div_val)
             try:
                 divisor = float(div_val)
@@ -640,7 +704,7 @@ class SetVariable(Action):
         elif self.operation == "modulo":
             current = ctx.get_var(self.var_name, 0)
             mod_val = self.value
-            if '${' in mod_val:
+            if "${" in mod_val:
                 mod_val = ctx.interpolate(mod_val)
             try:
                 divisor = float(mod_val)
@@ -650,10 +714,17 @@ class SetVariable(Action):
                     ctx.set_var(self.var_name, float(current) % divisor)
             except (ValueError, TypeError):
                 logger.warning("Cannot modulo '%s' by '%s'", current, mod_val)
+        elif self.operation == "concat":
+            # P2-4: String concatenation
+            current = ctx.get_var(self.var_name, "")
+            add_val = self.value
+            if "${" in add_val:
+                add_val = ctx.interpolate(add_val)
+            ctx.set_var(self.var_name, str(current) + str(add_val))
         elif self.operation == "eval":
             # 2.2: Safe expression language
             expr = self.value
-            if '${' in expr:
+            if "${" in expr:
                 expr = ctx.interpolate(expr)
             try:
                 result = self._safe_eval(expr)
@@ -663,41 +734,140 @@ class SetVariable(Action):
         else:
             logger.warning("Unknown operation '%s'", self.operation)
 
-        logger.info("SetVariable ${%s} %s %s → %s",
-                     self.var_name, self.operation, self.value,
-                     ctx.get_var(self.var_name))
+        logger.info(
+            "SetVariable ${%s} %s %s → %s", self.var_name, self.operation, self.value, ctx.get_var(self.var_name)
+        )
         return True
 
     @staticmethod
-    def _safe_eval(expr: str) -> float:
-        """Evaluate math expressions safely via AST (no exec/eval).
-        
-        Supports: numbers, +, -, *, /, //, **, %, parentheses.
-        Example: '(10 + 5) * 2' → 30.0
+    def _safe_eval(expr: str):
+        """Expression Engine v2: evaluate expressions safely via AST.
+
+        Supports:
+        - Numbers: 42, 3.14
+        - Strings: 'hello', "world"
+        - Arithmetic: +, -, *, /, //, **, %
+        - Comparisons: ==, !=, <, >, <=, >=
+        - Boolean: and, or, not
+        - Functions: abs, min, max, round, len, int, float, str,
+                     upper, lower, strip, replace, split, join
+        - Parentheses and nested expressions
+
+        Examples:
+            '(10 + 5) * 2'          → 30.0
+            'len("hello")'          → 5
+            'upper("abc")'          → 'ABC'
+            '10 > 5 and 3 < 7'     → True
+            'abs(-42)'              → 42
+            'round(3.14159, 2)'     → 3.14
+            'min(1, 2, 3)'          → 1
+            'replace("abc", "b", "x")' → 'axc'
         """
         import ast
         import operator
 
-        ops = {
-            ast.Add: operator.add, ast.Sub: operator.sub,
-            ast.Mult: operator.mul, ast.Div: operator.truediv,
-            ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
-            ast.Pow: operator.pow, ast.USub: operator.neg,
+        _bin_ops = {
+            ast.Add: operator.add,
+            ast.Sub: operator.sub,
+            ast.Mult: operator.mul,
+            ast.Div: operator.truediv,
+            ast.FloorDiv: operator.floordiv,
+            ast.Mod: operator.mod,
+            ast.Pow: operator.pow,
+        }
+        _unary_ops = {
+            ast.USub: operator.neg,
+            ast.UAdd: operator.pos,
+            ast.Not: operator.not_,
+        }
+        _cmp_ops = {
+            ast.Eq: operator.eq,
+            ast.NotEq: operator.ne,
+            ast.Lt: operator.lt,
+            ast.LtE: operator.le,
+            ast.Gt: operator.gt,
+            ast.GtE: operator.ge,
+        }
+        _bool_ops = {
+            ast.And: lambda vals: all(vals),
+            ast.Or: lambda vals: any(vals),
+        }
+        _safe_funcs = {
+            # Math
+            "abs": abs,
+            "min": min,
+            "max": max,
+            "round": round,
+            "int": lambda x: int(float(x) if isinstance(x, str) else x),
+            "float": float,
+            # String
+            "len": len,
+            "str": str,
+            "upper": lambda s: str(s).upper(),
+            "lower": lambda s: str(s).lower(),
+            "strip": lambda s: str(s).strip(),
+            "replace": lambda s, old, new: str(s).replace(old, new),
+            "split": lambda s, sep=",": str(s).split(sep),
+            "join": lambda sep, lst: sep.join(str(x) for x in lst),
         }
 
         def _eval_node(node):
-            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-                return float(node.value)
-            elif isinstance(node, ast.BinOp) and type(node.op) in ops:
-                return ops[type(node.op)](_eval_node(node.left), _eval_node(node.right))
-            elif isinstance(node, ast.UnaryOp) and type(node.op) in ops:
-                return ops[type(node.op)](_eval_node(node.operand))
-            elif isinstance(node, ast.Expression):
-                return _eval_node(node.body)
-            else:
-                raise ValueError(f"Unsupported: {ast.dump(node)}")
+            # Constants: numbers, strings, booleans, None
+            if isinstance(node, ast.Constant):
+                if isinstance(node.value, (int, float, str, bool, type(None))):
+                    return node.value
+                raise ValueError(f"Unsupported constant: {type(node.value)}")
 
-        tree = ast.parse(expr.strip(), mode='eval')
+            # Binary ops: 1 + 2, "a" + "b"
+            if isinstance(node, ast.BinOp) and type(node.op) in _bin_ops:
+                left = _eval_node(node.left)
+                right = _eval_node(node.right)
+                return _bin_ops[type(node.op)](left, right)
+
+            # Unary ops: -x, not x
+            if isinstance(node, ast.UnaryOp) and type(node.op) in _unary_ops:
+                return _unary_ops[type(node.op)](_eval_node(node.operand))
+
+            # Comparisons: x > 5, a == b, 1 < x < 10
+            if isinstance(node, ast.Compare):
+                left = _eval_node(node.left)
+                for op, comparator in zip(node.ops, node.comparators):
+                    right = _eval_node(comparator)
+                    if type(op) not in _cmp_ops:
+                        raise ValueError(f"Unsupported comparison: {type(op)}")
+                    if not _cmp_ops[type(op)](left, right):
+                        return False
+                    left = right
+                return True
+
+            # Boolean ops: x and y, a or b
+            if isinstance(node, ast.BoolOp) and type(node.op) in _bool_ops:
+                values = [_eval_node(v) for v in node.values]
+                return _bool_ops[type(node.op)](values)
+
+            # Function calls: abs(-5), len("hello"), min(1,2,3)
+            if isinstance(node, ast.Call):
+                if not isinstance(node.func, ast.Name):
+                    raise ValueError("Only simple function names allowed")
+                fname = node.func.id
+                if fname not in _safe_funcs:
+                    raise ValueError(f"Function '{fname}' not allowed")
+                args = [_eval_node(a) for a in node.args]
+                return _safe_funcs[fname](*args)
+
+            # IfExp: x if condition else y
+            if isinstance(node, ast.IfExp):
+                if _eval_node(node.test):
+                    return _eval_node(node.body)
+                return _eval_node(node.orelse)
+
+            # Expression wrapper
+            if isinstance(node, ast.Expression):
+                return _eval_node(node.body)
+
+            raise ValueError(f"Unsupported: {ast.dump(node)}")
+
+        tree = ast.parse(expr.strip(), mode="eval")
         return _eval_node(tree)
 
     def _get_params(self) -> dict[str, Any]:
@@ -717,9 +887,16 @@ class SetVariable(Action):
     def get_display_name(self) -> str:
         """Return label showing variable name, operation symbol, and value."""
         op_symbols = {
-            "set": "=", "increment": "+=", "decrement": "-=",
-            "add": "+=", "subtract": "-=", "multiply": "*=",
-            "divide": "/=", "modulo": "%=", "eval": "= eval",
+            "set": "=",
+            "increment": "+=",
+            "decrement": "-=",
+            "add": "+=",
+            "subtract": "-=",
+            "multiply": "*=",
+            "divide": "/=",
+            "modulo": "%=",
+            "eval": "= eval",
+            "concat": "+=",
         }
         sym = op_symbols.get(self.operation, self.operation)
         val = self.value or ("1" if self.operation in ("increment", "decrement") else "")
@@ -733,9 +910,9 @@ class SplitString(Action):
     Example: variable="a,b,c", delimiter=",", field_index=1 → stores "b"
     """
 
-    def __init__(self, source_var: str = "", delimiter: str = ",",
-                 field_index: int = 0, target_var: str = "",
-                 **kwargs: Any) -> None:
+    def __init__(
+        self, source_var: str = "", delimiter: str = ",", field_index: int = 0, target_var: str = "", **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
         self.source_var = source_var
         self.delimiter = delimiter
@@ -745,7 +922,9 @@ class SplitString(Action):
     def execute(self) -> bool:
         import csv
         import io
+
         from core.engine_context import get_context
+
         ctx = get_context()
         if not ctx:
             return True
@@ -767,13 +946,12 @@ class SplitString(Action):
         if 0 <= self.field_index < len(parts):
             result = parts[self.field_index].strip()
             ctx.set_var(self.target_var, result)
-            logger.info("Split ${%s}[%d] → ${%s} = '%s'",
-                         self.source_var, self.field_index,
-                         self.target_var, result[:50])
+            logger.info(
+                "Split ${%s}[%d] → ${%s} = '%s'", self.source_var, self.field_index, self.target_var, result[:50]
+            )
             return True
         else:
-            logger.warning("Field %d out of range (%d fields in '%s')",
-                           self.field_index, len(parts), value[:50])
+            logger.warning("Field %d out of range (%d fields in '%s')", self.field_index, len(parts), value[:50])
             ctx.set_var(self.target_var, "")
             return True
 
@@ -795,8 +973,7 @@ class SplitString(Action):
 
     def get_display_name(self) -> str:
         """Return label showing source→target mapping."""
-        return (f"Split ${{{self.source_var}}}[{self.field_index}]"
-                f" → ${{{self.target_var}}}")
+        return f"Split ${{{self.source_var}}}[{self.field_index}]" f" → ${{{self.target_var}}}"
 
 
 @register_action("comment")

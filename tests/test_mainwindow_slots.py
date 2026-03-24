@@ -109,6 +109,9 @@ def _make_stub() -> Any:
     mw._step_next_btn = QPushButton()
     mw._step_toggle = QCheckBox()
 
+    # Phase 3: Mini-Map mock
+    mw._minimap = MagicMock()
+
     return mw
 
 

@@ -37,6 +37,7 @@ def retry(
     Returns:
         Decorated function that auto-retries on failure.
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -51,18 +52,25 @@ def retry(
                     if attempt >= max_attempts:
                         logger.error(
                             "%s failed after %d attempts: %s",
-                            func.__name__, max_attempts, exc,
+                            func.__name__,
+                            max_attempts,
+                            exc,
                         )
                         raise
                     logger.warning(
                         "%s attempt %d/%d failed (%s), retrying in %.1fs...",
-                        func.__name__, attempt, max_attempts,
-                        exc, current_delay,
+                        func.__name__,
+                        attempt,
+                        max_attempts,
+                        exc,
+                        current_delay,
                     )
                     time.sleep(current_delay)
                     current_delay *= backoff
 
             # Should not reach here, but satisfy type checker
             raise last_exc  # type: ignore[misc]
+
         return wrapper  # type: ignore[return-value]
+
     return decorator

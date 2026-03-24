@@ -53,9 +53,7 @@ class AutoSaveManager:
         self._backup_dir = backup_dir
         self._current_file = current_file
         self._running = True
-        self._thread = threading.Thread(
-            target=self._loop, daemon=True, name="AutoSave"
-        )
+        self._thread = threading.Thread(target=self._loop, daemon=True, name="AutoSave")
         self._thread.start()
         logger.info("AutoSave started (interval=%ds)", self._interval)
 

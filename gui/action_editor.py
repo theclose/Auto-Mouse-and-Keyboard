@@ -5,72 +5,105 @@ Provides a user-friendly form for each action type with appropriate widgets.
 
 import logging
 import os
-from typing import Optional, Callable, Any
+from typing import Any, Callable, Optional
 
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit, QPushButton,
-    QGroupBox, QCheckBox, QFileDialog, QWidget, QLabel,
-    QTextBrowser, QFrame, QSizePolicy,
-)
-from PyQt6.QtCore import QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSizePolicy,
+    QSpinBox,
+    QTextBrowser,
+    QVBoxLayout,
+    QWidget,
+)
 
+from core.action import Action, get_action_class
 from gui.coordinate_picker import CoordinatePickerOverlay
 from gui.image_capture import ImageCaptureOverlay
-
-from core.action import Action, get_action_class, get_all_action_types
 
 logger = logging.getLogger(__name__)
 
 # Grouped action categories for the type selector
 ACTION_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
-    ("🖱 Mouse", [
-        ("mouse_click", "Click"),
-        ("mouse_double_click", "Double Click"),
-        ("mouse_right_click", "Right Click"),
-        ("mouse_move", "Move"),
-        ("mouse_drag", "Drag"),
-        ("mouse_scroll", "Scroll"),
-    ]),
-    ("⌨ Keyboard", [
-        ("key_press", "Key Press"),
-        ("key_combo", "Key Combo"),
-        ("type_text", "Type Text"),
-        ("hotkey", "Hotkey"),
-    ]),
-    ("🖼 Image", [
-        ("wait_for_image", "Wait for Image"),
-        ("click_on_image", "Click on Image"),
-        ("image_exists", "Image Exists"),
-        ("take_screenshot", "Take Screenshot"),
-    ]),
-    ("🎨 Pixel", [
-        ("check_pixel_color", "Check Pixel Color"),
-        ("wait_for_color", "Wait for Color"),
-    ]),
-    ("⏱ Flow Control", [
-        ("delay", "Delay"),
-        ("loop_block", "Loop Block"),
-        ("if_image_found", "If Image Found"),
-        ("if_pixel_color", "If Pixel Color"),
-        ("if_variable", "If Variable"),
-    ]),
-    ("📊 Variables", [
-        ("set_variable", "Set Variable"),
-        ("split_string", "Split String"),
-        ("comment", "Comment / Label"),
-    ]),
-    ("🖥 System", [
-        ("activate_window", "Activate Window"),
-        ("log_to_file", "Log to File"),
-        ("read_clipboard", "Read Clipboard"),
-        ("read_file_line", "Read File Line"),
-        ("write_to_file", "Write to File"),
-        ("secure_type_text", "Secure Type Text"),
-        ("run_macro", "Run Sub-Macro"),
-        ("capture_text", "Capture Text (OCR)"),
-    ]),
+    (
+        "🖱 Mouse",
+        [
+            ("mouse_click", "Click"),
+            ("mouse_double_click", "Double Click"),
+            ("mouse_right_click", "Right Click"),
+            ("mouse_move", "Move"),
+            ("mouse_drag", "Drag"),
+            ("mouse_scroll", "Scroll"),
+        ],
+    ),
+    (
+        "⌨ Keyboard",
+        [
+            ("key_press", "Key Press"),
+            ("key_combo", "Key Combo"),
+            ("type_text", "Type Text"),
+            ("hotkey", "Hotkey"),
+        ],
+    ),
+    (
+        "🖼 Image",
+        [
+            ("wait_for_image", "Wait for Image"),
+            ("click_on_image", "Click on Image"),
+            ("image_exists", "Image Exists"),
+            ("take_screenshot", "Take Screenshot"),
+        ],
+    ),
+    (
+        "🎨 Pixel",
+        [
+            ("check_pixel_color", "Check Pixel Color"),
+            ("wait_for_color", "Wait for Color"),
+        ],
+    ),
+    (
+        "⏱ Flow Control",
+        [
+            ("delay", "Delay"),
+            ("loop_block", "Loop Block"),
+            ("if_image_found", "If Image Found"),
+            ("if_pixel_color", "If Pixel Color"),
+            ("if_variable", "If Variable"),
+        ],
+    ),
+    (
+        "📊 Variables",
+        [
+            ("set_variable", "Set Variable"),
+            ("split_string", "Split String"),
+            ("comment", "Comment / Label"),
+        ],
+    ),
+    (
+        "🖥 System",
+        [
+            ("activate_window", "Activate Window"),
+            ("log_to_file", "Log to File"),
+            ("read_clipboard", "Read Clipboard"),
+            ("read_file_line", "Read File Line"),
+            ("write_to_file", "Write to File"),
+            ("secure_type_text", "Secure Type Text"),
+            ("run_macro", "Run Sub-Macro"),
+            ("capture_text", "Capture Text (OCR)"),
+        ],
+    ),
 ]
 
 # Per-type descriptions shown in editor (P2 #8)
@@ -117,13 +150,9 @@ class _HelpPopup(QFrame):
 
     def __init__(self, html: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowFlags(
-            Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setStyleSheet(
-            "_HelpPopup { background: #1e1e2e; border: 1px solid #6c6cff; "
-            "border-radius: 8px; }"
-        )
+        self.setStyleSheet("_HelpPopup { background: #1e1e2e; border: 1px solid #6c6cff; " "border-radius: 8px; }")
         self.setFixedWidth(420)
         self.setMinimumHeight(200)
         self.setMaximumHeight(450)
@@ -153,15 +182,10 @@ class _HelpPopup(QFrame):
 
         # Content browser
         browser = QTextBrowser()
-        browser.setHtml(f"<div style='color:#ccc; font-size:12px; "
-                        f"line-height:1.5'>{html}</div>")
+        browser.setHtml(f"<div style='color:#ccc; font-size:12px; " f"line-height:1.5'>{html}</div>")
         browser.setOpenExternalLinks(False)
-        browser.setStyleSheet(
-            "QTextBrowser { background: transparent; border: none; "
-            "color: #ccc; }"
-        )
-        browser.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        browser.setStyleSheet("QTextBrowser { background: transparent; border: none; " "color: #ccc; }")
+        browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(browser)
 
         # Escape key shortcut
@@ -180,10 +204,10 @@ class ActionEditorDialog(QDialog):
     Modal dialog for creating or editing a single action.
     Emits action_ready(action) when user confirms.
     """
+
     action_ready = pyqtSignal(object)  # emits Action before dialog closes
 
-    def __init__(self, parent: Any = None, action: Optional[Action] = None,
-                 macro_dir: str = "") -> None:
+    def __init__(self, parent: Any = None, action: Optional[Action] = None, macro_dir: str = "") -> None:
         super().__init__(parent)
         self._action = action
         self._macro_dir = macro_dir
@@ -269,11 +293,23 @@ class ActionEditorDialog(QDialog):
         common_layout.addRow("", self._enabled_check)
 
         self._error_combo = QComboBox()
-        _err_items = [("Dừng", "stop"), ("Bỏ qua", "skip"),
-                      ("Thử lại: 3", "retry:3"), ("Thử lại: 5", "retry:5")]
+        _err_items = [
+            ("Dừng", "stop"),
+            ("Bỏ qua", "skip"),
+            ("Thử lại: 1", "retry:1"),
+            ("Thử lại: 3", "retry:3"),
+            ("Thử lại: 5", "retry:5"),
+        ]
         for vi_label, en_val in _err_items:
             self._error_combo.addItem(vi_label, en_val)
-        self._error_combo.setToolTip("Hành động khi action bị lỗi")
+        self._error_combo.setToolTip(
+            "Chế độ xử lý khi action thất bại:\n\n"
+            "• Dừng (stop): Đánh dấu lỗi — macro dừng nếu bật\n"
+            "  'Dừng khi lỗi' trong cài đặt chạy, hoặc tiếp tục nếu tắt.\n"
+            "• Bỏ qua (skip): Coi như thành công, tiếp tục action tiếp.\n"
+            "• Thử lại 1-5x: Thử lại N lần (nghỉ 1s giữa mỗi lần),\n"
+            "  nếu vẫn lỗi thì xử lý theo chế độ mặc định."
+        )
         common_layout.addRow("Khi lỗi:", self._error_combo)
 
         layout.addWidget(common_group)
@@ -296,7 +332,8 @@ class ActionEditorDialog(QDialog):
 
     def _build_grouped_combo(self) -> None:
         """Build grouped combo box with category headers."""
-        from PyQt6.QtGui import QStandardItemModel, QStandardItem, QFont
+        from PyQt6.QtGui import QFont, QStandardItem, QStandardItemModel
+
         model = QStandardItemModel()
         for cat_label, actions in ACTION_CATEGORIES:
             # Category header (non-selectable, bold)
@@ -304,7 +341,7 @@ class ActionEditorDialog(QDialog):
             header_font = QFont()
             header_font.setBold(True)
             header.setFont(header_font)
-            header.setEnabled(False)                     # non-selectable
+            header.setEnabled(False)  # non-selectable
             header.setSelectable(False)
             model.appendRow(header)
             # Action items (indented with spaces)
@@ -339,8 +376,7 @@ class ActionEditorDialog(QDialog):
             return
 
         # Update description (P2 #8)
-        self._type_desc_label.setText(
-            f"ℹ️ {_ACTION_DESCRIPTIONS.get(atype, '')}")
+        self._type_desc_label.setText(f"ℹ️ {_ACTION_DESCRIPTIONS.get(atype, '')}")
 
         # Dispatch to per-category builder
         builders: dict[str, Callable[[], None]] = {
@@ -382,8 +418,8 @@ class ActionEditorDialog(QDialog):
             builder()
         elif atype:
             import logging
-            logging.getLogger(__name__).warning(
-                "No param builder registered for action type '%s'", atype)
+
+            logging.getLogger(__name__).warning("No param builder registered for action type '%s'", atype)
 
         # Restore cached x,y values if new type also has them
         for key in ("x", "y"):
@@ -402,17 +438,14 @@ class ActionEditorDialog(QDialog):
             display_name = self._type_combo.currentText()
             desc = _ACTION_DESCRIPTIONS.get(atype, "")
             html = (
-                f"<b>{display_name}</b><br><br>"
-                f"{desc}<br><br>"
-                "<i>Chưa có hướng dẫn chi tiết cho action này.</i>"
+                f"<b>{display_name}</b><br><br>" f"{desc}<br><br>" "<i>Chưa có hướng dẫn chi tiết cho action này.</i>"
             )
         # Close previous popup if open
-        if hasattr(self, '_help_popup') and self._help_popup is not None:
+        if hasattr(self, "_help_popup") and self._help_popup is not None:
             self._help_popup.close()
         self._help_popup = _HelpPopup(html, parent=self)
         # Position to the right of the help button
-        btn_pos = self._help_btn.mapToGlobal(
-            self._help_btn.rect().topRight())
+        btn_pos = self._help_btn.mapToGlobal(self._help_btn.rect().topRight())
         self._help_popup.move(btn_pos.x() + 6, btn_pos.y())
         self._help_popup.show()
         self._help_popup.setFocus()
@@ -512,16 +545,16 @@ class ActionEditorDialog(QDialog):
 
         # Filename pattern
         pattern_edit = QLineEdit("screenshot_%Y%m%d_%H%M%S.png")
-        pattern_edit.setToolTip(
-            "%Y=năm, %m=tháng, %d=ngày, %H=giờ, %M=phút, %S=giây"
-        )
+        pattern_edit.setToolTip("%Y=năm, %m=tháng, %d=ngày, %H=giờ, %M=phút, %S=giây")
         self._params_layout.addRow("Tên file:", pattern_edit)
         self._param_widgets["filename_pattern"] = pattern_edit
 
         # Optional region (0 = full screen)
         for label, key, default in [
-            ("Region X:", "region_x", 0), ("Region Y:", "region_y", 0),
-            ("Region W:", "region_w", 0), ("Region H:", "region_h", 0),
+            ("Region X:", "region_x", 0),
+            ("Region Y:", "region_y", 0),
+            ("Region W:", "region_w", 0),
+            ("Region H:", "region_h", 0),
         ]:
             spin = QSpinBox()
             spin.setRange(0, 9999)
@@ -585,13 +618,9 @@ class ActionEditorDialog(QDialog):
         pick_btn = QPushButton("📌 Chọn trên màn hình")
         pick_btn.setObjectName("primaryButton")
         pick_btn.setToolTip(
-            "Nhấn để chọn toạ độ trên màn hình.\n"
-            "Click bất kỳ → toạ độ tự điền.\n"
-            "Nhấn Escape để hủy."
+            "Nhấn để chọn toạ độ trên màn hình.\n" "Click bất kỳ → toạ độ tự điền.\n" "Nhấn Escape để hủy."
         )
-        pick_btn.clicked.connect(
-            lambda: self._start_coordinate_picker(x_spin, y_spin)
-        )
+        pick_btn.clicked.connect(lambda: self._start_coordinate_picker(x_spin, y_spin))
         self._params_layout.addRow("", pick_btn)
 
     def _build_if_image_found_params(self) -> None:
@@ -641,7 +670,9 @@ class ActionEditorDialog(QDialog):
 
         # 3.1: ELSE action (optional)
         else_action = QLineEdit()
-        else_action.setPlaceholderText('Tuỳ chọn: {"type":"set_variable","params":{"var_name":"x","value":"0","operation":"set"}}')
+        else_action.setPlaceholderText(
+            'Tuỳ chọn: {"type":"set_variable","params":{"var_name":"x","value":"0","operation":"set"}}'
+        )
         else_action.setToolTip("Action thực thi khi điều kiện SAI (JSON)")
         self._params_layout.addRow("Nếu không:", else_action)
         self._param_widgets["else_action_json"] = else_action
@@ -659,8 +690,7 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["value"] = value
 
         operation = QComboBox()
-        operation.addItems(["set", "increment", "decrement", "add",
-                           "subtract", "multiply", "divide", "modulo", "eval"])
+        operation.addItems(["set", "increment", "decrement", "add", "subtract", "multiply", "divide", "modulo", "eval"])
         self._params_layout.addRow("Phép toán:", operation)
         self._param_widgets["operation"] = operation
 
@@ -765,11 +795,14 @@ class ActionEditorDialog(QDialog):
 
         encrypt_btn = QPushButton("🔒 Mã hóa ngay")
         encrypt_btn.setToolTip("Mã hóa nội dung bằng Windows DPAPI")
+
         def _do_encrypt():
             from core.secure import encrypt
+
             raw = text_edit.text()
             if raw and not raw.startswith("DPAPI:"):
                 text_edit.setText(encrypt(raw))
+
         encrypt_btn.clicked.connect(_do_encrypt)
         self._params_layout.addRow("", encrypt_btn)
 
@@ -781,13 +814,14 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["macro_path"] = path
 
         browse_btn = QPushButton("📂 Duyệt...")
+
         def _browse():
             from PyQt6.QtWidgets import QFileDialog
-            fpath, _ = QFileDialog.getOpenFileName(
-                self, "Chọn macro", "macros",
-                "JSON Macros (*.json)")
+
+            fpath, _ = QFileDialog.getOpenFileName(self, "Chọn macro", "macros", "JSON Macros (*.json)")
             if fpath:
                 path.setText(fpath)
+
         browse_btn.clicked.connect(_browse)
         self._params_layout.addRow("", browse_btn)
 
@@ -874,13 +908,8 @@ class ActionEditorDialog(QDialog):
         browse_btn.clicked.connect(lambda: self._browse_image(img_edit))
         capture_btn = QPushButton("📸 Chụp")
         capture_btn.setObjectName("primaryButton")
-        capture_btn.setToolTip(
-            "Chụp vùng màn hình → tự động điền path\n"
-            "Kéo vùng chọn, nhấn Escape để hủy."
-        )
-        capture_btn.clicked.connect(
-            lambda: self._start_image_capture(img_edit)
-        )
+        capture_btn.setToolTip("Chụp vùng màn hình → tự động điền path\n" "Kéo vùng chọn, nhấn Escape để hủy.")
+        capture_btn.clicked.connect(lambda: self._start_image_capture(img_edit))
         img_layout.addWidget(img_edit)
         img_layout.addWidget(browse_btn)
         img_layout.addWidget(capture_btn)
@@ -897,16 +926,23 @@ class ActionEditorDialog(QDialog):
         self._params_layout.addRow("Độ chính xác:", conf)
         self._param_widgets["confidence"] = conf
 
+        # 3.2: Live Preview
+        from gui.image_preview_widget import ImagePreviewWidget
+
+        self._image_preview = ImagePreviewWidget()
+        img_edit.textChanged.connect(self._image_preview.set_template)
+        conf.valueChanged.connect(self._image_preview.set_confidence)
+        self._params_layout.addRow(self._image_preview)
+
     def _browse_image(self, line_edit: QLineEdit) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select Image", self._macro_dir,
-            "Images (*.png *.jpg *.bmp)")
+        path, _ = QFileDialog.getOpenFileName(self, "Select Image", self._macro_dir, "Images (*.png *.jpg *.bmp)")
         if path:
             line_edit.setText(path)
 
     def _start_image_capture(self, target_edit: QLineEdit) -> None:
         """Launch capture overlay to snip a screen region as template."""
         import os
+
         assets_dir = os.path.join(self._macro_dir, "assets")
         self._capture_overlay = ImageCaptureOverlay(save_dir=assets_dir)
         self._capture_target_edit = target_edit
@@ -989,11 +1025,23 @@ class ActionEditorDialog(QDialog):
             action.on_error = self._error_combo.currentData() or "stop"
 
             # Preserve hidden params from original action (e.g. context_image)
-            if hasattr(self, '_editing_action') and self._editing_action:
+            if hasattr(self, "_editing_action") and self._editing_action:
                 orig = self._editing_action
-                if hasattr(orig, 'context_image') and orig.context_image:
-                    if hasattr(action, 'context_image') and not action.context_image:
+                if hasattr(orig, "context_image") and orig.context_image:
+                    if hasattr(action, "context_image") and not action.context_image:
                         action.context_image = orig.context_image
+
+                # CRITICAL: Preserve composite children when editing parameters
+                if orig.is_composite:
+                    if hasattr(orig, "_sub_actions") and hasattr(action, "_sub_actions"):
+                        # LoopBlock children
+                        action._sub_actions = list(orig._sub_actions)
+                    if hasattr(orig, "_then_actions") and hasattr(action, "_then_actions"):
+                        # If* THEN branch
+                        action._then_actions = list(orig._then_actions)
+                    if hasattr(orig, "_else_actions") and hasattr(action, "_else_actions"):
+                        # If* ELSE branch
+                        action._else_actions = list(orig._else_actions)
 
             if not self._validate_image_path(action):
                 return
@@ -1005,10 +1053,10 @@ class ActionEditorDialog(QDialog):
         except Exception as e:
             logger.warning("Action creation failed: type=%s error=%s", atype, e)
             from PyQt6.QtWidgets import QMessageBox
+
             QMessageBox.warning(
-                self, "Thông Số Không Hợp Lệ",
-                f"Vui lòng kiểm tra lại các thông số đã nhập.\n\n"
-                f"Chi tiết: {e}")
+                self, "Thông Số Không Hợp Lệ", f"Vui lòng kiểm tra lại các thông số đã nhập.\n\n" f"Chi tiết: {e}"
+            )
 
     def _collect_params(self) -> dict[str, Any]:
         """Extract parameter values from widgets."""
@@ -1023,21 +1071,23 @@ class ActionEditorDialog(QDialog):
 
         # Handle keys_str → keys list
         if "keys_str" in params:
-            params["keys"] = [k.strip() for k in
-                              params.pop("keys_str").split("+") if k.strip()]
+            params["keys"] = [k.strip() for k in params.pop("keys_str").split("+") if k.strip()]
         return params
 
     def _validate_image_path(self, action: Action) -> bool:
         """Warn if image path doesn't exist. Returns False to cancel."""
-        if not hasattr(action, 'image_path') or not action.image_path:
+        if not hasattr(action, "image_path") or not action.image_path:
             return True
         if os.path.isfile(action.image_path):
             return True
         from PyQt6.QtWidgets import QMessageBox
+
         r = QMessageBox.warning(
-            self, "Warning",
+            self,
+            "Warning",
             f"Image file not found:\n{action.image_path}\n\nContinue anyway?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
         return r == QMessageBox.StandardButton.Yes
 
     def get_action(self) -> Optional[Action]:

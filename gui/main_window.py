@@ -68,6 +68,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self._actions: list[Action] = []
+        self._hk_mgr: Any = None  # set by main.py for restart-free rebind
         self._engine = MacroEngine()
         self._config = load_config()
         self._current_file: str = ""

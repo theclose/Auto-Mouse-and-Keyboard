@@ -8,7 +8,10 @@ import logging.handlers
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.hotkey_manager import HotkeyManager
 
 # Set up logging before any other imports
 LOG_DIR = Path("logs")
@@ -35,7 +38,7 @@ logging.basicConfig(
 logger = logging.getLogger("AutoPilot")
 
 
-def setup_global_hotkeys(config: dict[str, Any]) -> Any:
+def setup_global_hotkeys(config: dict[str, Any]) -> "HotkeyManager | None":
     """Register system-wide hotkeys using Win32 RegisterHotKey."""
     try:
         from PyQt6.QtCore import QTimer
@@ -100,6 +103,7 @@ def setup_global_hotkeys(config: dict[str, Any]) -> Any:
         return hk_mgr  # Keep reference to prevent GC
     except Exception as e:
         logger.warning("Failed to set up global hotkeys: %s", e)
+        return None
 
 
 def main() -> None:
@@ -141,11 +145,11 @@ def main() -> None:
 
     # Load config and set up hotkeys
     config = load_config()
-    _hk_mgr: Any = setup_global_hotkeys(config)  # prevent GC
+    _hk_mgr = setup_global_hotkeys(config)  # prevent GC
 
     # Show main window
     window = MainWindow()
-    window._hk_mgr = _hk_mgr  # Enable restart-free hotkey rebind  # type: ignore
+    window._hk_mgr = _hk_mgr  # Enable restart-free hotkey rebind
     window.show()
 
     # Audit: log all registered action types for diagnostics

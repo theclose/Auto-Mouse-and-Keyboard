@@ -441,8 +441,8 @@ class ActionEditorDialog(QDialog):
                 f"<b>{display_name}</b><br><br>" f"{desc}<br><br>" "<i>Chưa có hướng dẫn chi tiết cho action này.</i>"
             )
         # Close previous popup if open
-        if hasattr(self, "_help_popup") and self._help_popup is not None:
-            self._help_popup.close()
+        if hasattr(self, "_help_popup") and self._help_popup is not None:  # type: ignore[has-type]
+            self._help_popup.close()  # type: ignore[has-type]
         self._help_popup = _HelpPopup(html, parent=self)
         # Position to the right of the help button
         btn_pos = self._help_btn.mapToGlobal(self._help_btn.rect().topRight())
@@ -862,7 +862,7 @@ class ActionEditorDialog(QDialog):
         # Hide both the dialog AND the main window behind it
         self._parent_window = self.parent()
         if self._parent_window:
-            self._parent_window.hide()
+            self._parent_window.hide()  # type: ignore[attr-defined]
         self.hide()
         # Short delay so windows fully hide before screenshot
         QTimer.singleShot(300, self._picker.start)
@@ -872,16 +872,16 @@ class ActionEditorDialog(QDialog):
         self._picker_x_target.setValue(x)
         self._picker_y_target.setValue(y)
         if self._parent_window:
-            self._parent_window.show()
-            self._parent_window.activateWindow()
+            self._parent_window.show()  # type: ignore[attr-defined]
+            self._parent_window.activateWindow()  # type: ignore[attr-defined]
         self.show()
         self.activateWindow()
 
     def _on_picker_cancelled(self) -> None:
         """Handle picker cancellation."""
         if self._parent_window:
-            self._parent_window.show()
-            self._parent_window.activateWindow()
+            self._parent_window.show()  # type: ignore[attr-defined]
+            self._parent_window.activateWindow()  # type: ignore[attr-defined]
         self.show()
         self.activateWindow()
 
@@ -951,7 +951,7 @@ class ActionEditorDialog(QDialog):
         # Hide both dialog and main window
         self._capture_parent = self.parent()
         if self._capture_parent:
-            self._capture_parent.hide()
+            self._capture_parent.hide()  # type: ignore[attr-defined]
         self.hide()
         QTimer.singleShot(300, self._capture_overlay.start)
 
@@ -959,8 +959,8 @@ class ActionEditorDialog(QDialog):
         """Handle captured image — fill path into target edit."""
         self._capture_target_edit.setText(path)
         if self._capture_parent:
-            self._capture_parent.show()
-            self._capture_parent.activateWindow()
+            self._capture_parent.show()  # type: ignore[attr-defined]
+            self._capture_parent.activateWindow()  # type: ignore[attr-defined]
         self.show()
         self.activateWindow()
         logger.info("Image captured for template: %s", path)
@@ -968,8 +968,8 @@ class ActionEditorDialog(QDialog):
     def _on_capture_cancelled(self) -> None:
         """Restore windows if capture was cancelled."""
         if self._capture_parent:
-            self._capture_parent.show()
-            self._capture_parent.activateWindow()
+            self._capture_parent.show()  # type: ignore[attr-defined]
+            self._capture_parent.activateWindow()  # type: ignore[attr-defined]
         self.show()
         self.activateWindow()
 

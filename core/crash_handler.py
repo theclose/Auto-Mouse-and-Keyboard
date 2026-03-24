@@ -100,7 +100,7 @@ class CrashDialog(QDialog):
     def _build_report(self) -> str:
         """Build crash report string with version and system info."""
         try:
-            from version import VERSION
+            from version import VERSION  # type: ignore[attr-defined]
         except ImportError:
             VERSION = "unknown"
         return (

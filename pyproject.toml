@@ -46,5 +46,5 @@ ignore = ["E402", "E501", "E701"]
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
-warn_unused_imports = false
+
 

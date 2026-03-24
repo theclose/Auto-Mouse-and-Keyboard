@@ -183,11 +183,11 @@ class MainWindow(QMainWindow):
         tb.addAction(save_act)
 
         undo_act = self._undo_stack.createUndoAction(self, "↩ Hoàn tác")
-        undo_act.setShortcut(QKeySequence.StandardKey.Undo)
+        undo_act.setShortcut(QKeySequence.StandardKey.Undo)  # type: ignore[union-attr]
         tb.addAction(undo_act)
 
         redo_act = self._undo_stack.createRedoAction(self, "↪ Làm lại")
-        redo_act.setShortcut(QKeySequence.StandardKey.Redo)
+        redo_act.setShortcut(QKeySequence.StandardKey.Redo)  # type: ignore[union-attr]
         tb.addAction(redo_act)
 
         tb.addSeparator()
@@ -295,7 +295,7 @@ class MainWindow(QMainWindow):
 
         # Drag-drop undo: snapshot order before drop
         self._pre_drag_order: list[Action] = []
-        self._table.viewport().installEventFilter(self)
+        self._table.viewport().installEventFilter(self)  # type: ignore[union-attr]
 
         splitter.addWidget(self._action_list_panel)
 
@@ -576,7 +576,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ #
     # Drag-drop undo support
     # ------------------------------------------------------------------ #
-    def eventFilter(self, obj: QObject, event: Any) -> bool:
+    def eventFilter(self, obj: QObject, event: Any) -> bool:  # type: ignore[override]
         """Intercept drag-drop on table viewport to push undo command."""
         from PyQt6.QtCore import QEvent
 
@@ -1540,7 +1540,7 @@ class MainWindow(QMainWindow):
             dup = BaseAction.from_dict(self._actions[row].to_dict())
             from core.undo_commands import DuplicateActionCommand
 
-            cmd = DuplicateActionCommand(self._actions, row, dup)
+            cmd = DuplicateActionCommand(self._actions, row, dup)  # type: ignore[assignment]
             self._undo_stack.push(cmd)
             logger.info("Duplicated action [%d]", row + 1)
         except Exception:
@@ -1812,8 +1812,8 @@ class MainWindow(QMainWindow):
             font_size = ui_cfg.get("font_size", 10)
             self._apply_theme_live(theme_pref, font_size=font_size)
             # Re-register hotkeys without restart
-            if hasattr(self, "_hk_mgr") and self._hk_mgr:
-                self._hk_mgr.stop()
+            if hasattr(self, "_hk_mgr") and self._hk_mgr:  # type: ignore[has-type]
+                self._hk_mgr.stop()  # type: ignore[has-type]
             from main import setup_global_hotkeys
 
             self._hk_mgr = setup_global_hotkeys(config)

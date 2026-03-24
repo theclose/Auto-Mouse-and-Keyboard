@@ -141,11 +141,11 @@ def main() -> None:
 
     # Load config and set up hotkeys
     config = load_config()
-    _hk_mgr = setup_global_hotkeys(config)  # noqa: F841 – prevent GC
+    _hk_mgr: Any = setup_global_hotkeys(config)  # prevent GC
 
     # Show main window
     window = MainWindow()
-    window._hk_mgr = _hk_mgr  # Enable restart-free hotkey rebind
+    window._hk_mgr = _hk_mgr  # Enable restart-free hotkey rebind  # type: ignore
     window.show()
 
     # Audit: log all registered action types for diagnostics

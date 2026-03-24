@@ -34,7 +34,7 @@ class VariablePanel(QWidget):
 
         self._var_table = QTableWidget(0, 3)
         self._var_table.setHorizontalHeaderLabels(["Tên", "Giá trị", "Kiểu"])
-        self._var_table.horizontalHeader().setStretchLastSection(True)
+        self._var_table.horizontalHeader().setStretchLastSection(True)  # type: ignore[union-attr]
         self._var_table.setMaximumHeight(120)
         self._var_table.setAlternatingRowColors(True)
         self._var_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)

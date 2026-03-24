@@ -298,7 +298,7 @@ class ActionTreeModel(QAbstractItemModel):
     def mimeTypes(self) -> list[str]:
         return ["application/x-action-tree-rows"]
 
-    def mimeData(self, indexes: list[QModelIndex]) -> QMimeData:
+    def mimeData(self, indexes: list[QModelIndex]) -> QMimeData:  # type: ignore[override]
         mime = QMimeData()
         # Store row paths for each selected item
         rows = []

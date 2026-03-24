@@ -92,7 +92,7 @@ class ImagePreviewWidget(QGroupBox):
         try:
             import cv2
 
-            from modules.screen import grab_screen
+            from modules.screen import grab_screen  # type: ignore[attr-defined]
 
             # 1. Grab screen
             screen = grab_screen()

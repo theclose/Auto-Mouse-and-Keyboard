@@ -10,7 +10,7 @@ from core.action import Action
 logger = logging.getLogger(__name__)
 
 
-def analyze_hints(actions: list[Action]) -> list[dict[str, str]]:
+def analyze_hints(actions: list[Action]) -> list[dict[str, str | int]]:
     """Analyze a list of actions and return contextual hints.
 
     Returns list of dicts with keys:
@@ -19,7 +19,7 @@ def analyze_hints(actions: list[Action]) -> list[dict[str, str]]:
         - message: hint text
         - action_idx: optional index of related action
     """
-    hints: list[dict[str, str]] = []
+    hints: list[dict[str, str | int]] = []
     if not actions:
         return hints
 

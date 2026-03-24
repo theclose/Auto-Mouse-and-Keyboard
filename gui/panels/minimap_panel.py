@@ -138,7 +138,7 @@ class MiniMapWidget(QWidget):
             label.setCursor(Qt.CursorShape.PointingHandCursor)
             # Capture index for click
             idx = i
-            label.mousePressEvent = lambda e, x=idx: self.action_clicked.emit(x)
+            label.mousePressEvent = lambda e, x=idx: self.action_clicked.emit(x)  # type: ignore
             self._content_layout.addWidget(label)
             self._labels.append(label)
 

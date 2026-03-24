@@ -165,6 +165,9 @@ class LoopBlock(Action):
         """Deserialize loop params and rebuild sub-action list."""
         self.iterations = params.get("iterations", 1)
         self._sub_actions = [Action.from_dict(a) for a in params.get("sub_actions", [])]
+        # Ensure _cancel_event exists when deserialized via from_dict
+        if not hasattr(self, "_cancel_event"):
+            self._cancel_event = threading.Event()
 
     def get_display_name(self) -> str:
         """Return human-readable label, e.g. 'Loop ×3 (5 actions)'."""
@@ -185,6 +188,10 @@ class LoopBlock(Action):
     def children(self, value: list[Action]) -> None:
         """Replace sub-actions list entirely."""
         self._sub_actions = list(value)
+
+    def __deepcopy__(self, memo: dict) -> "LoopBlock":
+        """Custom deepcopy: threading.Event can't be pickled, so serialize→deserialize."""
+        return Action.from_dict(self.to_dict())  # type: ignore[return-value]
 
 
 @register_action("if_image_found")

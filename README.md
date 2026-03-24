@@ -99,6 +99,24 @@ python -m pytest tests/test_benchmarks.py --benchmark-only
 
 **Current status:** 558 tests, 27 files, 0 failures.
 
+## Performance
+
+Measured on Windows 10, Python 3.11.5, Intel x64:
+
+| Metric | Value |
+|--------|-------|
+| Baseline RAM | 17 MB |
+| After all imports | 61 MB |
+| With MainWindow (idle) | 74 MB |
+| EXE idle | ~160 MB |
+| Window startup | 27 ms |
+| Action creation | 892K ops/sec |
+| Serialize 1K actions | 1.4 ms |
+| Deserialize 1K actions | 0.8 ms |
+| Smart Hints (500 actions) | 0.2 ms |
+| EXE size | 7.8 MB |
+| Total dist folder | 265 MB |
+
 ## Building
 
 ```bash

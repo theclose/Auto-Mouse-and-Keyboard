@@ -1,7 +1,8 @@
 # Auto Mouse & Keyboard — Architecture Guide
 
-> **Codebase**: 33 source files, ~200KB code, 31 registered action types
+> **Version**: 2.9.7 · **Codebase**: 48 source files · **31 registered action types**
 > **Framework**: PyQt6 (desktop), pyautogui + opencv (automation)
+> **CI**: GitHub Actions (Black + Ruff + Mypy + pytest)
 
 ## Table of Contents
 1. [System Overview](#system-overview)
@@ -10,9 +11,12 @@
 4. [GUI Layer](#gui-layer)
 5. [Action Registration & Import Order](#action-registration--import-order)
 6. [Data Flow](#data-flow)
-7. [Security Architecture](#security-architecture)
-8. [Design Patterns](#design-patterns)
-9. [File Size Map](#file-size-map)
+7. [Undo/Redo Framework](#undoredo-framework)
+8. [Event-Driven Architecture](#event-driven-architecture)
+9. [Security Architecture](#security-architecture)
+10. [CI/CD Pipeline](#cicd-pipeline)
+11. [Design Patterns](#design-patterns)
+12. [File Size Map](#file-size-map)
 
 ---
 
@@ -25,16 +29,27 @@ graph TB
     end
 
     subgraph GUI["gui/ — User Interface"]
-        MW[main_window.py<br/>Action Table + Toolbar]
+        MW[main_window.py<br/>TreeView + Toolbar]
         AE[action_editor.py<br/>Create/Edit Actions]
+        ATM[action_tree_model.py<br/>QAbstractItemModel]
         RP[recording_panel.py<br/>Record Controls]
         SD[settings_dialog.py<br/>App Settings]
         ST[styles.py<br/>Theme System]
         TR[tray.py<br/>System Tray]
         CP[coordinate_picker.py<br/>XY Picker Overlay]
         IC[image_capture.py<br/>Screen Snip Tool]
+        IP[image_preview_widget.py<br/>Image Preview]
         HD[help_dialog.py<br/>Action Help]
         HC[help_content.py<br/>Help HTML Data]
+    end
+
+    subgraph Panels["gui/panels/ — Dockable UI Panels"]
+        ALP[action_list_panel.py]
+        EXP[execution_panel.py]
+        LP[log_panel.py]
+        MMP[minimap_panel.py]
+        PP[playback_panel.py]
+        VP[variable_panel.py]
     end
 
     subgraph Core["core/ — Engine & Logic"]
@@ -45,7 +60,10 @@ graph TB
         ECtx[engine_context.py<br/>Thread-local Speed/Stop]
         R[recorder.py<br/>Input Recording]
         HK[hotkey_manager.py<br/>Global Hotkeys]
-        UC[undo_commands.py<br/>Undo/Redo]
+        UC[undo_commands.py<br/>Undo/Redo Commands]
+        EB[event_bus.py<br/>Pub/Sub Events]
+        SH[smart_hints.py<br/>Macro Analysis]
+        MT[macro_templates.py<br/>Preset Templates]
         AS[autosave.py<br/>Auto-Save Timer]
         CH[crash_handler.py<br/>Exception Handler]
         MM[memory_manager.py<br/>Memory Monitor]
@@ -65,13 +83,14 @@ graph TB
 
     M --> MW
     MW --> AE & RP & SD & TR
-    AE --> CP & IC & HD
+    MW --> ATM & Panels
+    AE --> CP & IC & HD & IP
     HD --> HC
     MW --> E & R & HK & UC & AS
     E --> A & S & EC & ECtx
     S --> A
     A --> MO & KB & IM & PX & SY
-    MW --> ST
+    MW --> ST & EB & SH
 ```
 
 ---
@@ -80,19 +99,22 @@ graph TB
 
 `core/` contains the engine, action model, and infrastructure services.
 
-| File | Size | Key Classes/Functions | Purpose |
-|------|------|----------------------|---------|
-| `action.py` | 10KB | `Action`, `DelayAction`, `register_action()`, `audit_registry()` | Base class, registry, serialization |
-| `engine.py` | 12KB | `MacroEngine` | Threaded macro execution (flat list) |
-| `scheduler.py` | 26KB | `LoopBlock`, `IfImageFound`, `IfPixelColor`, `IfVariable`, `SetVariable`, `SplitString`, `Comment` | **7 flow control actions** (Composite Pattern) |
-| `execution_context.py` | 8KB | `ExecutionContext` | Shared state: variables, image matches, stats |
-| `engine_context.py` | 2KB | `set_speed()`, `get_context()`, `is_stopped()`, `scaled_sleep()` | Thread-local context helpers |
-| `recorder.py` | 17KB | `Recorder` | Mouse + keyboard input recording |
-| `hotkey_manager.py` | 7KB | `HotkeyManager` | Win32 RegisterHotKey integration |
-| `undo_commands.py` | 5KB | `AddActionCommand`, `DeleteActionsCommand`, `ReorderActionsCommand` | Qt QUndoCommand for action list |
-| `autosave.py` | 4KB | `AutoSaveManager` | Timer-based auto-save (60s default) |
-| `crash_handler.py` | 5KB | `CrashHandler` | Global sys.excepthook replacement |
-| `memory_manager.py` | 7KB | `MemoryManager` | Memory monitoring + cleanup callbacks |
+| File | Size | Key Classes | Purpose |
+|------|------|-------------|---------|
+| `action.py` | 11KB | `Action`, `DelayAction`, `register_action()`, `audit_registry()` | Base class, registry, serialization |
+| `engine.py` | 13KB | `MacroEngine` | Threaded macro execution with pause/resume/stop, signals |
+| `scheduler.py` | 37KB | `LoopBlock`, `IfImageFound`, `IfPixelColor`, `IfVariable`, `SetVariable`, `SplitString`, `Comment` | **7 flow control actions** (Composite Pattern) |
+| `execution_context.py` | 8KB | `ExecutionContext` | Shared state: variables, image matches, system vars, interpolation |
+| `engine_context.py` | 3KB | `set_speed()`, `get_context()`, `is_stopped()`, `scaled_sleep()` | Thread-local context helpers |
+| `recorder.py` | 16KB | `Recorder` | Mouse + keyboard input recording with thread-safe snapshot API |
+| `hotkey_manager.py` | 6KB | `HotkeyManager` | Win32 RegisterHotKey integration |
+| `undo_commands.py` | 7KB | `AddActionCommand`, `DeleteActionsCommand`, `ReorderActionsCommand`, `CompositeChildrenCommand` | Qt QUndoCommand for action list + nested sub-action mutations |
+| `event_bus.py` | 2KB | `EventBus` | Global publish/subscribe for decoupled GUI↔Core communication |
+| `smart_hints.py` | 9KB | `analyze_hints()` | Static analysis of macro: detects empty composites, duplicate delays, missing delays, etc. |
+| `macro_templates.py` | 8KB | `get_templates()` | Preset macro templates (e.g., auto-clicker, form filler) |
+| `autosave.py` | 3KB | `AutoSaveManager` | Timer-based auto-save with backup rotation |
+| `crash_handler.py` | 6KB | `CrashHandler`, `CrashDialog` | Global sys.excepthook with crash report dialog |
+| `memory_manager.py` | 6KB | `MemoryManager` | Memory monitoring + cleanup callbacks |
 | `profiler.py` | 3KB | `PerformanceProfiler`, `get_profiler()` | Context-manager timing tracker |
 | `retry.py` | 2KB | `retry()` decorator | Exponential backoff retry for transient failures |
 | `secure.py` | 2KB | `encrypt()`, `decrypt()`, `is_encrypted()` | Windows DPAPI encryption for passwords |
@@ -106,8 +128,8 @@ Each module is imported at startup in `gui/main_window.py`.
 
 | Module | Types | Count | Notes |
 |--------|-------|-------|-------|
-| `mouse.py` | mouse_click, mouse_double_click, mouse_right_click, mouse_move, mouse_drag, mouse_scroll | 6 | pyautogui-based |
-| `keyboard.py` | key_press, key_combo, type_text, hotkey | 4 | pyautogui + keyboard lib |
+| `mouse.py` | mouse_click, mouse_double_click, mouse_right_click, mouse_move, mouse_drag, mouse_scroll | 6 | pyautogui-based, supports dynamic `${var}` coordinates |
+| `keyboard.py` | key_press, key_combo, type_text, hotkey | 4 | pyautogui + SendInput |
 | `image.py` | wait_for_image, click_on_image, image_exists, take_screenshot | 4 | OpenCV template matching |
 | `pixel.py` | check_pixel_color, wait_for_color | 2 | Single-pixel fast check |
 | `system.py` | activate_window, log_to_file, read_clipboard, read_file_line, write_to_file, secure_type_text, run_macro, capture_text | 8 | Window mgmt, file I/O, OCR |
@@ -120,18 +142,33 @@ Each module is imported at startup in `gui/main_window.py`.
 
 ## GUI Layer
 
+### Main Components
+
 | File | Size | Key Classes | Purpose |
 |------|------|-------------|---------|
-| `main_window.py` | 68KB | `MainWindow` | Main app: action table, toolbar, log panel, drag-drop |
-| `action_editor.py` | 43KB | `ActionEditor` | Create/edit dialog: per-type param builders |
-| `settings_dialog.py` | 12KB | `SettingsDialog` | Hotkeys, speed, defaults, paths |
-| `recording_panel.py` | 10KB | `RecordingPanel` | Record/pause/stop controls |
+| `main_window.py` | 82KB | `MainWindow` | Main app: TreeView, toolbar, log panel, drag-drop, undo stack |
+| `action_editor.py` | 46KB | `ActionEditor` | Create/edit dialog: per-type param builders |
+| `action_tree_model.py` | 12KB | `ActionTreeModel` | QAbstractItemModel for hierarchical action display (composites as tree nodes) |
+| `settings_dialog.py` | 13KB | `SettingsDialog` | Hotkeys, speed, defaults, paths |
+| `recording_panel.py` | 9KB | `RecordingPanel` | Record/pause/stop controls |
 | `coordinate_picker.py` | 9KB | `CoordinatePickerOverlay` | Full-screen crosshair + magnifier + color preview |
+| `image_preview_widget.py` | 5KB | `ImagePreviewWidget` | Image template preview with screen capture |
 | `help_dialog.py` | 7KB | `HelpPopup` | Floating help window for action types |
-| `help_content.py` | 37KB | `_ACTION_HELP` dict | Rich HTML help text with scenarios for all 31 types |
+| `help_content.py` | 36KB | `_ACTION_HELP` dict | Rich HTML help text with scenarios for all 31 types |
 | `styles.py` | 12KB | `DARK_COLORS`, `get_stylesheet()` | Theme palette + QSS template engine |
 | `tray.py` | 4KB | `SystemTrayManager` | System tray icon with state-colored indicator |
 | `image_capture.py` | 5KB | `ImageCaptureOverlay` | Screen snipping for image templates |
+
+### Dockable Panels (`gui/panels/`)
+
+| File | Size | Purpose |
+|------|------|---------|
+| `action_list_panel.py` | 11KB | Alternative list view for actions |
+| `playback_panel.py` | 6KB | Play/pause/stop controls with progress |
+| `minimap_panel.py` | 6KB | Scrollable overview of all actions |
+| `log_panel.py` | 4KB | Execution log output |
+| `variable_panel.py` | 3KB | Live variable inspector (ExecutionContext) |
+| `execution_panel.py` | 3KB | Engine state dashboard |
 
 ---
 
@@ -167,8 +204,8 @@ ActionEditor._on_type_changed()
     → _build_*_params() creates widgets
     → _collect_params() reads widget values → dict
     → get_action_class(type)(**params) → Action instance
-    → MainWindow._actions.append(action)
-    → QTableWidget row updated
+    → UndoStack.push(AddActionCommand)
+    → ActionTreeModel updated
     → engine.save_macro() → JSON file
 ```
 
@@ -187,6 +224,7 @@ MainWindow._on_play()
                 └── IfImageFound.execute()
                     ├── found → run _then_actions
                     └── not_found → run _else_actions
+    → Signals: progress_signal, step_signal, nested_step_signal
 ```
 
 ### Record (Input → Actions)
@@ -195,7 +233,7 @@ RecordingPanel → Recorder.start()
     → pynput listeners (mouse + keyboard)
     → Events filtered (skip hotkeys, debounce)
     → Recorder.stop()
-    → List of Action objects
+    → List of Action objects (thread-safe snapshot via get_actions_snapshot())
     → MainWindow._actions.extend(recorded)
 ```
 
@@ -205,6 +243,36 @@ Save: action.to_dict() → {"type": "loop_block", "params": {..., "sub_actions":
 Load: Action.from_dict(data) → recursive deserialization
 Format: {"version": "1.x", "actions": [...], "settings": {...}}
 ```
+
+---
+
+## Undo/Redo Framework
+
+Built on `QUndoStack` with 4 command types:
+
+| Command | Scope | Usage |
+|---------|-------|-------|
+| `AddActionCommand` | Top-level list | Insert/append actions |
+| `DeleteActionsCommand` | Top-level list | Remove selected actions |
+| `ReorderActionsCommand` | Top-level list | Drag-drop / move up-down |
+| `CompositeChildrenCommand` | Nested children | Snapshot-based undo for sub-action mutations |
+
+`CompositeChildrenCommand` uses a **snapshot strategy**: captures before/after state of `_sub_actions`, `_then_actions`, `_else_actions` as lists, and restores them on undo/redo. This avoids complex per-item tracking for deeply nested composites.
+
+---
+
+## Event-Driven Architecture
+
+`core/event_bus.py` provides global publish/subscribe:
+
+```python
+from core.event_bus import EventBus
+bus = EventBus.instance()
+bus.subscribe("action_added", handler)
+bus.publish("action_added", action=new_action)
+```
+
+Used for decoupling GUI panels from core logic (e.g., variable panel updates when engine sets variables).
 
 ---
 
@@ -227,58 +295,85 @@ User enters password in ActionEditor
 
 ---
 
+## CI/CD Pipeline
+
+`.github/workflows/ci.yml` runs on every push:
+
+```yaml
+steps:
+  1. Black (formatting check)
+  2. Ruff (linting — unused imports, style)
+  3. Mypy (type checking — strict on core/)
+  4. pytest (584 tests, QT_QPA_PLATFORM=offscreen)
+```
+
+Local development tools:
+- `requirements-dev.txt`: black, ruff, mypy, pytest, pytest-benchmark
+- `pyproject.toml`: centralised tool configs (mypy, ruff, pytest)
+
+---
+
 ## Design Patterns
 
 | Pattern | Where | Purpose |
 |---------|-------|---------|
-| **Command** | `Action` subclasses | Each action = self-contained command with execute/undo |
+| **Command** | `Action` subclasses, `QUndoCommand` | Each action = self-contained command with execute/undo |
 | **Registry** | `@register_action()` + `_ACTION_REGISTRY` | Type string → class lookup |
 | **Composite** | `LoopBlock`, `IfImageFound`, `IfVariable`, `IfPixelColor` | Actions contain child action lists |
 | **Builder** | `ActionEditor._build_*_params()` | Per-type widget construction |
-| **Singleton** | `MemoryManager.instance()`, `get_profiler()` | Global singletons for services |
-| **Observer** | Qt signals/slots throughout GUI | Loose coupling between components |
+| **Observer** | Qt signals/slots, `EventBus` | Loose coupling between components |
+| **Singleton** | `MemoryManager.instance()`, `EventBus.instance()`, `get_profiler()` | Global singletons for services |
 | **Decorator** | `@retry()`, `@register_action()` | Cross-cutting behavior |
 | **Template Method** | `Action.run()` calls `execute()` | Base handles delay/repeat, subclass handles logic |
 | **Strategy** | `_ACTION_HELP`, `ACTION_CATEGORIES` | Data-driven help and categories |
+| **Snapshot** | `CompositeChildrenCommand` | Capture/restore sub-action lists for undo |
+| **Pub/Sub** | `EventBus` | Decoupled cross-module communication |
 
 ---
 
 ## File Size Map
 
-File sizes indicate complexity and maintenance burden:
-
 ```
-68KB  gui/main_window.py        ██████████████████████████████████ ← Largest, needs refactoring
-43KB  gui/action_editor.py      ██████████████████████
-37KB  gui/help_content.py       ███████████████████
-26KB  core/scheduler.py         █████████████
-19KB  modules/system.py         ██████████
-19KB  modules/image.py          ██████████
-17KB  core/recorder.py          █████████
-12KB  gui/settings_dialog.py    ██████
+82KB  gui/main_window.py        ██████████████████████████████████████████ ← Largest
+46KB  gui/action_editor.py      ███████████████████████
+37KB  core/scheduler.py         ███████████████████
+36KB  gui/help_content.py       ██████████████████
+21KB  modules/system.py         ███████████
+18KB  modules/image.py          █████████
+16KB  core/recorder.py          ████████
+14KB  modules/mouse.py          ███████
+13KB  gui/settings_dialog.py    ███████
+13KB  core/engine.py            ███████
 12KB  gui/styles.py             ██████
-12KB  core/engine.py            ██████
-10KB  core/action.py            █████
-10KB  gui/recording_panel.py    █████
-10KB  modules/mouse.py          █████
+12KB  gui/action_tree_model.py  ██████
+11KB  gui/panels/action_list    ██████
+11KB  core/action.py            ██████
+ 9KB  gui/recording_panel.py    █████
  9KB  gui/coordinate_picker.py  █████
+ 9KB  core/smart_hints.py       █████
+ 8KB  core/macro_templates.py   ████
  8KB  core/execution_context.py ████
- 7KB  core/hotkey_manager.py    ████
- 7KB  gui/help_dialog.py        ████
- 7KB  core/memory_manager.py    ████
  7KB  modules/keyboard.py       ████
+ 7KB  gui/help_dialog.py        ████
+ 7KB  core/undo_commands.py     ████
  6KB  modules/pixel.py          ███
- 5KB  core/undo_commands.py     ███
- 5KB  core/crash_handler.py     ███
- 5KB  gui/image_capture.py      ███
+ 6KB  gui/panels/playback       ███
+ 6KB  gui/panels/minimap        ███
+ 6KB  core/memory_manager.py    ███
+ 6KB  core/hotkey_manager.py    ███
+ 6KB  core/crash_handler.py     ███
  5KB  main.py                   ███
- 4KB  gui/tray.py               ██
+ 5KB  gui/image_preview_widget  ███
+ 5KB  gui/image_capture.py      ███
  4KB  modules/screen.py         ██
- 4KB  core/autosave.py          ██
+ 4KB  gui/tray.py               ██
+ 4KB  gui/panels/log_panel      ██
+ 3KB  gui/panels/variable       ██
+ 3KB  gui/panels/execution      ██
  3KB  core/profiler.py          ██
- 2KB  core/retry.py             █
- 2KB  core/engine_context.py    █
+ 3KB  core/engine_context.py    ██
+ 3KB  core/autosave.py          ██
  2KB  core/secure.py            █
- 2KB  scripts/bump_version.py   █
- 0KB  version.py                ▏
+ 2KB  core/retry.py             █
+ 2KB  core/event_bus.py         █
 ```

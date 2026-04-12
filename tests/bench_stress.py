@@ -3,23 +3,24 @@
 High-Iteration Stress Test — profiles all action types under extreme loads.
 Tests: 10K, 50K, 100K iterations for core paths.
 """
-import sys
 import os
+import sys
+import threading
 import time
 import tracemalloc
-import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Mock pyautogui/pynput to avoid physical side effects
 import unittest.mock as mock
+
 sys.modules['pyautogui'] = mock.MagicMock()
 sys.modules['pynput'] = mock.MagicMock()
 sys.modules['pynput.mouse'] = mock.MagicMock()
 sys.modules['pynput.keyboard'] = mock.MagicMock()
 
+from core.engine_context import set_context, set_speed, set_stop_event
 from core.execution_context import ExecutionContext
-from core.engine_context import set_context, set_stop_event, set_speed
 
 # Setup context
 ctx = ExecutionContext()
@@ -34,18 +35,18 @@ def profile(name, fn, iterations):
     """Profile a function over N iterations."""
     tracemalloc.start()
     mem_before = tracemalloc.get_traced_memory()[0]
-    
+
     start = time.perf_counter()
     for _ in range(iterations):
         fn()
     elapsed = time.perf_counter() - start
-    
+
     mem_after = tracemalloc.get_traced_memory()[0]
     tracemalloc.stop()
-    
+
     per_iter = (elapsed / iterations) * 1_000_000  # microseconds
     mem_delta = (mem_after - mem_before) / 1024  # KB
-    
+
     print(f"  {name:40s} | {iterations:>8,} iters | "
           f"{elapsed:>7.3f}s | {per_iter:>7.1f} µs/iter | "
           f"mem Δ: {mem_delta:>+8.1f} KB")
@@ -83,8 +84,8 @@ profile("interpolate no-var 'static text'",
 # Test 3: SetVariable action
 # ============================================================================
 print("\n▶ Test 3: SetVariable action")
-import core.scheduler  # register actions
 from core.action import get_action_class
+
 SetVariable = get_action_class("set_variable")
 
 sv_set = SetVariable(var_name="x", value="0", operation="set")
@@ -137,7 +138,6 @@ print(f"  10K set_image_match (100 templates) | mem Δ: {(mem_after - mem_before
 # Test 7: LogToFile throughput
 # ============================================================================
 print("\n▶ Test 7: LogToFile throughput")
-import modules.system  # register actions
 LogToFile = get_action_class("log_to_file")
 log_file = os.path.join(os.path.dirname(__file__), "_stress_log.txt")
 lf = LogToFile(message="Test iteration ${row}", file_path=log_file)
@@ -168,6 +168,7 @@ os.unlink(test_file)
 # ============================================================================
 print("\n▶ Test 9: LoopBlock × SetVariable (simulated 10K iterations)")
 from core.scheduler import LoopBlock
+
 sv_counter = SetVariable(var_name="loop_counter", value="", operation="increment")
 ctx.set_var("loop_counter", 0)
 
@@ -191,7 +192,8 @@ print(f"  LoopBlock(10K) × SetVariable(inc) | {elapsed:.3f}s | "
 # Test 10: DPAPI encrypt/decrypt throughput
 # ============================================================================
 print("\n▶ Test 10: DPAPI encrypt/decrypt")
-from core.secure import encrypt, decrypt
+from core.secure import decrypt, encrypt
+
 encrypted = encrypt("P@ssw0rd123!Secret")
 profile("encrypt (18 chars)", lambda: encrypt("P@ssw0rd123!Secret"), 1_000)
 profile("decrypt (18 chars)", lambda: decrypt(encrypted), 1_000)

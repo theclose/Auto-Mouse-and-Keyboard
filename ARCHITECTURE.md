@@ -1,8 +1,8 @@
 # Auto Mouse & Keyboard — Architecture Guide
 
-> **Version**: 2.9.7 · **Codebase**: 48 source files · **31 registered action types**
+> **Version**: 3.0.0 · **Codebase**: 52 source files · **34 registered action types**
 > **Framework**: PyQt6 (desktop), pyautogui + opencv (automation)
-> **CI**: GitHub Actions (Black + Ruff + Mypy + pytest)
+> **CI**: GitHub Actions (Ruff + pytest)
 
 ## Table of Contents
 1. [System Overview](#system-overview)
@@ -30,6 +30,7 @@ graph TB
 
     subgraph GUI["gui/ — User Interface"]
         MW[main_window.py<br/>TreeView + Toolbar]
+        CN[constants.py<br/>Theme & Icons]
         AE[action_editor.py<br/>Create/Edit Actions]
         ATM[action_tree_model.py<br/>QAbstractItemModel]
         RP[recording_panel.py<br/>Record Controls]
@@ -102,7 +103,8 @@ graph TB
 | File | Size | Key Classes | Purpose |
 |------|------|-------------|---------|
 | `action.py` | 11KB | `Action`, `DelayAction`, `register_action()`, `audit_registry()` | Base class, registry, serialization |
-| `engine.py` | 13KB | `MacroEngine` | Threaded macro execution with pause/resume/stop, signals |
+| `app_paths.py` | 1KB | `APP_DIR`, `LOG_DIR`, `CONFIG_PATH` | **Single source of truth** for all paths (no import side-effects) |
+| `engine.py` | 15KB | `MacroEngine` | Threaded macro execution with pause/resume/stop, signals, `__current_macro_dir__` |
 | `scheduler.py` | 37KB | `LoopBlock`, `IfImageFound`, `IfPixelColor`, `IfVariable`, `SetVariable`, `SplitString`, `Comment` | **7 flow control actions** (Composite Pattern) |
 | `execution_context.py` | 8KB | `ExecutionContext` | Shared state: variables, image matches, system vars, interpolation |
 | `engine_context.py` | 3KB | `set_speed()`, `get_context()`, `is_stopped()`, `scaled_sleep()` | Thread-local context helpers |
@@ -110,7 +112,7 @@ graph TB
 | `hotkey_manager.py` | 6KB | `HotkeyManager` | Win32 RegisterHotKey integration |
 | `undo_commands.py` | 7KB | `AddActionCommand`, `DeleteActionsCommand`, `ReorderActionsCommand`, `CompositeChildrenCommand` | Qt QUndoCommand for action list + nested sub-action mutations |
 | `event_bus.py` | 2KB | `EventBus` | Global publish/subscribe for decoupled GUI↔Core communication |
-| `smart_hints.py` | 9KB | `analyze_hints()` | Static analysis of macro: detects empty composites, duplicate delays, missing delays, etc. |
+| `smart_hints.py` | 12KB | `analyze_hints()` | **11-rule** preflight analyzer: detects empty commands, plaintext secrets, missing paths, infinite loops, etc. (recursive) |
 | `macro_templates.py` | 8KB | `get_templates()` | Preset macro templates (e.g., auto-clicker, form filler) |
 | `autosave.py` | 3KB | `AutoSaveManager` | Timer-based auto-save with backup rotation |
 | `crash_handler.py` | 6KB | `CrashHandler`, `CrashDialog` | Global sys.excepthook with crash report dialog |
@@ -132,11 +134,11 @@ Each module is imported at startup in `gui/main_window.py`.
 | `keyboard.py` | key_press, key_combo, type_text, hotkey | 4 | pyautogui + SendInput |
 | `image.py` | wait_for_image, click_on_image, image_exists, take_screenshot | 4 | OpenCV template matching |
 | `pixel.py` | check_pixel_color, wait_for_color | 2 | Single-pixel fast check |
-| `system.py` | activate_window, log_to_file, read_clipboard, read_file_line, write_to_file, secure_type_text, run_macro, capture_text | 8 | Window mgmt, file I/O, OCR |
+| `system.py` | activate_window, log_to_file, read_clipboard, read_file_line, write_to_file, secure_type_text, run_macro, run_command, capture_text | 9 | Window mgmt, file I/O, OCR |
 | `screen.py` | *(no registered types)* | 0 | Screenshot utilities |
 
 > **7 additional** flow control types are in `core/scheduler.py` (NOT modules/).
-> **Total: 31 registered types** across all files.
+> **Total: 34 registered types** across all files.
 
 ---
 
@@ -147,6 +149,7 @@ Each module is imported at startup in `gui/main_window.py`.
 | File | Size | Key Classes | Purpose |
 |------|------|-------------|---------|
 | `main_window.py` | 82KB | `MainWindow` | Main app: TreeView, toolbar, log panel, drag-drop, undo stack |
+| `constants.py` | 2KB | `TYPE_ICONS` | Centralized action icons and colors |
 | `action_editor.py` | 46KB | `ActionEditor` | Create/edit dialog: per-type param builders |
 | `action_tree_model.py` | 12KB | `ActionTreeModel` | QAbstractItemModel for hierarchical action display (composites as tree nodes) |
 | `settings_dialog.py` | 13KB | `SettingsDialog` | Hotkeys, speed, defaults, paths |
@@ -154,7 +157,7 @@ Each module is imported at startup in `gui/main_window.py`.
 | `coordinate_picker.py` | 9KB | `CoordinatePickerOverlay` | Full-screen crosshair + magnifier + color preview |
 | `image_preview_widget.py` | 5KB | `ImagePreviewWidget` | Image template preview with screen capture |
 | `help_dialog.py` | 7KB | `HelpPopup` | Floating help window for action types |
-| `help_content.py` | 36KB | `_ACTION_HELP` dict | Rich HTML help text with scenarios for all 31 types |
+| `help_content.py` | 36KB | `_ACTION_HELP` dict | Rich HTML help text with scenarios for all 34 types |
 | `styles.py` | 12KB | `DARK_COLORS`, `get_stylesheet()` | Theme palette + QSS template engine |
 | `tray.py` | 4KB | `SystemTrayManager` | System tray icon with state-colored indicator |
 | `image_capture.py` | 5KB | `ImageCaptureOverlay` | Screen snipping for image templates |
@@ -212,6 +215,7 @@ ActionEditor._on_type_changed()
 ### Execute Macro (Play)
 ```
 MainWindow._on_play()
+    → _preflight_check() — smart_hints blocks errors, warns warnings
     → MacroEngine.load_actions(deep_copy of _actions)
     → QThread: engine._run_action_list()
         → for action in actions:
@@ -304,7 +308,8 @@ steps:
   1. Black (formatting check)
   2. Ruff (linting — unused imports, style)
   3. Mypy (type checking — strict on core/)
-  4. pytest (584 tests, QT_QPA_PLATFORM=offscreen)
+  4. Thread-Safety Scan (scripts/lint_thread_safety.py)
+  5. pytest (880 tests, QT_QPA_PLATFORM=offscreen)
 ```
 
 Local development tools:

@@ -4,7 +4,13 @@ Thread-local execution context for the macro engine.
 Provides speed factor and stop event without modifying Action signatures.
 Engine sets speed/stop_event before running; Action.run() and
 DelayAction.execute() read via scaled_sleep() which auto-checks stop.
+
+v3.1: Speed and jitter are now per-thread (thread-local) instead of global,
+enabling safe multi-engine concurrent execution.
 """
+
+__all__ = ['ExecutionContext', 'get_context', 'is_stopped']
+
 
 import threading
 import time
@@ -15,22 +21,15 @@ if TYPE_CHECKING:
 
 _ctx = threading.local()
 
-# P0-2: Speed factor uses shared variable (not thread-local) for runtime updates
-_speed_lock = threading.Lock()
-_global_speed: float = 1.0
-
 
 def set_speed(factor: float) -> None:
-    """Set playback speed (0.1 – 10.0). Thread-safe, callable mid-run."""
-    global _global_speed
-    with _speed_lock:
-        _global_speed = max(0.1, min(10.0, factor))
+    """Set playback speed for the current engine thread (0.1 – 10.0)."""
+    _ctx.speed = max(0.1, min(10.0, factor))
 
 
 def get_speed() -> float:
-    """Get current speed factor (default 1.0). Thread-safe."""
-    with _speed_lock:
-        return _global_speed
+    """Get current speed factor (default 1.0). Thread-local."""
+    return getattr(_ctx, "speed", 1.0)
 
 
 def set_stop_event(event: threading.Event) -> None:
@@ -88,3 +87,22 @@ def emit_nested_step(path: list[int], display_name: str) -> None:
     fn = getattr(_ctx, "nested_callback", None)
     if fn is not None:
         fn(path, display_name)
+
+
+# -- v3.0.2: delay jitter for humanized playback -------------------------
+def set_jitter(percent: float) -> None:
+    """Set delay jitter for the current engine thread (0.0–0.5). Thread-local."""
+    _ctx.jitter = max(0.0, min(0.5, percent))
+
+
+def get_jitter() -> float:
+    """Get current jitter percent (default 0.0). Thread-local."""
+    return getattr(_ctx, "jitter", 0.0)
+
+
+def reset_globals() -> None:
+    """Reset all thread-local state — for test isolation."""
+    for attr in ("stop_event", "exec_context", "nested_callback", "speed", "jitter"):
+        if hasattr(_ctx, attr):
+            delattr(_ctx, attr)
+

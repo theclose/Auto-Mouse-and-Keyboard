@@ -10,6 +10,9 @@ Usage:
     bus.engine_started.connect(my_handler)
 """
 
+__all__ = ['AppEventBus']
+
+
 from PyQt6.QtCore import QObject, pyqtSignal
 
 
@@ -46,15 +49,35 @@ class AppEventBus(QObject):
         """Reset singleton (for testing)."""
         cls._instance = None
 
+    _SIGNAL_PAIRS = [
+        ("started_signal", "engine_started"),
+        ("stopped_signal", "engine_stopped"),
+        ("error_signal", "engine_error"),
+        ("progress_signal", "engine_progress"),
+        ("action_signal", "engine_action"),
+        ("loop_signal", "engine_loop"),
+        ("step_signal", "engine_step"),
+    ]
+
     def bridge_engine(self, engine) -> None:
         """Connect engine signals to bus signals (one-way forward).
 
         Call this after creating/replacing the MacroEngine instance.
+        Automatically disconnects previous engine to prevent duplicates.
         """
-        engine.started_signal.connect(self.engine_started.emit)
-        engine.stopped_signal.connect(self.engine_stopped.emit)
-        engine.error_signal.connect(self.engine_error.emit)
-        engine.progress_signal.connect(self.engine_progress.emit)
-        engine.action_signal.connect(self.engine_action.emit)
-        engine.loop_signal.connect(self.engine_loop.emit)
-        engine.step_signal.connect(self.engine_step.emit)
+        # Disconnect previous engine (H4: prevent connection leak)
+        old = getattr(self, "_bridged_engine", None)
+        old_refs = getattr(self, "_bridge_refs", [])
+        if old is not None:
+            for eng_sig_name, ref in old_refs:
+                try:
+                    getattr(old, eng_sig_name).disconnect(ref)
+                except (TypeError, RuntimeError):
+                    pass  # Already disconnected or engine destroyed
+        # Connect new engine and store references for future disconnect
+        self._bridged_engine = engine
+        self._bridge_refs = []
+        for eng_sig, bus_sig in self._SIGNAL_PAIRS:
+            bus_emit = getattr(self, bus_sig).emit  # Capture reference
+            getattr(engine, eng_sig).connect(bus_emit)
+            self._bridge_refs.append((eng_sig, bus_emit))

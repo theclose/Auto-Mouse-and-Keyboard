@@ -34,7 +34,8 @@ class AutoSaveManager:
         self._interval = interval_s
         self._max_backups = max_backups
         self._running = False
-        self._dirty = False
+        self._dirty_event = threading.Event()
+        self._stop_event = threading.Event()  # HARD-3: for interruptible sleep
         self._thread: threading.Thread | None = None
         self._save_callback: Callable[[], bool] | None = None
         self._backup_dir: Path | None = None
@@ -53,36 +54,39 @@ class AutoSaveManager:
         self._backup_dir = backup_dir
         self._current_file = current_file
         self._running = True
+        self._stop_event.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="AutoSave")
         self._thread.start()
         logger.info("AutoSave started (interval=%ds)", self._interval)
 
     def stop(self) -> None:
         self._running = False
+        self._stop_event.set()  # HARD-3: wake thread immediately
         if self._thread:
             self._thread.join(timeout=2.0)
             self._thread = None
 
     def mark_dirty(self) -> None:
         """Flag that changes need saving."""
-        self._dirty = True
+        self._dirty_event.set()
 
     def mark_clean(self) -> None:
-        self._dirty = False
+        self._dirty_event.clear()
 
     def set_current_file(self, path: Path | None) -> None:
         self._current_file = path
 
     def _loop(self) -> None:
         while self._running:
-            time.sleep(self._interval)
+            # HARD-3: Interruptible sleep — wakes immediately on stop()
+            self._stop_event.wait(timeout=self._interval)
             if not self._running:
                 break
-            if self._dirty and self._save_callback:
+            if self._dirty_event.is_set() and self._save_callback:
                 try:
                     self._create_backup()
                     if self._save_callback():
-                        self._dirty = False
+                        self._dirty_event.clear()
                         logger.info("AutoSave completed")
                 except Exception as e:
                     logger.exception("AutoSave failed: %s", e)

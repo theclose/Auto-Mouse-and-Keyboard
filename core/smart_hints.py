@@ -67,7 +67,10 @@ def analyze_hints(actions: list[Action]) -> list[dict[str, str | int]]:
 
         # Rule 4: LoopBlock with count=0 (infinite) without break condition
         if atype == "loop_block":
-            loop_count = getattr(action, "loop_count", 1)
+            # LoopBlock uses repeat_count (0 = infinite)
+            loop_count = getattr(action, "repeat_count", None)
+            if loop_count is None:
+                loop_count = getattr(action, "loop_count", 1)  # fallback for compat
             if loop_count == 0:
                 # Check if sub-actions have any IfVariable that could break
                 children = getattr(action, "children", [])
@@ -109,7 +112,7 @@ def analyze_hints(actions: list[Action]) -> list[dict[str, str | int]]:
 
         # Rule 6: Image action without template path
         if atype in ("wait_for_image", "click_on_image", "image_exists"):
-            template = getattr(action, "template_path", "")
+            template = getattr(action, "image_path", "") or getattr(action, "template_path", "")
             if not template:
                 hints.append(
                     {
@@ -139,6 +142,48 @@ def analyze_hints(actions: list[Action]) -> list[dict[str, str | int]]:
                             "action_idx": i,
                         }
                     )
+
+        # Rule 9: RunCommand with empty command
+        if atype == "run_command":
+            cmd = getattr(action, "command", "")
+            if not cmd or not cmd.strip():
+                hints.append(
+                    {
+                        "level": "error",
+                        "icon": "❌",
+                        "message": f"Action #{i+1}: RunCommand chưa có lệnh",
+                        "action_idx": i,
+                    }
+                )
+
+        # Rule 10: SecureTypeText with plaintext (not encrypted)
+        if atype == "secure_type_text":
+            from core.secure import is_encrypted
+
+            enc_text = getattr(action, "encrypted_text", "")
+            if enc_text and not is_encrypted(enc_text):
+                hints.append(
+                    {
+                        "level": "warning",
+                        "icon": "🔓",
+                        "message": f"Action #{i+1}: SecureTypeText chứa plaintext "
+                        f"— nên mã hóa để bảo mật",
+                        "action_idx": i,
+                    }
+                )
+
+        # Rule 11: RunMacro with empty or missing path
+        if atype == "run_macro":
+            macro_path = getattr(action, "macro_path", "")
+            if not macro_path or not macro_path.strip():
+                hints.append(
+                    {
+                        "level": "error",
+                        "icon": "❌",
+                        "message": f"Action #{i+1}: RunMacro chưa có đường dẫn macro",
+                        "action_idx": i,
+                    }
+                )
 
     # Global hints
     total_delay = sum(a.delay_after for a in actions)
@@ -178,7 +223,7 @@ def analyze_hints(actions: list[Action]) -> list[dict[str, str | int]]:
 
         # Rule 6 (nested): Image action without template path
         if atype in ("wait_for_image", "click_on_image", "image_exists"):
-            template = getattr(nested_action, "template_path", "")
+            template = getattr(nested_action, "image_path", "") or getattr(nested_action, "template_path", "")
             if not template:
                 hints.append(
                     {

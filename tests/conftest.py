@@ -10,10 +10,9 @@ Key protections:
 4. Ensures QApplication singleton exists
 """
 
-import sys
 import os
+import sys
 import time
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -77,6 +76,7 @@ def _mock_heavy_screen_captures(monkeypatch):
     """
     try:
         import numpy as np
+
         import modules.screen
         _fake_img = np.zeros((10, 10, 3), dtype=np.uint8)
 
@@ -99,7 +99,6 @@ def _mock_heavy_screen_captures(monkeypatch):
 @pytest.fixture(autouse=True)
 def _test_timeout():
     """Kill tests that hang for more than 30 seconds."""
-    import threading
     start = time.perf_counter()
     yield
     elapsed = time.perf_counter() - start
@@ -117,3 +116,58 @@ def _qapp():
     from PyQt6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication([])
     return app
+
+
+# ============================================================
+# 5. Reset engine_context global state between tests (QA: L6)
+# ============================================================
+
+@pytest.fixture(autouse=True)
+def _reset_engine_globals():
+    """Prevent global state pollution between tests."""
+    yield
+    try:
+        from core.engine_context import reset_globals
+        reset_globals()
+    except ImportError:
+        pass
+
+
+# ============================================================
+# 6. Reset EventBus singleton between tests (QA: H4)
+# ============================================================
+
+@pytest.fixture(autouse=True)
+def _reset_event_bus():
+    """Prevent EventBus connection accumulation across tests."""
+    yield
+    try:
+        from core.event_bus import AppEventBus
+        AppEventBus.reset()
+    except ImportError:
+        pass
+
+
+# ============================================================
+# 7. Real MainWindow fixture for smoke/lifecycle tests (BS-3)
+# ============================================================
+
+@pytest.fixture()
+def real_main_window():
+    """Create a real MainWindow (full __init__) with mocked system hooks.
+
+    Runs _setup_central(), _setup_toolbar() etc. for real,
+    so all signal connections and widget types are verified.
+    """
+    from unittest.mock import patch
+
+    with patch("core.recorder.keyboard", create=True):
+        from gui.main_window import MainWindow
+
+        mw = MainWindow()
+        yield mw
+        # Prevent QApplication.quit() during teardown
+        mw._on_quit = lambda: None
+        mw._config.setdefault("ui", {})["minimize_to_tray"] = False
+        mw._undo_stack.setClean()
+        mw.close()

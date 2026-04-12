@@ -42,35 +42,10 @@ _TYPE_COLORS = {
     "log_to_file": "#16a085",
     "run_macro": "#8e44ad",
     "capture_text": "#d35400",
+    "run_command": "#2980b9",
 }
 
-# Type icons
-_TYPE_ICONS = {
-    "mouse_click": "🖱",
-    "mouse_double_click": "🖱",
-    "mouse_right_click": "🖱",
-    "mouse_move": "🖱",
-    "mouse_drag": "🖱",
-    "mouse_scroll": "🖱",
-    "key_press": "⌨",
-    "key_combo": "⌨",
-    "type_text": "⌨",
-    "hotkey": "⌨",
-    "delay": "⏱",
-    "wait_for_image": "🖼",
-    "click_on_image": "🖼",
-    "image_exists": "🖼",
-    "loop_block": "🔁",
-    "if_image_found": "❓",
-    "if_pixel_color": "🎯",
-    "if_variable": "📏",
-    "set_variable": "📊",
-    "comment": "💬",
-    "activate_window": "🖥",
-    "log_to_file": "📝",
-    "run_macro": "▶️",
-    "capture_text": "🔍",
-}
+from gui.constants import TYPE_ICONS as _TYPE_ICONS
 
 
 class MiniMapWidget(QWidget):
@@ -180,11 +155,37 @@ class MiniMapWidget(QWidget):
         """Reset all highlights."""
         self._current_idx = -1
         self._completed_idx = -1
+        self._viewport_first = -1
+        self._viewport_last = -1
         for i, label in enumerate(self._labels):
             atype = getattr(self._actions[i], "ACTION_TYPE", "") if i < len(self._actions) else ""
             color = _TYPE_COLORS.get(atype, "#888888")
             label.setStyleSheet(
                 f"padding: 2px 4px; border-left: 3px solid {color}; "
+                f"font-size: 8pt; background: transparent; "
+                f"border-radius: 0px;"
+            )
+
+    def set_visible_range(self, first: int, last: int) -> None:
+        """Highlight the viewport range currently visible in the tree.
+
+        Adds a subtle right-border indicator to labels within the viewport.
+        """
+        self._viewport_first = first
+        self._viewport_last = last
+        for i, label in enumerate(self._labels):
+            atype = getattr(self._actions[i], "ACTION_TYPE", "") if i < len(self._actions) else ""
+            color = _TYPE_COLORS.get(atype, "#888888")
+            # Skip if this is the currently executing action (keep its highlight)
+            if i == self._current_idx:
+                continue
+            # Viewport indicator: subtle right border
+            in_viewport = first <= i <= last
+            viewport_css = "border-right: 2px solid rgba(0, 120, 215, 0.5); " if in_viewport else ""
+            dim_css = "color: #666; " if (self._current_idx >= 0 and i < self._current_idx) else ""
+            label.setStyleSheet(
+                f"padding: 2px 4px; border-left: 3px solid {color}; "
+                f"{viewport_css}{dim_css}"
                 f"font-size: 8pt; background: transparent; "
                 f"border-radius: 0px;"
             )

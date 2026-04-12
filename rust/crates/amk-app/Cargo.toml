@@ -1,0 +1,22 @@
+[package]
+name = "amk-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[dependencies]
+amk-domain = { path = "../amk-domain" }
+amk-platform-win = { path = "../amk-platform-win" }
+amk-runtime = { path = "../amk-runtime" }
+amk-schema = { path = "../amk-schema" }
+anyhow.workspace = true
+serde_json.workspace = true
+time.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+wait-timeout.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

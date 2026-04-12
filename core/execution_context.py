@@ -29,6 +29,10 @@ class ExecutionContext:
         self.action_count: int = 0
         self.error_count: int = 0
         self.start_time: float = 0.0
+        # ROI cache fields (C3: initialized here, accessed under lock)
+        self._roi_cache_key: str | None = None
+        self._roi_cache_val: Optional[tuple[int, int, int, int]] = None
+        self._roi_cache_time: float = 0.0
 
     # -- Variables -----------------------------------------------------------
     def set_var(self, name: str, value: Any) -> None:
@@ -98,17 +102,19 @@ class ExecutionContext:
         """Cached version — uses last result if template hasn't changed.
         P1-5: TTL of 300s (5 min) to prevent stale ROI in long-running macros.
         """
-        cached_key = getattr(self, "_roi_cache_key", None)
-        cached_val = getattr(self, "_roi_cache_val", None)
-        cached_time = getattr(self, "_roi_cache_time", 0.0)
+        with self._lock:
+            cached_key = self._roi_cache_key
+            cached_val = self._roi_cache_val
+            cached_time = self._roi_cache_time
         if (
             cached_key == template_path and cached_val is not None and (time.perf_counter() - cached_time) < 300
         ):  # 5 min TTL
             return cached_val
         result = self.suggest_roi(template_path, margin)
-        self._roi_cache_key = template_path
-        self._roi_cache_val = result
-        self._roi_cache_time = time.perf_counter()
+        with self._lock:
+            self._roi_cache_key = template_path
+            self._roi_cache_val = result
+            self._roi_cache_time = time.perf_counter()
         return result
 
     # -- Pixel result --------------------------------------------------------
@@ -122,9 +128,10 @@ class ExecutionContext:
 
     # -- Stats ---------------------------------------------------------------
     def record_action(self, success: bool) -> None:
-        self.action_count += 1
-        if not success:
-            self.error_count += 1
+        with self._lock:
+            self.action_count += 1
+            if not success:
+                self.error_count += 1
 
     def get_elapsed_seconds(self) -> float:
         if self.start_time:
@@ -138,10 +145,13 @@ class ExecutionContext:
             self._last_image_match = None
             self._last_pixel_color = None
             self._roi_history.clear()
-        self.iteration_count = 0
-        self.action_count = 0
-        self.error_count = 0
-        self.start_time = time.perf_counter()
+            self.iteration_count = 0
+            self.action_count = 0
+            self.error_count = 0
+            self.start_time = time.perf_counter()
+            self._roi_cache_key = None
+            self._roi_cache_val = None
+            self._roi_cache_time = 0.0
 
     # -- Checkpoint / Resume (1.1) -------------------------------------------
     def snapshot(self) -> dict:

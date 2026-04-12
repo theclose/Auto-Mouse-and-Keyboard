@@ -17,46 +17,43 @@ from numpy.typing import NDArray
 
 logger = logging.getLogger(__name__)
 
-# Thread-safe mss singleton
-_sct: Any = None
-_sct_lock = threading.Lock()
+# Thread-local mss instances: each thread gets its own handle (no lock contention)
+_thread_local = threading.local()
 
 
 def _get_sct() -> Any:
-    global _sct
-    if _sct is None:
-        with _sct_lock:
-            if _sct is None:
-                _sct = mss.mss()
-    assert _sct is not None
-    return _sct
+    """Get thread-local mss instance, creating one if needed."""
+    sct = getattr(_thread_local, 'sct', None)
+    if sct is None:
+        _thread_local.sct = mss.mss()
+        sct = _thread_local.sct
+    if sct is None:
+        raise RuntimeError("Failed to initialize mss screen capture")
+    return sct
 
 
 def _reset_sct() -> Any:
-    """Recreate mss instance (after stale handle error)."""
-    global _sct
-    with _sct_lock:
-        try:
-            if _sct:
-                _sct.close()
-        except Exception:
-            pass
-        _sct = mss.mss()
-        logger.info("mss instance recreated")
-        return _sct
+    """Recreate mss instance for current thread (after stale handle error)."""
+    old = getattr(_thread_local, 'sct', None)
+    try:
+        if old:
+            old.close()
+    except Exception:
+        pass
+    _thread_local.sct = mss.mss()
+    logger.info("mss instance recreated (thread=%s)", threading.current_thread().name)
+    return _thread_local.sct
 
 
 def _safe_grab(region: dict[str, int]) -> NDArray[np.uint8]:
-    """Grab with auto-recovery on mss errors (OPT-5: no ThreadPool overhead)."""
+    """Grab with auto-recovery on mss errors. Lock-free per-thread."""
     try:
         sct = _get_sct()
-        with _sct_lock:
-            return np.array(sct.grab(region))
+        return np.array(sct.grab(region))
     except Exception as e:
         logger.warning("mss grab failed (%s), recreating...", e)
         sct = _reset_sct()
-        with _sct_lock:
-            return np.array(sct.grab(region))
+        return np.array(sct.grab(region))
 
 
 def capture_full_screen() -> NDArray[np.uint8]:
@@ -143,3 +140,23 @@ def save_screenshot(filepath: str, region: tuple[int, int, int, int] | None = No
     cv2.imwrite(filepath, img)
     logger.info("Screenshot saved: %s", filepath)
     return filepath
+
+
+def capture_window(hwnd: int) -> NDArray[np.uint8]:
+    """
+    Capture a specific window using PrintWindow (Win32).
+
+    Works on hidden, minimized, or occluded windows — the target does NOT
+    need to be in the foreground. Returns an OpenCV BGR numpy array.
+
+    This is complementary to mss-based capture: mss captures screen regions,
+    while this captures a specific window regardless of its visibility state.
+
+    Args:
+        hwnd: Window handle (HWND) to capture.
+
+    Returns:
+        BGR numpy array (H, W, 3).
+    """
+    from core.win32_stealth import capture_window as _capture_win32
+    return _capture_win32(hwnd)

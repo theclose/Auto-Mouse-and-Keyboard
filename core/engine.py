@@ -4,20 +4,36 @@ Runs a list of Actions in a worker thread with pause/resume/stop support,
 progress signals, and fail-safe emergency stop.
 """
 
+__all__ = ['MacroEngine', 'PlaybackReport']
+
+
 import copy
 import json
 import logging
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QMutex, QObject, QThread, QWaitCondition, pyqtSignal
+from PyQt6.QtCore import QMutex, QMutexLocker, QObject, QThread, QWaitCondition, pyqtSignal
 
 from core.action import Action
 from core.execution_context import ExecutionContext
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PlaybackReport:
+    """Per-run statistics collected by MacroEngine."""
+    total: int = 0
+    success: int = 0
+    failed: int = 0
+    skipped: int = 0
+    duration_ms: int = 0
+    first_error: str = ""
+    first_error_idx: int = -1
 
 
 class MacroEngine(QThread):
@@ -42,9 +58,12 @@ class MacroEngine(QThread):
     loop_signal = pyqtSignal(int, int)
     step_signal = pyqtSignal(int, str)  # L6: (action_index, display_name)
     nested_step_signal = pyqtSignal(list, str)  # v3.0: ([path_indices], display_name)
+    duration_signal = pyqtSignal(int, int)  # H3: (action_index, duration_ms)
+    report_signal = pyqtSignal(object)  # PlaybackReport — emitted on engine stop
 
     def __init__(self, parent: "QObject | None" = None) -> None:
         super().__init__(parent)
+        self.setObjectName("MacroEngine")
 
         self._actions: list[Action] = []
         self._loop_count: int = 1  # 0 = infinite
@@ -63,11 +82,16 @@ class MacroEngine(QThread):
         # Checkpoint/resume support
         self._last_checkpoint: dict | None = None
         self._resume_from_idx: int = 0
+        self._exec_ctx: Any = None  # Set in run(), init here to avoid getattr
+        self._macro_file_path: str = ""  # Set via set_macro_file() before start
+        self._jitter_percent: float = 0.0  # Delay jitter (0-0.5)
+        self._report: PlaybackReport = PlaybackReport()
 
     # -- public API ----------------------------------------------------------
     def load_actions(self, actions: list[Action]) -> None:
-        """Set the action list to execute (deep copy for thread safety)."""
-        self._actions = copy.deepcopy(actions)
+        """Set the action list to execute (lazy deep copy for thread safety)."""
+        self._source_actions = list(actions)  # shallow copy of list, keep refs
+        self._actions: list[Action | None] = [None] * len(actions)  # lazy slots
 
     def set_loop(self, count: int = 1, delay_ms: int = 0, stop_on_error: bool = False) -> None:
         """Configure looping. count=0 means infinite."""
@@ -75,31 +99,36 @@ class MacroEngine(QThread):
         self._loop_delay_ms = max(0, delay_ms)
         self._stop_on_error = stop_on_error
 
+    def set_macro_file(self, filepath: str) -> None:
+        """Set the current macro file path for context resolution."""
+        self._macro_file_path = filepath
+
     def set_speed_factor(self, factor: float) -> None:
         """Set playback speed multiplier (0.1 – 10.0)."""
         self._speed_factor = max(0.1, min(10.0, factor))
 
+    def set_jitter(self, percent: float) -> None:
+        """Set delay jitter percentage (0.0 – 0.5). 0.2 = ±20% randomize."""
+        self._jitter_percent = max(0.0, min(0.5, percent))
+
     def pause(self) -> None:
-        self._mutex.lock()
+        locker = QMutexLocker(self._mutex)  # noqa: F841 — RAII lock
         self._is_paused = True
-        self._mutex.unlock()
         logger.info("Engine paused")
 
     def resume(self) -> None:
-        self._mutex.lock()
+        locker = QMutexLocker(self._mutex)  # noqa: F841 — RAII lock
         self._is_paused = False
         self._pause_condition.wakeAll()
-        self._mutex.unlock()
         logger.info("Engine resumed")
 
     def stop(self) -> None:
-        self._mutex.lock()
+        locker = QMutexLocker(self._mutex)  # noqa: F841 — RAII lock
         self._is_stopped = True
         self._is_paused = False
         self._step_mode = False
         self._stop_event.set()
         self._pause_condition.wakeAll()
-        self._mutex.unlock()
         logger.info("Engine stop requested")
 
     def set_step_mode(self, enabled: bool) -> None:
@@ -109,10 +138,9 @@ class MacroEngine(QThread):
 
     def step_next(self) -> None:
         """L6: Resume to execute the next single action (used in step mode)."""
-        self._mutex.lock()
+        locker = QMutexLocker(self._mutex)  # noqa: F841 — RAII lock
         self._is_paused = False
         self._pause_condition.wakeAll()
-        self._mutex.unlock()
 
     def get_last_checkpoint(self) -> dict | None:
         """1.1: Get the last saved checkpoint (action_idx + context snapshot)."""
@@ -157,6 +185,17 @@ class MacroEngine(QThread):
         set_context(self._exec_ctx)
         self._last_checkpoint = None
         self._resume_from_idx = 0
+        # Initialize playback report
+        self._report = PlaybackReport(total=len(self._actions))
+        _run_start = time.perf_counter()
+        # Set jitter in thread-local context
+        from core.engine_context import set_jitter
+        set_jitter(self._jitter_percent)
+        # Set macro file/dir context for path resolution in actions
+        if self._macro_file_path:
+            macro_path = Path(self._macro_file_path).resolve()
+            self._exec_ctx.set_var("__current_macro_file__", str(macro_path))
+            self._exec_ctx.set_var("__current_macro_dir__", str(macro_path.parent))
         # v3.0: register nested callback for composite actions
         from core.engine_context import set_nested_callback
 
@@ -190,15 +229,22 @@ class MacroEngine(QThread):
             logger.error("Engine fatal error: %s", exc, exc_info=True)
             self.error_signal.emit(f"Fatal: {exc}")
         finally:
+            self._report.duration_ms = int((time.perf_counter() - _run_start) * 1000)
+            self.report_signal.emit(self._report)
+            # P3-A: Log profiler report at end of run
+            try:
+                from core.profiler import get_profiler
+                get_profiler().log_report()
+            except Exception:
+                pass  # Best-effort
             self.stopped_signal.emit()
-            logger.info("Engine finished")
+            logger.info("Engine finished — %s", self._report)
 
     def _check_pause_or_stop(self) -> bool:
         """Handle pause/stop. Returns False if stopped."""
-        self._mutex.lock()
+        locker = QMutexLocker(self._mutex)  # noqa: F841 — RAII lock
         while self._is_paused and not self._is_stopped:
             self._pause_condition.wait(self._mutex)
-        self._mutex.unlock()
         return not self._is_stopped
 
     def _execute_single_action(self, idx: int, action: "Action") -> bool:
@@ -209,6 +255,11 @@ class MacroEngine(QThread):
         self.progress_signal.emit(idx + 1, len(self._actions))
         self.action_signal.emit(action.get_display_name())
         logger.info("Executing [%d/%d]: %s", idx + 1, len(self._actions), action.get_display_name())
+        # v3.1: Sync speed/jitter from engine object → thread-local
+        # (allows real-time speed changes from UI even with thread-local storage)
+        from core.engine_context import set_jitter, set_speed
+        set_speed(self._speed_factor)
+        set_jitter(self._jitter_percent)
         # 1.1: Save checkpoint before execution
         if self._exec_ctx:
             self._last_checkpoint = {
@@ -222,6 +273,16 @@ class MacroEngine(QThread):
                 success = True  # Defensive: treat None as success
             if self._exec_ctx:
                 self._exec_ctx.record_action(success)
+            # Collect stats for PlaybackReport
+            if success:
+                self._report.success += 1
+            else:
+                self._report.failed += 1
+                if not self._report.first_error:
+                    self._report.first_error = f"{action.get_display_name()}"
+                    self._report.first_error_idx = idx
+            # H3: Propagate timing back to UI
+            self.duration_signal.emit(idx, action.last_duration_ms)
             if not success:
                 self.error_signal.emit(f"Action failed: {action.get_display_name()}")
                 if self._stop_on_error:
@@ -230,27 +291,37 @@ class MacroEngine(QThread):
             # L6: Step mode — pause after each action
             if self._step_mode and not self._is_stopped:
                 self.step_signal.emit(idx, action.get_display_name())
-                self._mutex.lock()
+                locker = QMutexLocker(self._mutex)  # noqa: F841 — RAII lock
                 self._is_paused = True
                 while self._is_paused and not self._is_stopped:
                     self._pause_condition.wait(self._mutex)
-                self._mutex.unlock()
         except Exception as exc:
             error_msg = f"Error in {action.get_display_name()}: {exc}"
             logger.error(error_msg, exc_info=True)
             self.error_signal.emit(error_msg)
+            self._report.failed += 1
+            if not self._report.first_error:
+                self._report.first_error = error_msg
+                self._report.first_error_idx = idx
             if self._stop_on_error:
                 return False
         return True
 
     def _run_action_list(self) -> bool:
         """Run all actions once. Returns False if stopped."""
-        for idx, action in enumerate(self._actions):
+        for idx in range(len(self._actions)):
             if not self._check_pause_or_stop():
                 return False
+            action = self._ensure_action(idx)
             if not self._execute_single_action(idx, action):
                 return False
         return True
+
+    def _ensure_action(self, idx: int) -> Action:
+        """P4: Lazy deepcopy — only copy action when first accessed."""
+        if self._actions[idx] is None:
+            self._actions[idx] = copy.deepcopy(self._source_actions[idx])
+        return self._actions[idx]  # type: ignore[return-value]
 
     def _wait_loop_delay(self) -> bool:
         """Interruptible sleep for loop delay. Returns False if stopped."""
@@ -261,6 +332,9 @@ class MacroEngine(QThread):
         sleep_end = time.perf_counter() + self._loop_delay_ms / 1000.0
         while time.perf_counter() < sleep_end:
             if self._is_stopped:
+                return False
+            # HARD-4: Check pause/stop during loop delay
+            if not self._check_pause_or_stop():
                 return False
             scaled_sleep(min(0.1, sleep_end - time.perf_counter()))
         return True

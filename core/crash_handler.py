@@ -56,7 +56,8 @@ class CrashDialog(QDialog):
         header = QHBoxLayout()
         icon_label = QLabel()
         style = self.style()
-        assert style is not None
+        if style is None:
+            return
         icon = style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxCritical)
         icon_label.setPixmap(icon.pixmap(40, 40))
         header.addWidget(icon_label)
@@ -100,7 +101,7 @@ class CrashDialog(QDialog):
     def _build_report(self) -> str:
         """Build crash report string with version and system info."""
         try:
-            from version import VERSION  # type: ignore[attr-defined]
+            from version import __version__ as VERSION
         except ImportError:
             VERSION = "unknown"
         return (

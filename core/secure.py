@@ -22,6 +22,7 @@ except ImportError:
 def encrypt(plaintext: str) -> str:
     """Encrypt a string using Windows DPAPI. Returns base64-encoded blob."""
     if not _HAS_DPAPI:
+        logger.warning("DPAPI unavailable — storing sensitive data in PLAINTEXT")
         return plaintext
     try:
         blob = win32crypt.CryptProtectData(

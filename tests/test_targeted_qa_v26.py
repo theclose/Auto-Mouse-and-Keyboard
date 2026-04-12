@@ -12,31 +12,26 @@ Run: python -m pytest tests/test_targeted_qa_v26.py -v
 import json
 import os
 import sys
-import tempfile
-import threading
 from pathlib import Path
-from typing import Any
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
 
-import modules.mouse      # noqa: F401
-import modules.keyboard   # noqa: F401
-import modules.image      # noqa: F401
-import modules.pixel      # noqa: F401
-import modules.system     # noqa: F401
-import core.scheduler      # noqa: F401
-
-from core.action import Action, get_action_class
+import core.scheduler  # noqa: F401
+import modules.image  # noqa: F401
+import modules.keyboard  # noqa: F401
+import modules.mouse  # noqa: F401
+import modules.pixel  # noqa: F401
+import modules.system  # noqa: F401
+from core.action import get_action_class
 from core.execution_context import ExecutionContext
-
 
 # ============================================================
 # TIER 1: Engine Checkpoint / Resume
@@ -330,6 +325,7 @@ class TestNarrowedExceptions:
     def test_click_handler_uses_specific_exceptions(self) -> None:
         """Verify _on_click handler doesn't use broad 'except Exception'."""
         import inspect
+
         from core.recorder import Recorder
         source = inspect.getsource(Recorder._on_click)
         assert "except Exception" not in source, \
@@ -340,6 +336,7 @@ class TestNarrowedExceptions:
     def test_scroll_handler_uses_specific_exceptions(self) -> None:
         """Verify _on_scroll handler doesn't use broad 'except Exception'."""
         import inspect
+
         from core.recorder import Recorder
         source = inspect.getsource(Recorder._on_scroll)
         assert "except Exception" not in source, \
@@ -348,6 +345,7 @@ class TestNarrowedExceptions:
     def test_key_handler_uses_specific_exceptions(self) -> None:
         """Verify _on_key_press handler doesn't use broad 'except Exception'."""
         import inspect
+
         from core.recorder import Recorder
         source = inspect.getsource(Recorder._on_key_press)
         assert "except Exception" not in source, \
@@ -356,6 +354,7 @@ class TestNarrowedExceptions:
     def test_context_capture_uses_specific_exceptions(self) -> None:
         """Verify _capture_click_context uses specific exceptions."""
         import inspect
+
         from core.recorder import Recorder
         source = inspect.getsource(Recorder._capture_click_context)
         assert "except Exception" not in source, \
@@ -433,8 +432,8 @@ class TestIfImageFoundBuilder:
                     i, Qt.ItemDataRole.UserRole) == "if_image_found":
                 dialog._type_combo.setCurrentIndex(i)
                 break
-        assert "else_action_json" in dialog._param_widgets, \
-            "IfImageFound missing else_action_json widget"
+        assert "_branch_list_else_actions" in dialog._param_widgets, \
+            "IfImageFound missing inline else branch editor"
 
 
 class TestLoopBlockBuilder:
@@ -467,8 +466,8 @@ class TestIfVariableElseEditor:
                     i, Qt.ItemDataRole.UserRole) == "if_variable":
                 dialog._type_combo.setCurrentIndex(i)
                 break
-        assert "else_action_json" in dialog._param_widgets, \
-            "IfVariable missing else_action_json widget"
+        assert "_branch_list_else_actions" in dialog._param_widgets, \
+            "IfVariable missing inline else branch editor"
 
 
 if __name__ == "__main__":

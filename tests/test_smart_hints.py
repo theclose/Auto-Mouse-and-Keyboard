@@ -2,18 +2,15 @@
 Tests for core.smart_hints — analyze_hints rule engine.
 """
 import os
-import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # Import action modules to register types
-import modules.mouse
-import modules.keyboard
-import modules.image
-import modules.pixel
-import modules.system
-import core.scheduler
-
+import core.scheduler  # noqa: F401 — registers loop_block, if_*, set_variable, comment
+import modules.image  # noqa: F401 — registers wait_for_image, click_on_image, etc.
+import modules.keyboard  # noqa: F401
+import modules.mouse  # noqa: F401
+import modules.system  # noqa: F401 — registers activate_window, run_command, etc.
 from core.action import get_action_class
 from core.smart_hints import analyze_hints
 
@@ -99,7 +96,7 @@ class TestRule3_LowTimeout:
 class TestRule4_InfiniteLoop:
     def test_infinite_loop_no_break(self):
         loop = _make("loop_block", delay_after=0)
-        loop.loop_count = 0
+        loop.repeat_count = 0  # LoopBlock uses repeat_count (0 = infinite)
         loop.children = []
         actions = [loop]
         hints = analyze_hints(actions)
@@ -107,7 +104,7 @@ class TestRule4_InfiniteLoop:
 
     def test_finite_loop_no_warning(self):
         loop = _make("loop_block", delay_after=0)
-        loop.loop_count = 5
+        loop.repeat_count = 5  # LoopBlock uses repeat_count (not loop_count)
         loop.children = []
         actions = [loop]
         hints = analyze_hints(actions)
@@ -138,10 +135,18 @@ class TestRule5_DuplicateDelays:
 class TestRule6_ImageNoTemplate:
     def test_wait_image_no_path(self):
         action = _make("wait_for_image", delay_after=0)
-        action.template_path = ""
+        # WaitForImage stores path in image_path (not template_path)
+        action.image_path = ""
         hints = analyze_hints([action])
         assert any("ảnh mẫu" in h["message"] and h["level"] == "error"
                     for h in hints)
+
+    def test_wait_image_with_path_no_hint(self):
+        action = _make("wait_for_image", delay_after=0)
+        action.image_path = "some_template.png"
+        hints = analyze_hints([action])
+        no_template_hints = [h for h in hints if "ảnh mẫu" in h.get("message", "")]
+        assert len(no_template_hints) == 0
 
 
 class TestRule7_UnsetVariable:

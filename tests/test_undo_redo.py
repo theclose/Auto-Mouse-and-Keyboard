@@ -7,28 +7,33 @@ Run: python -m pytest tests/test_undo_redo.py -v
 import os
 import sys
 from typing import Any
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PyQt6.QtWidgets import (
-    QApplication, QTableWidget, QLabel, QPushButton,
-    QSpinBox, QCheckBox, QProgressBar, QGroupBox,
-    QListWidget, QPlainTextEdit,
-)
 from PyQt6.QtGui import QUndoStack
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QGroupBox,
+    QLabel,
+    QListWidget,
+    QPlainTextEdit,
+    QProgressBar,
+    QPushButton,
+    QSpinBox,
+    QTableWidget,
+)
 
 _app = QApplication.instance() or QApplication([])
 
 # Force-register all action types
-import core.action       # noqa: F401
-import modules.mouse     # noqa: F401
+import core.action  # noqa: F401
+import core.scheduler  # noqa: F401
+import modules.image  # noqa: F401
 import modules.keyboard  # noqa: F401
-import modules.image     # noqa: F401
-import modules.pixel     # noqa: F401
-import core.scheduler    # noqa: F401
+import modules.mouse  # noqa: F401
+import modules.pixel  # noqa: F401
 
 
 def _make_stub() -> Any:
@@ -98,7 +103,6 @@ def _make_delay(ms: int = 100) -> Any:
 
 class TestAddUndo:
     def test_add_then_undo(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         action = _make_delay(100)
 
@@ -113,7 +117,6 @@ class TestAddUndo:
         assert len(mw._actions) == 0
 
     def test_add_undo_redo(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         action = _make_delay(42)
 

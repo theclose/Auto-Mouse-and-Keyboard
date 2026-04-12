@@ -5,7 +5,7 @@ description: Auto git commit with version bump after code changes
 
 # Auto Commit Workflow
 
-Run this after making code changes to auto-bump version, run tests, and commit.
+Run this after making code changes to auto-bump version, run QA, and commit.
 
 ## Steps
 
@@ -14,9 +14,9 @@ Run this after making code changes to auto-bump version, run tests, and commit.
 python scripts/bump_version.py patch
 ```
 
-2. Run the full test suite to verify nothing is broken:
+2. Run the full QA suite (tests + all lint checks):
 ```
-python -m pytest tests/ -q --tb=short --benchmark-disable
+python scripts/qa_check.py
 ```
 
 3. Stage all changes:
@@ -36,6 +36,7 @@ git commit -m "vNEW_VERSION: DESCRIPTION"
 
 > **Note**: Replace `NEW_VERSION` with the version output from step 1 (e.g. `1.0.1`), 
 > and `DESCRIPTION` with a brief summary of changes made.
+> The pre-commit hook will auto-run `qa_check.py --quick` before committing.
 
 ## For Minor/Major Bumps
 

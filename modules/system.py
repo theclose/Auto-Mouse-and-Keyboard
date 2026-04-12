@@ -59,6 +59,8 @@ _user32 = ctypes.windll.user32
 class ActivateWindow(Action):
     """Bring a window to the foreground by title (partial match)."""
 
+    __slots__ = ('window_title', 'exact_match')
+
     def __init__(self, window_title: str = "", exact_match: bool = False, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.window_title = window_title
@@ -169,6 +171,8 @@ class ActivateWindow(Action):
 class LogToFile(Action):
     """Write a message to a log file. Supports ${var} interpolation."""
 
+    __slots__ = ('message', 'file_path')
+
     def __init__(self, message: str = "", file_path: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.message = message
@@ -185,10 +189,20 @@ class LogToFile(Action):
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         line = f"[{timestamp}] {msg}\n"
 
-        os.makedirs(os.path.dirname(self.file_path) or ".", exist_ok=True)
+        # HARD-1: Validate path (consistent with WriteToFile)
+        path = self.file_path
+        if ctx and "${" in path:
+            path = ctx.interpolate(path)
+        try:
+            path = _validate_path(path, "log")
+        except ValueError as e:
+            logger.error("LogToFile blocked: %s", e)
+            return False
+
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         # L1: Log rotation — rotate at 5MB
-        self._rotate_if_needed(self.file_path, max_bytes=5 * 1024 * 1024)
-        with open(self.file_path, "a", encoding="utf-8") as f:
+        self._rotate_if_needed(path, max_bytes=5 * 1024 * 1024)
+        with open(path, "a", encoding="utf-8") as f:
             f.write(line)
         logger.info("Logged: %s", msg[:80])
         return True
@@ -227,6 +241,8 @@ class LogToFile(Action):
 class ReadClipboard(Action):
     """Read clipboard text and store it in a context variable."""
 
+    __slots__ = ('var_name',)
+
     def __init__(self, var_name: str = "clipboard", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.var_name = var_name
@@ -234,16 +250,21 @@ class ReadClipboard(Action):
     def execute(self) -> bool:
         from core.engine_context import get_context
 
-        # Win32 clipboard read (thread-safe)
-        _user32.OpenClipboard(0)
+        # BUG-2: Win32 clipboard read with proper error handling
+        text = ""
         try:
-            handle = ctypes.windll.user32.GetClipboardData(13)  # CF_UNICODETEXT
-            if handle:
-                text = ctypes.wstring_at(handle)
-            else:
-                text = ""
-        finally:
-            _user32.CloseClipboard()
+            if not _user32.OpenClipboard(0):
+                logger.warning("ReadClipboard: cannot open clipboard (locked by another app)")
+                return False
+            try:
+                handle = _user32.GetClipboardData(13)  # CF_UNICODETEXT
+                if handle:
+                    text = ctypes.wstring_at(handle)
+            finally:
+                _user32.CloseClipboard()
+        except (OSError, ctypes.ArgumentError, ValueError) as e:
+            logger.error("ReadClipboard Win32 error: %s", e)
+            return False
 
         ctx = get_context()
         if ctx:
@@ -272,6 +293,8 @@ class ReadFileLine(Action):
 
     Uses per-instance cache with mtime invalidation — O(1) per read after first load.
     """
+
+    __slots__ = ('file_path', 'line_number', 'var_name', '_cache')
 
     def __init__(self, file_path: str = "", line_number: str = "1", var_name: str = "line", **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -360,6 +383,8 @@ class ReadFileLine(Action):
 class WriteToFile(Action):
     """Write/append text to a file. Supports ${var} interpolation."""
 
+    __slots__ = ('file_path', 'text', 'mode')
+
     def __init__(self, file_path: str = "", text: str = "", mode: str = "append", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.file_path = file_path
@@ -423,6 +448,8 @@ class SecureTypeText(Action):
     Uses Windows DPAPI for encryption — tied to machine + user account.
     """
 
+    __slots__ = ('encrypted_text', 'interval')
+
     def __init__(self, encrypted_text: str = "", interval: float = 0.02, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.encrypted_text = encrypted_text
@@ -434,7 +461,14 @@ class SecureTypeText(Action):
         from core.secure import decrypt, is_encrypted
 
         # Decrypt at runtime
-        text = decrypt(self.encrypted_text) if is_encrypted(self.encrypted_text) else self.encrypted_text
+        if is_encrypted(self.encrypted_text):
+            text = decrypt(self.encrypted_text)
+        else:
+            text = self.encrypted_text
+            logger.warning(
+                "SecureTypeText: text is NOT encrypted — typing as plaintext. "
+                "Use the encrypt button in Action Editor to secure this text."
+            )
         if text.isascii():
             pyautogui.typewrite(text, interval=self.interval)
         else:
@@ -468,6 +502,8 @@ _MAX_MACRO_DEPTH = 10  # Prevent infinite recursion (A→B→A)
 @register_action("run_macro")
 class RunMacro(Action):
     """Execute another macro file as a sub-routine."""
+
+    __slots__ = ('macro_path',)
 
     def __init__(self, macro_path: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -558,6 +594,8 @@ class CaptureText(Action):
     Stores the result in a context variable.
     """
 
+    __slots__ = ('x', 'y', 'width', 'height', 'var_name', 'lang')
+
     def __init__(
         self,
         x: int = 0,
@@ -579,25 +617,29 @@ class CaptureText(Action):
     def execute(self) -> bool:
         try:
             import pytesseract
-            from PIL import ImageGrab
         except ImportError:
             logger.error(
-                "CaptureText requires pytesseract and Pillow.\n"
-                "Install: pip install pytesseract Pillow\n"
+                "CaptureText requires pytesseract.\n"
+                "Install: pip install pytesseract\n"
                 "Also install Tesseract OCR: https://github.com/tesseract-ocr/tesseract\n"
                 "Windows: https://github.com/UB-Mannheim/tesseract/wiki"
             )
             return False
 
+        import cv2
+
         from core.engine_context import get_context
 
-        # Capture screen region
-        bbox = (self.x, self.y, self.x + self.width, self.y + self.height)
-        screenshot = ImageGrab.grab(bbox)
+        # Capture screen region using the mss-based pipeline (consistent with rest of app)
+        from modules.screen import capture_region as _capture_region
+
+        bgr = _capture_region(self.x, self.y, self.width, self.height)
+        # pytesseract expects PIL Image or numpy RGB — convert BGR→RGB
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
         # OCR
         try:
-            text = pytesseract.image_to_string(screenshot, lang=self.lang).strip()
+            text = pytesseract.image_to_string(rgb, lang=self.lang).strip()
         except pytesseract.TesseractNotFoundError:
             logger.error(
                 "Tesseract executable not found!\n"
@@ -638,3 +680,142 @@ class CaptureText(Action):
 
     def get_display_name(self) -> str:
         return f"OCR({self.x},{self.y} {self.width}×{self.height})" f" → ${{{self.var_name}}}"
+
+
+@register_action("run_command")
+class RunCommand(Action):
+    """Execute a system command (CMD/PowerShell) and optionally store output.
+
+    Security: Uses subprocess.run() with shell=True (required for CMD builtins
+    like 'dir', 'echo', etc.). Variables are interpolated before execution.
+    The timeout parameter limits maximum execution time.
+
+    Parameters:
+        command: The command string to execute (e.g., 'dir C:\\Users')
+        timeout: Maximum execution time in seconds (default 30, max 300)
+        var_name: Optional context variable to store stdout output
+        working_dir: Optional working directory for the command
+    """
+
+    __slots__ = ('command', 'timeout', 'var_name', 'working_dir', 'ignore_exit_code')
+
+    def __init__(
+        self,
+        command: str = "",
+        timeout: int = 30,
+        var_name: str = "",
+        working_dir: str = "",
+        ignore_exit_code: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.command = command
+        self.timeout = max(1, min(timeout, 300))  # Clamp: 1s to 5min
+        self.var_name = var_name
+        self.working_dir = working_dir
+        self.ignore_exit_code = ignore_exit_code
+
+    def execute(self) -> bool:
+        import subprocess
+
+        from core.engine_context import get_context
+
+        if not self.command or not self.command.strip():
+            logger.warning("RunCommand: empty command — skipping")
+            return True
+
+        ctx = get_context()
+        cmd = self.command
+        if ctx and "${" in cmd:
+            cmd = ctx.interpolate(cmd)
+
+        cwd = self.working_dir or None
+        if cwd and ctx and "${" in cwd:
+            cwd = ctx.interpolate(cwd)
+
+        logger.info("RunCommand: %s (timeout=%ds)", cmd[:80], self.timeout)
+
+        # Hard cap on captured output to prevent unbounded memory growth
+        _OUTPUT_CAP = 262_144  # 256KB — safe for 24/7 operation
+
+        try:
+            result = subprocess.run(
+                cmd,
+                shell=True,  # Required for CMD builtins like 'dir', 'echo'
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+                cwd=cwd,
+            )
+
+            stdout = result.stdout.strip()
+            stderr = result.stderr.strip()
+
+            # Cap output to prevent memory bloat from commands like 'find /'
+            if len(stdout) > _OUTPUT_CAP:
+                logger.warning(
+                    "RunCommand stdout truncated: %d → %d bytes",
+                    len(stdout), _OUTPUT_CAP,
+                )
+                stdout = stdout[:_OUTPUT_CAP] + "\n…[truncated]"
+            if len(stderr) > _OUTPUT_CAP:
+                logger.warning(
+                    "RunCommand stderr truncated: %d → %d bytes",
+                    len(stderr), _OUTPUT_CAP,
+                )
+                stderr = stderr[:_OUTPUT_CAP] + "\n…[truncated]"
+
+            if self.var_name and ctx:
+                ctx.set_var(self.var_name, stdout)
+
+            # Store exit_code + stderr in context for user inspection
+            if ctx:
+                ctx.set_var("__exit_code__", str(result.returncode))
+                if stderr:
+                    ctx.set_var("__stderr__", stderr[:500])
+
+            if result.returncode != 0:
+                logger.warning(
+                    "RunCommand exit code %d: %s",
+                    result.returncode,
+                    stderr[:200] if stderr else "(no stderr)",
+                )
+                return True if self.ignore_exit_code else False
+            else:
+                logger.info("RunCommand OK: %s", stdout[:100] if stdout else "(no output)")
+                return True
+
+        except subprocess.TimeoutExpired:
+            logger.error("RunCommand timed out after %ds: %s", self.timeout, cmd[:80])
+            if self.var_name and ctx:
+                ctx.set_var(self.var_name, "__TIMEOUT__")
+            return False
+
+        except Exception as e:
+            logger.error("RunCommand failed: %s", e)
+            return False
+
+    def _get_params(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "command": self.command,
+            "timeout": self.timeout,
+        }
+        if self.var_name:
+            d["var_name"] = self.var_name
+        if self.working_dir:
+            d["working_dir"] = self.working_dir
+        if self.ignore_exit_code:
+            d["ignore_exit_code"] = True
+        return d
+
+    def _set_params(self, params: dict[str, Any]) -> None:
+        self.command = params.get("command", "")
+        self.timeout = params.get("timeout", 30)
+        self.var_name = params.get("var_name", "")
+        self.working_dir = params.get("working_dir", "")
+        self.ignore_exit_code = params.get("ignore_exit_code", False)
+
+    def get_display_name(self) -> str:
+        cmd_preview = self.command[:30] + ("…" if len(self.command) > 30 else "")
+        return f"Run: {cmd_preview}"
+

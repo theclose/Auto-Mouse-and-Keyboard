@@ -70,9 +70,9 @@ class ImageCaptureOverlay(QWidget):
             rect = QRect(self._origin, self._current).normalized()
 
             # Clear the overlay inside the selection (show original)
+            # Zero-copy: draw directly from source rect, no QPixmap.copy()
             if not self._screenshot.isNull():
-                cropped = self._screenshot.copy(rect)
-                painter.drawPixmap(rect.topLeft(), cropped)
+                painter.drawPixmap(rect, self._screenshot, rect)
 
             # Draw border
             pen = QPen(QColor(108, 99, 255), 2, Qt.PenStyle.SolidLine)
@@ -106,13 +106,19 @@ class ImageCaptureOverlay(QWidget):
             if rect.width() > 5 and rect.height() > 5:
                 self._save_region(rect)
 
-            self.close()
+            self._cleanup_and_close()
 
     def keyPressEvent(self, event: Optional[QKeyEvent]) -> None:
         if event and event.key() == Qt.Key.Key_Escape:
             self._drawing = False
             self.cancelled.emit()
-            self.close()
+            self._cleanup_and_close()
+
+    def _cleanup_and_close(self) -> None:
+        """Release screenshot memory and schedule widget destruction."""
+        self._screenshot = QPixmap()  # Release ~8MB immediately
+        self.close()
+        self.deleteLater()  # Schedule Qt cleanup
 
     def _save_region(self, rect: QRect) -> None:
         """Crop the screenshot and save to file."""

@@ -187,8 +187,8 @@ class HotkeyManager:
                     if hid in self._hotkeys:
                         try:
                             self._hotkeys[hid]()
-                        except Exception as e:
-                            logger.error("Hotkey callback error: %s", e)
+                        except Exception:
+                            logger.exception("Hotkey callback error (hid=%d)", hid)
                 elif msg.message == WM_APP_REGISTER:
                     # New hotkeys queued — register them
                     self._process_pending()

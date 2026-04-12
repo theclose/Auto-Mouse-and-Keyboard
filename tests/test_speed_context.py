@@ -1,22 +1,18 @@
 """Tests for Speed Multiplier and Visual Context Click."""
 
-import time
-import os
 import tempfile
+import time
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from PyQt6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
 
 # Force-register all action types
-import core.action       # noqa: F401
-import modules.mouse     # noqa: F401
+import core.action  # noqa: F401
 import modules.keyboard  # noqa: F401
-
+import modules.mouse  # noqa: F401
 
 # ═════════════════════════════════════════════════════════════════
 # Speed Multiplier Tests
@@ -26,9 +22,10 @@ class TestEngineContext:
     """Tests for core/engine_context.py."""
 
     def test_default_speed_is_1(self) -> None:
-        from core.engine_context import get_speed
         # In a fresh thread, default should be 1.0
         import threading
+
+        from core.engine_context import get_speed
         result = [0.0]
         def check():
             result[0] = get_speed()
@@ -38,25 +35,25 @@ class TestEngineContext:
         assert result[0] == 1.0
 
     def test_set_speed(self) -> None:
-        from core.engine_context import set_speed, get_speed
+        from core.engine_context import get_speed, set_speed
         set_speed(2.0)
         assert get_speed() == 2.0
         set_speed(1.0)  # reset
 
     def test_speed_clamped_min(self) -> None:
-        from core.engine_context import set_speed, get_speed
+        from core.engine_context import get_speed, set_speed
         set_speed(0.01)
         assert get_speed() == 0.1
         set_speed(1.0)  # reset
 
     def test_speed_clamped_max(self) -> None:
-        from core.engine_context import set_speed, get_speed
+        from core.engine_context import get_speed, set_speed
         set_speed(99.0)
         assert get_speed() == 10.0
         set_speed(1.0)  # reset
 
     def test_scaled_sleep_2x(self) -> None:
-        from core.engine_context import set_speed, scaled_sleep
+        from core.engine_context import scaled_sleep, set_speed
         set_speed(2.0)
         t0 = time.perf_counter()
         scaled_sleep(0.2)  # should sleep ~0.1s
@@ -65,7 +62,7 @@ class TestEngineContext:
         set_speed(1.0)  # reset
 
     def test_scaled_sleep_half(self) -> None:
-        from core.engine_context import set_speed, scaled_sleep
+        from core.engine_context import scaled_sleep, set_speed
         set_speed(0.5)
         t0 = time.perf_counter()
         scaled_sleep(0.1)  # should sleep ~0.2s
@@ -137,8 +134,8 @@ class TestMouseClickContext:
 
     def test_click_with_context_serialization(self) -> None:
         """context_image round-trips through to_dict/from_dict."""
-        from modules.mouse import MouseClick
         from core.action import Action
+        from modules.mouse import MouseClick
         action = MouseClick(x=100, y=200, context_image="test.png")
         d = action.to_dict()
         restored = Action.from_dict(d)

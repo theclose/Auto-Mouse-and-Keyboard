@@ -22,6 +22,7 @@ Registered Action Types:
     │ set_variable     │ SetVariable   │ Set/compute context variable │
     │ split_string     │ SplitString   │ Split variable by delimiter  │
     │ comment          │ Comment       │ No-op label / section marker │
+    │ group            │ GroupAction   │ Visual container for actions │
     └──────────────────┴───────────────┴──────────────────────────────┘
 
 Architecture Notes:
@@ -47,15 +48,36 @@ See Also:
 
 import logging
 import threading
+import time
 from typing import Any
 
 from core.action import Action, register_action
+
+
+# CQ-1: Shared helper for parsing else_action_json (used by 3 conditional classes)
+def _parse_else_json(else_action_json: str) -> list[Action]:
+    """Parse inline else action JSON from action_editor.
+
+    Used by IfImageFound, IfPixelColor, IfVariable to avoid code duplication.
+    Returns a list (0 or 1 element) of parsed else actions.
+    """
+    if not else_action_json or not else_action_json.strip():
+        return []
+    try:
+        import json
+        data = json.loads(else_action_json)
+        return [Action.from_dict(data)]
+    except Exception:
+        logger.debug("Failed to parse else_action_json", exc_info=True)
+        return []
 
 logger = logging.getLogger(__name__)
 
 # B5: Recursion depth guard for nested composite actions
 MAX_COMPOSITE_DEPTH = 16
 _depth_local = threading.local()
+# M3: Safety timeout for infinite loops (24 hours)
+MAX_INFINITE_RUNTIME_S = 3600 * 24
 
 
 def _get_depth() -> int:
@@ -81,6 +103,8 @@ class LoopBlock(Action):
     In practice, the engine handles looping at the top level,
     but this allows nested loops inside a macro.
     """
+
+    __slots__ = ('iterations', '_sub_actions', '_cancel_event')
 
     def __init__(self, iterations: int = 1, **kwargs: Any) -> None:
         """Initialize a loop block.
@@ -119,6 +143,7 @@ class LoopBlock(Action):
         try:
             self._cancel_event.clear()
             count = 0
+            _loop_start = time.perf_counter()
             while True:
                 if self._cancel_event.is_set():
                     logger.info("LoopBlock cancelled after %d iterations", count)
@@ -128,6 +153,10 @@ class LoopBlock(Action):
                     return True
 
                 count += 1
+                # M3: Safety timeout for infinite loops
+                if self.iterations == 0 and (time.perf_counter() - _loop_start) > MAX_INFINITE_RUNTIME_S:
+                    logger.warning("LoopBlock infinite safety timeout (24h) after %d iterations", count)
+                    return True
                 ctx = get_context()
                 if ctx:
                     ctx.iteration_count = count
@@ -201,11 +230,14 @@ class IfImageFound(Action):
     else → run else_actions.
     """
 
+    __slots__ = ('image_path', 'confidence', 'timeout_ms', 'region_x', 'region_y', 'region_w', 'region_h', '_then_actions', '_else_actions')
+
     def __init__(
         self,
         image_path: str = "",
         confidence: float = 0.8,
         timeout_ms: int = 5000,
+        region_x: int = 0, region_y: int = 0, region_w: int = 0, region_h: int = 0,
         else_action_json: str = "",
         **kwargs: Any,
     ) -> None:
@@ -215,23 +247,19 @@ class IfImageFound(Action):
             image_path: Template image file path (supports ${var}).
             confidence: Match confidence threshold (0.0–1.0).
             timeout_ms: Search timeout in milliseconds.
+            region_x/y/w/h: Optional search region (0 = full screen).
             else_action_json: Optional inline JSON for ELSE branch.
         """
         super().__init__(**kwargs)
         self.image_path = image_path
         self.confidence = confidence
         self.timeout_ms = timeout_ms
+        self.region_x = region_x
+        self.region_y = region_y
+        self.region_w = region_w
+        self.region_h = region_h
         self._then_actions: list[Action] = []
-        self._else_actions: list[Action] = []
-        # Parse inline else action from action_editor
-        if else_action_json and else_action_json.strip():
-            try:
-                import json
-
-                data = json.loads(else_action_json)
-                self._else_actions.append(Action.from_dict(data))
-            except Exception:
-                logger.debug("Failed to parse else_action_json", exc_info=True)
+        self._else_actions: list[Action] = _parse_else_json(else_action_json)
 
     def add_then_action(self, action: Action) -> None:
         self._then_actions.append(action)
@@ -257,10 +285,16 @@ class IfImageFound(Action):
         if ctx and "${" in img_path:
             img_path = ctx.interpolate(img_path)
 
+        # User-defined region
+        region = None
+        if self.region_w > 0 and self.region_h > 0:
+            region = (self.region_x, self.region_y, self.region_w, self.region_h)
+
         result = finder.find_on_screen(
             img_path,
             confidence=self.confidence,
             timeout_ms=self.timeout_ms,
+            region=region,
         )
         if result is not None:
             logger.info("Image found at %s – running THEN branch", result)
@@ -286,6 +320,10 @@ class IfImageFound(Action):
             "image_path": self.image_path,
             "confidence": self.confidence,
             "timeout_ms": self.timeout_ms,
+            "region_x": self.region_x,
+            "region_y": self.region_y,
+            "region_w": self.region_w,
+            "region_h": self.region_h,
             "then_actions": [a.to_dict() for a in self._then_actions],
             "else_actions": [a.to_dict() for a in self._else_actions],
         }
@@ -295,6 +333,10 @@ class IfImageFound(Action):
         self.image_path = params.get("image_path", "")
         self.confidence = params.get("confidence", 0.8)
         self.timeout_ms = params.get("timeout_ms", 5000)
+        self.region_x = params.get("region_x", 0)
+        self.region_y = params.get("region_y", 0)
+        self.region_w = params.get("region_w", 0)
+        self.region_h = params.get("region_h", 0)
         self._then_actions = [Action.from_dict(a) for a in params.get("then_actions", [])]
         self._else_actions = [Action.from_dict(a) for a in params.get("else_actions", [])]
 
@@ -342,6 +384,8 @@ class IfImageFound(Action):
 class IfPixelColor(Action):
     """Conditional: if pixel matches color → then_actions, else → else_actions."""
 
+    __slots__ = ('x', 'y', 'r', 'g', 'b', 'tolerance', '_then_actions', '_else_actions')
+
     def __init__(
         self,
         x: int = 0,
@@ -365,15 +409,7 @@ class IfPixelColor(Action):
             self.r, self.g, self.b = r, g, b
         self.tolerance = tolerance
         self._then_actions: list[Action] = []
-        self._else_actions: list[Action] = []
-        if else_action_json and else_action_json.strip():
-            try:
-                import json
-
-                data = json.loads(else_action_json)
-                self._else_actions.append(Action.from_dict(data))
-            except Exception:
-                logger.debug("Failed to parse else_action_json", exc_info=True)
+        self._else_actions: list[Action] = _parse_else_json(else_action_json)
 
     @staticmethod
     def _parse_color_str(color: str) -> tuple[int, int, int]:
@@ -488,6 +524,8 @@ class IfVariable(Action):
     Operators: ==, !=, >, <, >=, <=
     """
 
+    __slots__ = ('var_name', 'operator', 'compare_value', '_then_actions', '_else_actions')
+
     def __init__(
         self,
         var_name: str = "",
@@ -501,15 +539,7 @@ class IfVariable(Action):
         self.operator = operator
         self.compare_value = compare_value
         self._then_actions: list[Action] = []
-        self._else_actions: list[Action] = []
-        if else_action_json and else_action_json.strip():
-            try:
-                import json
-
-                data = json.loads(else_action_json)
-                self._else_actions.append(Action.from_dict(data))
-            except Exception:
-                logger.debug("Failed to parse else_action_json", exc_info=True)
+        self._else_actions: list[Action] = _parse_else_json(else_action_json)
 
     def add_then_action(self, action: Action) -> None:
         self._then_actions.append(action)
@@ -631,6 +661,8 @@ class IfVariable(Action):
 class SetVariable(Action):
     """Set or modify a context variable. Operations: set, increment, decrement, add."""
 
+    __slots__ = ('var_name', 'value', 'operation')
+
     def __init__(self, var_name: str = "", value: str = "", operation: str = "set", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.var_name = var_name
@@ -643,6 +675,11 @@ class SetVariable(Action):
         ctx = get_context()
         if not ctx:
             logger.warning("SetVariable: no execution context")
+            return True
+
+        # P0-BUG-1: Guard against empty var_name
+        if not self.var_name or not self.var_name.strip():
+            logger.warning("SetVariable: empty var_name — skipping")
             return True
 
         if self.operation == "set":
@@ -829,6 +866,13 @@ class SetVariable(Action):
             if isinstance(node, ast.BinOp) and type(node.op) in _bin_ops:
                 left = _eval_node(node.left)
                 right = _eval_node(node.right)
+                # HARD-2: Guard against CPU/memory bomb (e.g. 2**1000000)
+                if isinstance(node.op, ast.Pow):
+                    try:
+                        if isinstance(right, (int, float)) and abs(right) > 1000:
+                            raise ValueError(f"Exponent too large: {right} (max 1000)")
+                    except TypeError:
+                        pass  # non-numeric right operand — let operator.pow handle it
                 return _bin_ops[type(node.op)](left, right)
 
             # Unary ops: -x, not x
@@ -917,6 +961,8 @@ class SplitString(Action):
     Example: variable="a,b,c", delimiter=",", field_index=1 → stores "b"
     """
 
+    __slots__ = ('source_var', 'delimiter', 'field_index', 'target_var')
+
     def __init__(
         self, source_var: str = "", delimiter: str = ",", field_index: int = 0, target_var: str = "", **kwargs: Any
     ) -> None:
@@ -987,6 +1033,8 @@ class SplitString(Action):
 class Comment(Action):
     """L7: Visual label/separator for organizing macros. No-op at runtime."""
 
+    __slots__ = ('text',)
+
     def __init__(self, text: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.text = text
@@ -1006,3 +1054,77 @@ class Comment(Action):
     def get_display_name(self) -> str:
         """Return formatted comment label with decorative dashes."""
         return f"── {self.text} ──" if self.text else "────────"
+
+
+@register_action("group")
+class GroupAction(Action):
+    """Visual container for organizing actions.
+
+    Executes children sequentially. Has no logic of its own.
+    Think of it as a "folder" or "region" for grouping related actions.
+    """
+
+    __slots__ = ('name', '_children', '_cancel_event')
+
+    def __init__(
+        self,
+        name: str = "Group",
+        children: list[Action] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.name = name
+        self._children: list[Action] = children or []
+        self._cancel_event = threading.Event()
+
+    def execute(self) -> bool:
+        """Execute all enabled children sequentially."""
+        from core.engine_context import is_stopped
+        # B5: Recursion depth guard
+        depth = _inc_depth()
+        if depth > MAX_COMPOSITE_DEPTH:
+            _dec_depth()
+            logger.error("GroupBlock: max nesting depth %d exceeded", MAX_COMPOSITE_DEPTH)
+            return False
+        try:
+            for action in self._children:
+                if self._cancel_event.is_set() or is_stopped():
+                    return True
+                if action.enabled:
+                    success = action.run()
+                    if not success:
+                        return False
+            return True
+        finally:
+            _dec_depth()
+
+    def _get_params(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "children": [a.to_dict() for a in self._children],
+        }
+
+    def _set_params(self, params: dict[str, Any]) -> None:
+        self.name = params.get("name", "Group")
+        self._children = [Action.from_dict(a) for a in params.get("children", [])]
+        if not hasattr(self, "_cancel_event"):
+            self._cancel_event = threading.Event()
+
+    def get_display_name(self) -> str:
+        return f"📦 {self.name} ({len(self._children)} actions)"
+
+    # -- composite interface (v3.0) --
+    @property
+    def is_composite(self) -> bool:
+        return True
+
+    @property
+    def children(self) -> list[Action]:
+        return list(self._children)
+
+    @children.setter
+    def children(self, value: list[Action]) -> None:
+        self._children = list(value)
+
+    def __deepcopy__(self, memo: dict) -> "GroupAction":
+        return Action.from_dict(self.to_dict())  # type: ignore[return-value]

@@ -16,34 +16,37 @@ Run: python -m pytest tests/test_qa_audit_v110.py -v
 
 import os
 import sys
-import time
-import tempfile
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch, MagicMock, PropertyMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PyQt6.QtWidgets import QApplication, QSpinBox, QLabel, QPushButton, \
-    QCheckBox, QProgressBar, QListWidget, QPlainTextEdit, QTableWidget, \
-    QMessageBox, QLineEdit
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QUndoStack
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QPlainTextEdit,
+    QProgressBar,
+    QPushButton,
+    QSpinBox,
+    QTableWidget,
+)
 
 _app = QApplication.instance() or QApplication([])
 
 # Force-register all action types
-import core.action       # noqa: F401
-import modules.mouse     # noqa: F401
+import core.action  # noqa: F401
+import core.scheduler  # noqa: F401
+import modules.image  # noqa: F401
 import modules.keyboard  # noqa: F401
-import modules.image     # noqa: F401
-import modules.pixel     # noqa: F401
-import core.scheduler    # noqa: F401
-
+import modules.mouse  # noqa: F401
+import modules.pixel  # noqa: F401
 from core.action import Action, get_action_class
-
 
 # ============================================================
 # Helpers
@@ -269,9 +272,10 @@ class TestImageCaptureOverlayCancelled:
         assert hasattr(overlay, 'cancelled')
 
     def test_escape_emits_cancelled(self) -> None:
-        from gui.image_capture import ImageCaptureOverlay
-        from PyQt6.QtGui import QKeyEvent
         from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+
+        from gui.image_capture import ImageCaptureOverlay
 
         overlay = ImageCaptureOverlay()
         received = []
@@ -465,8 +469,9 @@ class TestEngineThreadSafety:
     """Verify engine uses QThread correctly."""
 
     def test_engine_has_qthread(self) -> None:
-        from core.engine import MacroEngine
         from PyQt6.QtCore import QThread
+
+        from core.engine import MacroEngine
         assert issubclass(MacroEngine, QThread)
 
     def test_engine_has_mutex(self) -> None:
@@ -498,7 +503,6 @@ class TestTypeIconsCoverageV110:
 
     def test_all_17_types_have_icons(self) -> None:
         from gui.main_window import MainWindow
-        from core.action import get_all_action_types
         # Force import all modules to register
         for atype in ["mouse_click", "delay", "wait_for_image",
                       "check_pixel_color", "take_screenshot",
@@ -566,8 +570,9 @@ class TestCrashHandlerBasics:
         assert callable(CrashHandler.install)
 
     def test_install_sets_excepthook(self) -> None:
-        from core.crash_handler import CrashHandler
         import sys
+
+        from core.crash_handler import CrashHandler
         # Reset for test
         CrashHandler._installed = False
         old_hook = sys.excepthook

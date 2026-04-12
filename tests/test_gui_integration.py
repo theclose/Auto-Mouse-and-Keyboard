@@ -5,29 +5,28 @@ that was completely untested and caused the dialog.exec() bug.
 Run: python -m pytest tests/test_gui_integration.py -v
 """
 
+import copy
 import os
 import sys
-import copy
 from typing import Any
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
 
 # Force-register all action types
-import core.action       # noqa: F401
-import modules.mouse     # noqa: F401
+import core.action  # noqa: F401
+import core.scheduler  # noqa: F401
+import modules.image  # noqa: F401
 import modules.keyboard  # noqa: F401
-import modules.image     # noqa: F401
-import modules.pixel     # noqa: F401
-import core.scheduler    # noqa: F401
-
+import modules.mouse  # noqa: F401
+import modules.pixel  # noqa: F401
 
 # ============================================================
 # Test 1: ActionEditorDialog signal lifecycle
@@ -92,7 +91,7 @@ class TestActionEditorSignal:
 
     def test_all_action_types_selectable(self) -> None:
         """Every action type in ACTION_CATEGORIES can be selected."""
-        from gui.action_editor import ActionEditorDialog, ACTION_CATEGORIES
+        from gui.action_editor import ACTION_CATEGORIES, ActionEditorDialog
         dialog = ActionEditorDialog()
 
         expected_types = set()
@@ -114,7 +113,7 @@ class TestActionEditorSignal:
     def test_all_action_types_have_builders(self) -> None:
         """REGRESSION: Every action type MUST have a builder that produces
         at least one param widget. Prevents if_image_found/loop_block bug."""
-        from gui.action_editor import ActionEditorDialog, ACTION_CATEGORIES
+        from gui.action_editor import ACTION_CATEGORIES, ActionEditorDialog
         # Types that legitimately have zero custom params
         NO_PARAMS_TYPES = {"comment"}
 
@@ -141,7 +140,7 @@ class TestActionEditorSignal:
 
     def test_category_headers_not_selectable(self) -> None:
         """Category headers (bold items) should have no UserRole data."""
-        from gui.action_editor import ActionEditorDialog, ACTION_CATEGORIES
+        from gui.action_editor import ACTION_CATEGORIES, ActionEditorDialog
         dialog = ActionEditorDialog()
 
         header_count = 0
@@ -150,8 +149,10 @@ class TestActionEditorSignal:
             if data is None:
                 header_count += 1
 
-        assert header_count == len(ACTION_CATEGORIES), (
-            f"Expected {len(ACTION_CATEGORIES)} headers, got {header_count}"
+        # May have +1 header from "Recent Actions" section
+        expected_min = len(ACTION_CATEGORIES)
+        assert header_count >= expected_min, (
+            f"Expected at least {expected_min} headers, got {header_count}"
         )
 
 
@@ -160,39 +161,43 @@ class TestActionEditorSignal:
 # ============================================================
 
 class TestRefreshTable:
-    """Verify the 6-column table renders correctly for all action types."""
+    """Verify the tree model renders correctly for all action types."""
 
     def _make_main_window_stub(self) -> Any:
-        """Create a minimal MainWindow with just the table."""
+        """Create a minimal MainWindow with just the tree."""
         from gui.main_window import MainWindow
         with patch.object(MainWindow, '__init__', lambda self: None):
             mw = MainWindow.__new__(MainWindow)
-        # Setup minimal table
-        from PyQt6.QtWidgets import QTableWidget, QLabel, QSpinBox, QLineEdit, QPushButton, QTreeView
-        mw._table = QTableWidget(0, 6)
+        # Setup minimal tree
+        from PyQt6.QtWidgets import QLabel, QLineEdit, QSpinBox, QTreeView
         mw._actions = []
         mw._stats_label = QLabel("")
         mw._empty_overlay = QLabel("")
         mw._filter_edit = QLineEdit()
         mw._loop_spin = QSpinBox()
         mw._loop_spin.setValue(1)
-        # v3.0: tree view attributes
-        mw._tree_mode = False
+        # v3.0: tree view (tree-only)
         mw._tree = QTreeView()
-        from gui.action_tree_model import ActionTreeModel
+        from gui.action_tree_model import ActionTreeFilterProxy, ActionTreeModel
         mw._tree_model = ActionTreeModel(mw._actions)
-        mw._view_toggle_btn = QPushButton()
+        _proxy = ActionTreeFilterProxy()
+        _proxy.setSourceModel(mw._tree_model)
+        mw._action_list_panel = MagicMock()
+        mw._action_list_panel._filter_proxy = _proxy
+        mw._action_list_panel.filter_proxy = _proxy
+        mw._tree.setModel(_proxy)
         mw._minimap = MagicMock()
         return mw
 
     def test_empty_table(self) -> None:
-        from gui.main_window import MainWindow
         mw = self._make_main_window_stub()
         mw._refresh_table()
-        assert mw._table.rowCount() == 0
+        assert mw._tree_model.rowCount() == 0
 
     def test_single_action_all_columns(self) -> None:
-        from gui.main_window import MainWindow
+        from PyQt6.QtCore import Qt
+
+        from gui.action_tree_model import COL_DELAY, COL_DESC, COL_DETAILS, COL_ENABLED, COL_INDEX, COL_TYPE
         from modules.mouse import MouseClick
         mw = self._make_main_window_stub()
 
@@ -201,25 +206,35 @@ class TestRefreshTable:
         mw._actions = [action]
         mw._refresh_table()
 
-        assert mw._table.rowCount() == 1
+        assert mw._tree_model.rowCount() == 1
         # Col 0: row number
-        assert mw._table.item(0, 0).text() == "1"
-        # Col 1: icon (mouse type)
-        assert mw._table.item(0, 1).text() == "🖱"
-        # Col 2: display name
-        assert "100" in mw._table.item(0, 2).text()
-        # Col 3: delay
-        assert mw._table.item(0, 3).text() == "50ms"
-        # Col 4: enabled
-        assert mw._table.item(0, 4).text() == "✓"
+        idx0 = mw._tree_model.index(0, COL_INDEX)
+        assert mw._tree_model.data(idx0, Qt.ItemDataRole.DisplayRole) == "1"
+        # Col 2: type (contains icon)
+        idx_type = mw._tree_model.index(0, COL_TYPE)
+        type_text = mw._tree_model.data(idx_type, Qt.ItemDataRole.DisplayRole)
+        assert "🖱" in type_text
+        # Col 3: details (display name)
+        idx_details = mw._tree_model.index(0, COL_DETAILS)
+        details_text = mw._tree_model.data(idx_details, Qt.ItemDataRole.DisplayRole)
+        assert "100" in details_text
+        # Col 4: delay
+        idx_delay = mw._tree_model.index(0, COL_DELAY)
+        assert mw._tree_model.data(idx_delay, Qt.ItemDataRole.DisplayRole) == "50ms"
+        # Col 1: enabled
+        idx_en = mw._tree_model.index(0, COL_ENABLED)
+        assert mw._tree_model.data(idx_en, Qt.ItemDataRole.DisplayRole) == "✓"
         # Col 5: description
-        assert mw._table.item(0, 5).text() == "test click"
+        idx_desc = mw._tree_model.index(0, COL_DESC)
+        assert mw._tree_model.data(idx_desc, Qt.ItemDataRole.DisplayRole) == "test click"
 
     def test_five_action_types_icons(self) -> None:
-        from gui.main_window import MainWindow
-        from modules.mouse import MouseClick
-        from modules.keyboard import KeyPress
+        from PyQt6.QtCore import Qt
+
         from core.action import DelayAction
+        from gui.action_tree_model import COL_TYPE
+        from modules.keyboard import KeyPress
+        from modules.mouse import MouseClick
         from modules.pixel import CheckPixelColor
 
         mw = self._make_main_window_stub()
@@ -231,19 +246,25 @@ class TestRefreshTable:
         ]
         mw._refresh_table()
 
-        assert mw._table.rowCount() == 4
-        icons = [mw._table.item(i, 1).text() for i in range(4)]
-        assert icons == ["🖱", "⌨", "⏱", "🎨"]
+        assert mw._tree_model.rowCount() == 4
+        icons = [mw._tree_model.data(mw._tree_model.index(i, COL_TYPE), Qt.ItemDataRole.DisplayRole) for i in range(4)]
+        assert "🖱" in icons[0]
+        assert "⌨" in icons[1]
+        assert "⏱" in icons[2]
+        assert "🎨" in icons[3]
 
-    def test_disabled_action_shows_cross(self) -> None:
-        from gui.main_window import MainWindow
+    def test_disabled_action_shows_empty(self) -> None:
+        from PyQt6.QtCore import Qt
+
         from core.action import DelayAction
+        from gui.action_tree_model import COL_ENABLED
 
         mw = self._make_main_window_stub()
         mw._actions = [DelayAction(duration_ms=100, enabled=False)]
         mw._refresh_table()
 
-        assert mw._table.item(0, 4).text() == "✗"
+        idx_en = mw._tree_model.index(0, COL_ENABLED)
+        assert mw._tree_model.data(idx_en, Qt.ItemDataRole.DisplayRole) == ""
 
 
 # ============================================================
@@ -254,7 +275,7 @@ class TestSettingsDialogSignal:
     """Verify config_saved signal emits correct config dict."""
 
     def test_signal_emits_on_save(self) -> None:
-        from gui.settings_dialog import SettingsDialog, DEFAULT_CONFIG
+        from gui.settings_dialog import DEFAULT_CONFIG, SettingsDialog
         config = copy.deepcopy(DEFAULT_CONFIG)
         dialog = SettingsDialog(config)
         received: list[Any] = []
@@ -268,7 +289,7 @@ class TestSettingsDialogSignal:
         assert "defaults" in received[0]
 
     def test_changed_value_reflected(self) -> None:
-        from gui.settings_dialog import SettingsDialog, DEFAULT_CONFIG
+        from gui.settings_dialog import DEFAULT_CONFIG, SettingsDialog
         config = copy.deepcopy(DEFAULT_CONFIG)
         dialog = SettingsDialog(config)
         received: list[Any] = []
@@ -289,8 +310,8 @@ class TestTypeIconsCoverage:
     """Every registered action type should have an icon in _TYPE_ICONS."""
 
     def test_all_types_have_icons(self) -> None:
-        from gui.main_window import MainWindow
         from core.action import get_all_action_types
+        from gui.main_window import MainWindow
 
         for atype in get_all_action_types():
             assert atype in MainWindow._TYPE_ICONS, (
@@ -326,8 +347,8 @@ class TestActionEditorEditFlow:
         assert dialog._desc_edit.text() == "test desc"
 
     def test_load_delay_sets_duration(self) -> None:
-        from gui.action_editor import ActionEditorDialog
         from core.action import DelayAction
+        from gui.action_editor import ActionEditorDialog
 
         action = DelayAction(duration_ms=2500)
         dialog = ActionEditorDialog(action=action)
@@ -337,8 +358,8 @@ class TestActionEditorEditFlow:
         assert dialog._param_widgets["duration_ms"].value() == 2500
 
     def test_load_preserves_enabled_state(self) -> None:
-        from gui.action_editor import ActionEditorDialog
         from core.action import DelayAction
+        from gui.action_editor import ActionEditorDialog
 
         disabled = DelayAction(duration_ms=100, enabled=False,
                                repeat_count=3)
@@ -356,7 +377,7 @@ class TestActionEditorEditFlow:
 
         atype = dialog._type_combo.currentData(Qt.ItemDataRole.UserRole)
         assert atype == "key_press"
-        assert dialog._param_widgets["key"].text() == "enter"
+        assert dialog._param_widgets["key"].currentText() == "enter"
 
     def test_load_type_text_sets_text(self) -> None:
         from gui.action_editor import ActionEditorDialog
@@ -367,7 +388,7 @@ class TestActionEditorEditFlow:
 
         atype = dialog._type_combo.currentData(Qt.ItemDataRole.UserRole)
         assert atype == "type_text"
-        assert dialog._param_widgets["text"].text() == "hello world"
+        assert dialog._param_widgets["text"].toPlainText() == "hello world"
 
 
 # ============================================================
@@ -507,7 +528,7 @@ class TestSettingsWidgetInit:
     """Verify SettingsDialog populates widgets from config."""
 
     def test_modified_config_reflected_in_widgets(self) -> None:
-        from gui.settings_dialog import SettingsDialog, DEFAULT_CONFIG
+        from gui.settings_dialog import DEFAULT_CONFIG, SettingsDialog
         config = copy.deepcopy(DEFAULT_CONFIG)
         config["defaults"]["click_delay"] = 42
         dialog = SettingsDialog(config)
@@ -516,7 +537,7 @@ class TestSettingsWidgetInit:
         assert dialog._widgets["defaults.click_delay"].value() == 42
 
     def test_default_config_values_in_widgets(self) -> None:
-        from gui.settings_dialog import SettingsDialog, DEFAULT_CONFIG
+        from gui.settings_dialog import DEFAULT_CONFIG, SettingsDialog
         config = copy.deepcopy(DEFAULT_CONFIG)
         dialog = SettingsDialog(config)
 

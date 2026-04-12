@@ -13,29 +13,42 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from core.hotkey_manager import HotkeyManager
 
-# Set up logging before any other imports
-LOG_DIR = Path("logs")
-LOG_DIR.mkdir(exist_ok=True)
+from core.app_paths import LOG_DIR
 
-_log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-
-# Rotating log: 5MB per file, keep 3 backups (total max ~20MB)
-_file_handler = logging.handlers.RotatingFileHandler(
-    LOG_DIR / "autopilot.log",
-    maxBytes=5 * 1024 * 1024,
-    backupCount=3,
-    encoding="utf-8",
-)
-_file_handler.setFormatter(_log_formatter)
-
-_console_handler = logging.StreamHandler(sys.stdout)
-_console_handler.setFormatter(_log_formatter)
-
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[_file_handler, _console_handler],
-)
 logger = logging.getLogger("AutoPilot")
+
+
+def setup_logging() -> None:
+    """Initialize logging — call once from main(), NOT at import time."""
+    LOG_DIR.mkdir(exist_ok=True)
+
+    _log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+    # Rotating log: 5MB per file, keep 3 backups (total max ~20MB)
+    _file_handler = logging.handlers.RotatingFileHandler(
+        LOG_DIR / "autopilot.log",
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    _file_handler.setFormatter(_log_formatter)
+
+    _console_handler = logging.StreamHandler(sys.stdout)
+    _console_handler.setFormatter(_log_formatter)
+
+    # Support --debug flag for verbose logging
+    if "--debug" in sys.argv:
+        _log_level_name = "DEBUG"
+        sys.argv.remove("--debug")  # Remove so Qt doesn't see it
+    else:
+        _log_level_name = os.environ.get("AUTOPILOT_LOG_LEVEL", "INFO").upper()
+    _log_level = getattr(logging, _log_level_name, logging.INFO)
+
+    logging.basicConfig(
+        level=_log_level,
+        handlers=[_file_handler, _console_handler],
+    )
+
 
 
 def setup_global_hotkeys(config: dict[str, Any]) -> "HotkeyManager | None":
@@ -111,6 +124,9 @@ def main() -> None:
     app_dir = Path(__file__).parent.resolve()
     os.chdir(app_dir)
 
+    # Initialize logging (no side-effects at import time)
+    setup_logging()
+
     # Fix Qt DPI warning: set DPI awareness BEFORE Qt loads
     # so Qt doesn't call SetProcessDpiAwarenessContext() again
     try:
@@ -130,6 +146,10 @@ def main() -> None:
     app.setApplicationName("AutoPilot")
     app.setOrganizationName("AutoPilot")
 
+    # Suppress scroll-to-change-value on SpinBox/ComboBox when not focused
+    from gui.no_scroll_widgets import patch_wheel_events
+    patch_wheel_events()
+
     # --- Tier 1: CrashHandler (replaces simple excepthook) ---
     from core.crash_handler import CrashHandler
 
@@ -139,12 +159,15 @@ def main() -> None:
     from core.memory_manager import MemoryManager
     from modules.image import ImageFinder
 
+    # Load config first to get user-defined memory threshold
+    config = load_config()
+    mem_threshold = config.get("performance", {}).get("memory_limit_mb", 200)
     mem_mgr = MemoryManager.instance()
+    mem_mgr.set_threshold(mem_threshold)
     mem_mgr.register_cleanup(ImageFinder.clear_cache)
     mem_mgr.start()
 
-    # Load config and set up hotkeys
-    config = load_config()
+    # Set up hotkeys (reuse config loaded above)
     _hk_mgr = setup_global_hotkeys(config)  # prevent GC
 
     # Show main window

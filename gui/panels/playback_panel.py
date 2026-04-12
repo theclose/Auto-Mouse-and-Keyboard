@@ -119,6 +119,15 @@ class PlaybackPanel(QWidget):
         self._speed_spin.valueChanged.connect(self.speed_changed.emit)
         loop_form.addRow("Tốc độ:", self._speed_spin)
 
+        self._jitter_spin = QSpinBox()
+        self._jitter_spin.setRange(0, 50)
+        self._jitter_spin.setValue(0)
+        self._jitter_spin.setSuffix("%")
+        self._jitter_spin.setToolTip("Biến thiên delay ngẫu nhiên (±X%)\n"
+                                     "Giúp thao tác tự nhiên hơn, tránh rate-limit")
+        self._jitter_spin.setAccessibleName("Biến thiên delay")
+        loop_form.addRow("Biến thiên:", self._jitter_spin)
+
         layout.addWidget(self._loop_group)
 
     # -- Public API ---------------------------------------------------------

@@ -3,28 +3,28 @@ Tests for core.macro_templates — template loading and action creation.
 """
 import json
 import os
-import tempfile
-import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # Import action modules
-import modules.mouse
-import modules.keyboard
-import modules.image
-import modules.pixel
-import modules.system
-import core.scheduler
-
-from core.macro_templates import (
-    BUILTIN_TEMPLATES, get_templates, create_actions_from_template,
-)
+# Import action modules to register all types before testing templates
+import core.scheduler  # noqa: F401 — registers set_variable, delay, loop
+import modules.image  # noqa: F401 — registers wait_for_image, click_on_image
+import modules.keyboard  # noqa: F401 — registers type_text
+import modules.mouse  # noqa: F401 — registers mouse_click
+import modules.screen  # noqa: F401 — registers take_screenshot
+import modules.system  # noqa: F401 — registers read_file_line, write_to_file
 from core.action import Action
+from core.macro_templates import (
+    BUILTIN_TEMPLATES,
+    create_actions_from_template,
+    get_templates,
+)
 
 
 class TestBuiltinTemplates:
-    def test_has_6_builtin_templates(self):
-        assert len(BUILTIN_TEMPLATES) == 6
+    def test_has_10_builtin_templates(self):
+        assert len(BUILTIN_TEMPLATES) == 10
 
     def test_templates_have_required_keys(self):
         for t in BUILTIN_TEMPLATES:
@@ -42,6 +42,10 @@ class TestBuiltinTemplates:
         assert any("Screenshot" in n for n in names)
         assert any("CSV" in n for n in names)
         assert any("Retry" in n for n in names)
+        assert any("Clicker" in n or "Click tự động" in n for n in names)
+        assert any("Clipboard" in n or "Copy-Paste" in n for n in names)
+        assert any("Restart" in n or "Giám sát" in n for n in names)
+        assert any("Batch" in n or "Nhập hàng loạt" in n for n in names)
 
     def test_actions_have_type(self):
         for t in BUILTIN_TEMPLATES:
@@ -72,12 +76,9 @@ class TestGetTemplates:
         (templates_dir / "custom.json").write_text(
             json.dumps(custom), encoding="utf-8")
 
-        # Monkeypatch Path to use tmp_path
-        from pathlib import Path
-        orig_path = Path
-        monkeypatch.setattr(
-            "core.macro_templates.Path",
-            lambda x: tmp_path / x if x == "templates" else orig_path(x))
+        # Monkeypatch TEMPLATES_DIR to use tmp_path/templates
+        import core.app_paths
+        monkeypatch.setattr(core.app_paths, "TEMPLATES_DIR", templates_dir)
 
         templates = get_templates()
         assert len(templates) >= 7
@@ -89,11 +90,8 @@ class TestGetTemplates:
         templates_dir.mkdir()
         (templates_dir / "bad.json").write_text("NOT JSON!", encoding="utf-8")
 
-        from pathlib import Path
-        orig_path = Path
-        monkeypatch.setattr(
-            "core.macro_templates.Path",
-            lambda x: tmp_path / x if x == "templates" else orig_path(x))
+        import core.app_paths
+        monkeypatch.setattr(core.app_paths, "TEMPLATES_DIR", templates_dir)
 
         templates = get_templates()
         # Should still return builtin templates without crash

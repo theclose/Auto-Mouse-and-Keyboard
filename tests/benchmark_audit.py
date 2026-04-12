@@ -5,23 +5,24 @@ OCR Accuracy Benchmark + Low-Spec System Profiling
 Fix #2: Generate synthetic screenshots and measure pytesseract accuracy
 Fix #5: Profile memory usage, CPU time, and GDI handles under load
 """
-import sys
 import os
-import time
-import threading
-import tracemalloc
+import sys
 import tempfile
+import threading
+import time
+import tracemalloc
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import unittest.mock as mock
+
 sys.modules['pyautogui'] = mock.MagicMock()
 sys.modules['pynput'] = mock.MagicMock()
 sys.modules['pynput.mouse'] = mock.MagicMock()
 sys.modules['pynput.keyboard'] = mock.MagicMock()
 
+from core.engine_context import set_context, set_speed, set_stop_event
 from core.execution_context import ExecutionContext
-from core.engine_context import set_context, set_stop_event, set_speed
 
 results = []
 
@@ -43,7 +44,7 @@ def benchmark_ocr():
     print("=" * 70)
     print("OCR ACCURACY BENCHMARK")
     print("=" * 70)
-    
+
     try:
         import pytesseract
         from PIL import Image, ImageDraw, ImageFont
@@ -95,7 +96,7 @@ def benchmark_ocr():
         w, h = max(300, len(text) * size), size * 3
         img = Image.new("RGB", (w, h), bg)
         draw = ImageDraw.Draw(img)
-        
+
         try:
             font = ImageFont.truetype("arial.ttf", size)
         except (IOError, OSError):
@@ -105,7 +106,7 @@ def benchmark_ocr():
 
         # OCR
         ocr_text = pytesseract.image_to_string(img, config="--psm 7").strip()
-        
+
         match = ocr_text == text
         if match:
             correct += 1
@@ -124,7 +125,7 @@ def benchmark_ocr():
     print(f"\n  Exact match: {correct}/{total} ({exact_pct:.0f}%)")
     print(f"  Close match: {correct+close}/{total} ({close_pct:.0f}%)")
     print(f"  Failed:      {total - correct - close}/{total}")
-    
+
     results.append(("OCR exact accuracy", f"{exact_pct:.0f}%"))
     results.append(("OCR close accuracy", f"{close_pct:.0f}%"))
 
@@ -157,8 +158,6 @@ def profile_low_spec():
     ctx = setup()
 
     # Import all actions
-    import core.scheduler
-    import modules.system
     from core.action import get_action_class
 
     # 1. Memory baseline
@@ -186,14 +185,14 @@ def profile_low_spec():
 
     for i in range(1, 1001):
         ctx.set_var("i", i)
-        
+
         # Read + Split + Add
         rfl = RFL(file_path=csv_path, line_number=str(i), var_name="line")
         rfl.execute()
-        
+
         ss = SS(source_var="line", delimiter=",", field_index=2, target_var="amount")
         ss.execute()
-        
+
         sv = SV(var_name="total", value="${amount}", operation="add")
         sv.execute()
 
@@ -210,7 +209,7 @@ def profile_low_spec():
     mem_used_kb = (mem_after - mem_base) / 1024
     mem_peak_kb = (mem_peak - mem_base) / 1024
 
-    print(f"\n  Workload: 1000 iterations x (ReadFileLine + SplitString + SetVariable)")
+    print("\n  Workload: 1000 iterations x (ReadFileLine + SplitString + SetVariable)")
     print(f"  Total time:    {elapsed:.3f}s ({elapsed/1000*1000:.1f} ms/iter)")
     print(f"  Memory used:   {mem_used_kb:.1f} KB")
     print(f"  Memory peak:   {mem_peak_kb:.1f} KB")

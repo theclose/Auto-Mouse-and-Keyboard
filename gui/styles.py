@@ -3,6 +3,61 @@ Theme system for the AutoPilot application.
 Single template + color palettes = DRY and maintainable.
 """
 
+import os as _os
+import tempfile as _tempfile
+
+# Arrow image paths (generated at first theme build)
+_arrow_dir: str = ""
+_arrow_up: str = ""
+_arrow_down: str = ""
+
+
+def _ensure_arrow_images() -> tuple[str, str]:
+    """Generate up/down arrow PNGs for SpinBox buttons (light color, transparent bg).
+
+    Returns (up_path, down_path). Images are cached in a temp dir.
+    """
+    global _arrow_dir, _arrow_up, _arrow_down
+
+    # Return cached paths if already generated
+    if _arrow_up and _os.path.isfile(_arrow_up):
+        return _arrow_up, _arrow_down
+
+    _arrow_dir = _tempfile.mkdtemp(prefix="autopilot_arrows_")
+    _arrow_up = _os.path.join(_arrow_dir, "up.png")
+    _arrow_down = _os.path.join(_arrow_dir, "down.png")
+
+    try:
+        from PyQt6.QtCore import QPoint, Qt
+        from PyQt6.QtGui import QColor, QImage, QPainter, QPolygon
+
+        for path, points in [
+            (_arrow_up, [(5, 1), (9, 7), (1, 7)]),    # ▲
+            (_arrow_down, [(5, 7), (9, 1), (1, 1)]),  # ▼
+        ]:
+            img = QImage(10, 8, QImage.Format.Format_ARGB32)
+            img.fill(QColor(0, 0, 0, 0))  # transparent
+            p = QPainter(img)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            p.setBrush(QColor(200, 200, 220))  # visible light gray
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawPolygon(QPolygon([QPoint(*pt) for pt in points]))
+            p.end()
+            img.save(path)
+    except Exception:
+        # Fallback: create 1x1 transparent PNGs so QSS doesn't break
+        for path in (_arrow_up, _arrow_down):
+            with open(path, "wb") as f:
+                # Minimal valid 1x1 transparent PNG
+                f.write(
+                    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+                    b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4"
+                    b"\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05"
+                    b"\x00\x01\r\n\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+                )
+
+    return _arrow_up, _arrow_down
+
 # ── Color Palettes ──────────────────────────────────────────
 
 DARK_COLORS = {
@@ -20,8 +75,8 @@ DARK_COLORS = {
     "error": "#e74c3c",
     "error_hover": "#c0392b",
     "text_primary": "#e8e8f0",
-    "text_secondary": "#ababc0",
-    "text_muted": "#8a8aa8",
+    "text_secondary": "#c0c0d0",
+    "text_muted": "#9595a8",
     "border": "#3a3c60",
     "border_light": "#4a4c70",
     "scrollbar": "#4a4c70",
@@ -171,9 +226,27 @@ QSpinBox::up-button, QSpinBox::down-button,
 QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
     background-color: {bg_tertiary};
     border: none;
-    width: 20px;
+    border-left: 1px solid {border};
+    width: 22px;
 }}
-
+QSpinBox::up-button:hover, QSpinBox::down-button:hover,
+QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {{
+    background-color: {bg_hover};
+}}
+QSpinBox::up-button:pressed, QSpinBox::down-button:pressed,
+QDoubleSpinBox::up-button:pressed, QDoubleSpinBox::down-button:pressed {{
+    background-color: {accent_dark};
+}}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+    image: url({arrow_up});
+    width: 10px;
+    height: 8px;
+}}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+    image: url({arrow_down});
+    width: 10px;
+    height: 8px;
+}}
 /* ---- Combo Box ---- */
 QComboBox {{
     background-color: {bg_secondary};
@@ -353,8 +426,8 @@ QTextEdit#crashTraceback {{
 }}
 
 /* ---- Empty Overlay ---- */
-QLabel#emptyOverlay {{
-    font-size: 12pt; color: {text_secondary}; padding: 40px;
+QWidget#emptyOverlay {{
+    padding: 40px;
     background-color: transparent;
 }}
 
@@ -369,13 +442,45 @@ QListWidget:focus, QTableWidget:focus {{
 
 
 def _build_theme(colors: dict) -> str:
-    """Build QSS from template + color dict."""
-    return _THEME_TEMPLATE.format(**colors)
+    """Build QSS from template + color dict + arrow images."""
+    up_path, down_path = _ensure_arrow_images()
+    # Qt QSS requires forward slashes in image URLs, even on Windows
+    merged = {
+        **colors,
+        "arrow_up": up_path.replace("\\", "/"),
+        "arrow_down": down_path.replace("\\", "/"),
+    }
+    return _THEME_TEMPLATE.format(**merged)
 
 
-# Pre-built themes for backward compatibility
-DARK_THEME = _build_theme(DARK_COLORS)
-LIGHT_THEME = _build_theme(LIGHT_COLORS)
+
+ACCENT_PRESETS = {
+    "Tím": {"accent": "#6c63ff", "accent_hover": "#8b83ff", "accent_dark": "#4a42d4"},
+    "Xanh dương": {"accent": "#3498db", "accent_hover": "#5dade2", "accent_dark": "#2980b9"},
+    "Xanh lá": {"accent": "#27ae60", "accent_hover": "#2ecc71", "accent_dark": "#1e8449"},
+    "Đỏ": {"accent": "#e74c3c", "accent_hover": "#ec7063", "accent_dark": "#c0392b"},
+    "Cam": {"accent": "#e67e22", "accent_hover": "#eb984e", "accent_dark": "#d35400"},
+    "Hồng": {"accent": "#e84393", "accent_hover": "#fd79a8", "accent_dark": "#d63031"}
+}
+
+# Pre-built themes — lazy-loaded because _build_theme() now uses QPainter
+# which requires QApplication to exist.
+_DARK_THEME: str | None = None
+_LIGHT_THEME: str | None = None
+
+
+def __getattr__(name: str):
+    """Module-level __getattr__ for lazy theme constants."""
+    global _DARK_THEME, _LIGHT_THEME
+    if name == "DARK_THEME":
+        if _DARK_THEME is None:
+            _DARK_THEME = _build_theme(DARK_COLORS)
+        return _DARK_THEME
+    if name == "LIGHT_THEME":
+        if _LIGHT_THEME is None:
+            _LIGHT_THEME = _build_theme(LIGHT_COLORS)
+        return _LIGHT_THEME
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # ── Theme helpers ────────────────────────────────────────────
@@ -397,20 +502,28 @@ def get_system_theme() -> str:
         return "dark"
 
 
-def get_theme(preference: str = "auto", font_size: int = 10) -> str:
+def get_theme(preference: str = "auto", font_size: int = 10, accent: str = "Tím") -> str:
     """Return QSS string based on preference ('auto', 'dark', 'light').
 
     Args:
         preference: 'auto', 'dark', or 'light'
         font_size: Font size in pt (8-16, default 10)
+        accent: Accent color preset name
     """
     font_size = max(8, min(16, font_size))
+    
     if preference == "light":
-        qss = LIGHT_THEME
+        base_colors = dict(LIGHT_COLORS)
     elif preference == "dark":
-        qss = DARK_THEME
+        base_colors = dict(DARK_COLORS)
     else:
-        qss = LIGHT_THEME if get_system_theme() == "light" else DARK_THEME
+        base_colors = dict(LIGHT_COLORS) if get_system_theme() == "light" else dict(DARK_COLORS)
+        
+    if accent in ACCENT_PRESETS:
+        base_colors.update(ACCENT_PRESETS[accent])
+        
+    qss = _build_theme(base_colors)
+
     # Apply font size (replace default 10pt)
     if font_size != 10:
         qss = qss.replace("font-size: 10pt;", f"font-size: {font_size}pt;")

@@ -109,6 +109,8 @@ def get_pixel_checker() -> PixelChecker:
 class CheckPixelColor(Action):
     """Check if a pixel matches an expected color."""
 
+    __slots__ = ('x', 'y', 'r', 'g', 'b', 'tolerance', '_result')
+
     def __init__(
         self, x: int = 0, y: int = 0, r: int = 0, g: int = 0, b: int = 0, tolerance: int = 10, **kwargs: Any
     ) -> None:
@@ -173,6 +175,8 @@ class CheckPixelColor(Action):
 @register_action("wait_for_color")
 class WaitForColor(Action):
     """Wait until a pixel reaches a target color."""
+
+    __slots__ = ('x', 'y', 'r', 'g', 'b', 'tolerance', 'timeout_ms')
 
     def __init__(
         self,

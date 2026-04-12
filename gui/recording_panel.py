@@ -91,7 +91,7 @@ class RecordingPanel(QWidget):
 
         # Live preview list (#8: improved format)
         self._preview_list = QListWidget()
-        self._preview_list.setMaximumHeight(200)
+        self._preview_list.setMaximumHeight(120)
         self._preview_list.setAccessibleName("Xem trước hành động ghi")
         layout.addWidget(self._preview_list)
 

@@ -6,6 +6,9 @@ v2.9: double-click detection, key combo detection, mouse drag,
       pause/resume support.
 """
 
+__all__ = ['Recorder']
+
+
 import logging
 import threading
 import time
@@ -121,6 +124,7 @@ class Recorder:
         self._active_modifiers: set = set()
 
         # Drag detection state (#6)
+        self._state_lock = threading.Lock()  # CQ-2: thread-safe state tracking
         self._mouse_pressed: bool = False
         self._press_pos: tuple[int, int] = (0, 0)
         self._press_button: str = "left"
@@ -254,15 +258,17 @@ class Recorder:
 
         if pressed:
             # Track press for drag detection (#6)
-            self._mouse_pressed = True
-            self._press_pos = (int(x), int(y))
-            self._press_button = btn
+            with self._state_lock:
+                self._mouse_pressed = True
+                self._press_pos = (int(x), int(y))
+                self._press_button = btn
             return  # don't record click yet — wait for release
 
         # === RELEASE ===
-        self._mouse_pressed = False
         rx, ry = int(x), int(y)
-        px, py = self._press_pos
+        with self._state_lock:
+            self._mouse_pressed = False
+            px, py = self._press_pos
 
         # Drag detection (#6): if moved >DRAG_MIN_PX, record as drag
         dist = ((rx - px) ** 2 + (ry - py) ** 2) ** 0.5
@@ -271,7 +277,7 @@ class Recorder:
             self._record_delay()
             try:
                 cls = get_action_class("mouse_drag")
-                action = cls(x=rx, y=ry, duration=0.5, button=btn)  # type: ignore[call-arg]
+                action = cls(x=rx, y=ry, start_x=px, start_y=py, duration=0.5, button=btn)  # type: ignore[call-arg]
                 with self._actions_lock:
                     self._actions.append(action)
                 logger.debug("Recorded drag to (%d, %d)", rx, ry)
@@ -301,7 +307,7 @@ class Recorder:
                     if self._actions[-1].ACTION_TYPE == "mouse_click":
                         self._actions.pop()
                         # Also remove its delay if present
-                        if self._actions and isinstance(self._actions[-1], DelayAction):
+                        if len(self._actions) > 0 and isinstance(self._actions[-1], DelayAction):
                             self._actions.pop()
             try:
                 ctx_path = self._capture_click_context(rx, ry)

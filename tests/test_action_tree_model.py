@@ -7,27 +7,29 @@ Run: python -m pytest tests/test_action_tree_model.py -v
 import os
 import sys
 from typing import Any
-from unittest.mock import patch, MagicMock
-
-import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from PyQt6.QtCore import QModelIndex, Qt
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt, QModelIndex
 
 _app = QApplication.instance() or QApplication([])
 
 # Force-register all action types
-import core.action       # noqa: F401
-import modules.mouse     # noqa: F401
+import core.action  # noqa: F401
+import core.scheduler  # noqa: F401
+import modules.image  # noqa: F401
 import modules.keyboard  # noqa: F401
-import modules.image     # noqa: F401
-import modules.pixel     # noqa: F401
-import core.scheduler    # noqa: F401
-
-from gui.action_tree_model import ActionTreeModel, NUM_COLUMNS, COL_ENABLED, COL_TYPE, COL_DETAILS, COL_DELAY
-
+import modules.mouse  # noqa: F401
+import modules.pixel  # noqa: F401
+from gui.action_tree_model import (
+    COL_DELAY,
+    COL_DETAILS,
+    COL_ENABLED,
+    COL_TYPE,
+    NUM_COLUMNS,
+    ActionTreeModel,
+)
 
 # ============================================================
 # Helpers
@@ -280,8 +282,8 @@ class TestHeaders:
         model = ActionTreeModel([])
         h0 = model.headerData(0, Qt.Orientation.Horizontal)
         h1 = model.headerData(1, Qt.Orientation.Horizontal)
-        assert h0 == "✓"
-        assert h1 == "Loại"
+        assert h0 == "#"
+        assert h1 == "✓"
 
     def test_invalid_section_returns_none(self) -> None:
         model = ActionTreeModel([])

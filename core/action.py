@@ -4,6 +4,9 @@ Each action is a self-contained command that can be serialized/deserialized,
 executed, and composed into macro sequences.
 """
 
+__all__ = ['Action', 'register_action', 'get_action_class', 'get_all_action_types']
+
+
 import logging
 from abc import ABC, abstractmethod
 
@@ -94,7 +97,13 @@ class Action(ABC):
       - Implement _get_params() and _set_params()
     """
 
+    __slots__ = (
+        'id', 'delay_after', 'repeat_count', 'description',
+        'enabled', 'on_error', 'color', 'bookmarked', 'last_duration_ms',
+    )
+
     ACTION_TYPE: str = ""  # Set by @register_action
+    TYPE_ICON: str = ""    # Override in subclass for auto-icon discovery
 
     def __init__(
         self,
@@ -103,6 +112,8 @@ class Action(ABC):
         description: str = "",
         enabled: bool = True,
         on_error: str = "stop",
+        color: str = "",
+        bookmarked: bool = False,
     ):
         self.id = _next_id()
         self.delay_after = delay_after  # ms to wait after execution
@@ -110,6 +121,10 @@ class Action(ABC):
         self.description = description
         self.enabled = enabled
         self.on_error = on_error  # "stop" | "skip" | "retry:N"
+        self.color = color  # User color tag: "red", "blue", etc. or ""
+        self.bookmarked = bookmarked  # User bookmark flag
+        # Runtime-only fields (not serialized)
+        self.last_duration_ms: int = 0  # Measured execution time
 
     # -- composite interface (v3.0) ------------------------------------------
     @property
@@ -181,7 +196,7 @@ class Action(ABC):
     # -- serialisation -------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
         """Serialise the action to a JSON-compatible dict."""
-        return {
+        d = {
             "type": self.ACTION_TYPE,
             "params": self._get_params(),
             "delay_after": self.delay_after,
@@ -190,14 +205,46 @@ class Action(ABC):
             "enabled": self.enabled,
             "on_error": self.on_error,
         }
+        if self.color:  # Only save if set (backward-compatible)
+            d["color"] = self.color
+        if self.bookmarked:  # Only save if set (backward-compatible)
+            d["bookmarked"] = True
+        return d
+
+    # P0: Legacy/typo alias mapping for backward compatibility
+    _TYPE_ALIASES: dict[str, str] = {
+        "screenshot": "take_screenshot",
+        "click": "mouse_click",
+        "double_click": "mouse_double_click",
+        "right_click": "mouse_right_click",
+        "drag": "mouse_drag",
+        "scroll": "mouse_scroll",
+        "move": "mouse_move",
+        "press": "key_press",
+        "combo": "key_combo",
+        "wait_image": "wait_for_image",
+        "find_image": "image_exists",
+        "check_pixel": "check_pixel_color",
+        "wait_color": "wait_for_color",
+        "set_var": "set_variable",
+        "if_var": "if_variable",
+        "loop": "loop_block",
+    }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Action":
         """
         Deserialise an action dict into the correct Action subclass.
         This is a *factory* – call it on the base `Action` class.
+        Supports type aliases for backward compatibility.
         """
-        action_cls = get_action_class(data["type"])
+        action_type = data["type"]
+        # P0: Resolve type aliases
+        if action_type in cls._TYPE_ALIASES:
+            resolved = cls._TYPE_ALIASES[action_type]
+            logger.info("Action type alias: '%s' → '%s'", action_type, resolved)
+            action_type = resolved
+        action_cls = get_action_class(action_type)
         action = action_cls.__new__(action_cls)
         Action.__init__(
             action,
@@ -208,6 +255,8 @@ class Action(ABC):
             on_error=data.get("on_error", "stop"),
         )
         action._set_params(data.get("params", {}))
+        action.color = data.get("color", "")  # Backward-compat: missing → empty
+        action.bookmarked = data.get("bookmarked", False)
         return action
 
     # -- helpers -------------------------------------------------------------
@@ -224,26 +273,47 @@ class Action(ABC):
         """Execute the action with on_error policy support."""
         if not self.enabled:
             return True
-        # Fast path: on_error='stop' (default, ~95% of actions)
-        if self.on_error == "stop":
+        import time as _time
+
+        _t0 = _time.perf_counter()
+        try:
+            # P3-A: Auto-profile every action execution by type
+            from core.profiler import get_profiler
+            _profiler = get_profiler()
+
+            # Fast path: on_error='stop' (default, ~95% of actions)
+            if self.on_error == "stop":
+                for _ in range(self.repeat_count):
+                    with _profiler.track(f"action.{self.ACTION_TYPE}"):
+                        if not self.execute():
+                            return False
+                    if self.delay_after > 0:
+                        from core.engine_context import get_jitter, scaled_sleep
+
+                        delay = self.delay_after
+                        jitter = get_jitter()
+                        if jitter > 0:
+                            import random
+                            delay = max(1, int(delay * (1 + random.uniform(-jitter, jitter))))
+                        scaled_sleep(delay / 1000.0)
+                return True
+            # Slow path: skip/retry requires policy handling
             for _ in range(self.repeat_count):
-                if not self.execute():
+                success = self._run_once_with_policy()
+                if not success and self.on_error == "stop":
                     return False
                 if self.delay_after > 0:
-                    from core.engine_context import scaled_sleep
+                    from core.engine_context import get_jitter, scaled_sleep
 
-                    scaled_sleep(self.delay_after / 1000.0)
+                    delay = self.delay_after
+                    jitter = get_jitter()
+                    if jitter > 0:
+                        import random
+                        delay = max(1, int(delay * (1 + random.uniform(-jitter, jitter))))
+                    scaled_sleep(delay / 1000.0)
             return True
-        # Slow path: skip/retry requires policy handling
-        for _ in range(self.repeat_count):
-            success = self._run_once_with_policy()
-            if not success and self.on_error == "stop":
-                return False
-            if self.delay_after > 0:
-                from core.engine_context import scaled_sleep
-
-                scaled_sleep(self.delay_after / 1000.0)
-        return True
+        finally:
+            self.last_duration_ms = int((_time.perf_counter() - _t0) * 1000)
 
     def _run_once_with_policy(self) -> bool:
         """Execute once, applying on_error policy."""
@@ -288,6 +358,8 @@ class Action(ABC):
 @register_action("delay")
 class DelayAction(Action):
     """Wait for a specified number of milliseconds. Supports ${var} in duration."""
+
+    __slots__ = ('duration_ms', '_dynamic_ms')
 
     def __init__(self, duration_ms: int = 1000, **kwargs: Any) -> None:
         super().__init__(**kwargs)

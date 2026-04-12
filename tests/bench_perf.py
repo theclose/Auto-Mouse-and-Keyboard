@@ -1,16 +1,21 @@
 # -*- coding: utf-8 -*-
 """Quick stress benchmark after optimizations."""
-import sys, os, time, threading
+import os
+import sys
+import threading
+import time
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import unittest.mock as mock
+
 sys.modules['pyautogui'] = mock.MagicMock()
 sys.modules['pynput'] = mock.MagicMock()
 sys.modules['pynput.mouse'] = mock.MagicMock()
 sys.modules['pynput.keyboard'] = mock.MagicMock()
 
+from core.engine_context import set_context, set_speed, set_stop_event
 from core.execution_context import ExecutionContext
-from core.engine_context import set_context, set_stop_event, set_speed
 
 ctx = ExecutionContext()
 ctx.reset()
@@ -51,8 +56,6 @@ p("set_image_match", lambda: ctx.set_image_match("b.png", (100, 200, 50, 30)), 1
 p("get_image_match", lambda: ctx.get_image_match("b.png"), 100000)
 
 # === Actions ===
-import core.scheduler
-import modules.system
 from core.action import get_action_class
 
 SV = get_action_class("set_variable")
@@ -99,7 +102,8 @@ e = time.perf_counter() - t0
 results.append(("LoopBlock(100K)x1_action", 100000, e, e / 100000 * 1e6))
 
 # === DPAPI ===
-from core.secure import encrypt, decrypt
+from core.secure import decrypt, encrypt
+
 enc = encrypt("P@ssw0rd123!")
 p("DPAPI_encrypt", lambda: encrypt("P@ssw0rd123!"), 1000)
 p("DPAPI_decrypt", lambda: decrypt(enc), 1000)

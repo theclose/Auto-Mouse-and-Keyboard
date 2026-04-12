@@ -7,31 +7,35 @@ Run: python -m pytest tests/test_mainwindow_slots.py -v
 
 import os
 import sys
-from pathlib import Path
 from typing import Any
-from unittest.mock import patch, MagicMock, PropertyMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PyQt6.QtWidgets import (
-    QApplication, QTableWidget, QLabel, QPushButton,
-    QSpinBox, QCheckBox, QMessageBox, QProgressBar,
-    QGroupBox, QListWidget, QPlainTextEdit, QLineEdit,
-)
-from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QUndoStack
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
+    QPushButton,
+    QSpinBox,
+)
 
 _app = QApplication.instance() or QApplication([])
 
 # Force-register all action types
-import core.action       # noqa: F401
-import modules.mouse     # noqa: F401
+import core.action  # noqa: F401
+import core.scheduler  # noqa: F401
+import modules.image  # noqa: F401
 import modules.keyboard  # noqa: F401
-import modules.image     # noqa: F401
-import modules.pixel     # noqa: F401
-import core.scheduler    # noqa: F401
+import modules.mouse  # noqa: F401
+import modules.pixel  # noqa: F401
 
 
 def _make_stub() -> Any:
@@ -42,7 +46,6 @@ def _make_stub() -> Any:
 
     # Inject minimal widgets
     mw._actions = []
-    mw._table = QTableWidget(0, 6)
     mw._status_label = QLabel("Ready")
     mw._play_btn = QPushButton("Play")
     mw._pause_btn = QPushButton("Pause")
@@ -89,18 +92,30 @@ def _make_stub() -> Any:
     mw._ram_label = QLabel()
     mw._stats_label = QLabel()
     mw._empty_overlay = QLabel()
+    # Batch progress timer fields
+    from PyQt6.QtCore import QTimer
+    mw._pending_progress = None
+    mw._pending_action_name = ""
+    mw._progress_timer = QTimer()
+    mw._progress_timer.setInterval(100)
     from PyQt6.QtWidgets import QDoubleSpinBox
     mw._speed_spin = QDoubleSpinBox()
     mw._speed_spin.setValue(1.0)
 
-    # v3.0: tree view attributes
-    mw._tree_mode = False
+    # v3.0: tree view (tree-only, no table)
     from PyQt6.QtWidgets import QTreeView
     mw._tree = QTreeView()
-    from gui.action_tree_model import ActionTreeModel
+    from gui.action_tree_model import ActionTreeFilterProxy, ActionTreeModel
     mw._tree_model = ActionTreeModel(mw._actions)
     mw._filter_edit = QLineEdit()
-    mw._view_toggle_btn = QPushButton()
+
+    # Mock action_list_panel with filter_proxy
+    mw._action_list_panel = MagicMock()
+    _filter_proxy = ActionTreeFilterProxy()
+    _filter_proxy.setSourceModel(mw._tree_model)
+    mw._action_list_panel.filter_proxy = _filter_proxy
+    mw._action_list_panel._filter_proxy = _filter_proxy
+    mw._tree.setModel(_filter_proxy)  # connect tree to proxy
 
     # v3.0: variable inspector + step-through widgets
     from PyQt6.QtCore import QTimer
@@ -126,7 +141,6 @@ def _make_delay(ms: int = 100) -> Any:
 
 class TestHandleActionAdded:
     def test_appends_when_no_selection(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         action = _make_delay(100)
 
@@ -135,15 +149,14 @@ class TestHandleActionAdded:
         assert len(mw._actions) == 1
         assert mw._actions[0] is action
         mw._refresh_table()
-        assert mw._table.rowCount() == 1
+        assert mw._tree_model.rowCount() == 1
 
     def test_inserts_after_selected_row(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         a1, a2, a3 = _make_delay(1), _make_delay(2), _make_delay(3)
         mw._actions = [a1, a2]
         mw._refresh_table()
-        mw._table.selectRow(0)  # select row 0
+        mw._select_tree_row(0)  # select row 0
 
         mw._handle_action_added(a3)
 
@@ -157,7 +170,6 @@ class TestHandleActionAdded:
 
 class TestHandleActionEdited:
     def test_replaces_at_row(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         old = _make_delay(100)
         new = _make_delay(999)
@@ -170,7 +182,6 @@ class TestHandleActionEdited:
         assert mw._actions[0].duration_ms == 999
 
     def test_oob_row_ignored(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._actions = [_make_delay()]
 
@@ -186,12 +197,11 @@ class TestHandleActionEdited:
 
 class TestMoveUpDown:
     def test_move_up_swaps(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         a1, a2 = _make_delay(1), _make_delay(2)
         mw._actions = [a1, a2]
         mw._refresh_table()
-        mw._table.selectRow(1)
+        mw._select_tree_row(1)
 
         mw._on_move_up()
 
@@ -199,23 +209,21 @@ class TestMoveUpDown:
         assert mw._actions[1] is a1
 
     def test_move_up_first_row_noop(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         a1 = _make_delay(1)
         mw._actions = [a1]
         mw._refresh_table()
-        mw._table.selectRow(0)
+        mw._select_tree_row(0)
 
         mw._on_move_up()  # should do nothing
         assert mw._actions[0] is a1
 
     def test_move_down_swaps(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         a1, a2 = _make_delay(1), _make_delay(2)
         mw._actions = [a1, a2]
         mw._refresh_table()
-        mw._table.selectRow(0)
+        mw._select_tree_row(0)
 
         mw._on_move_down()
 
@@ -223,12 +231,11 @@ class TestMoveUpDown:
         assert mw._actions[1] is a1
 
     def test_move_down_last_row_noop(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         a1 = _make_delay(1)
         mw._actions = [a1]
         mw._refresh_table()
-        mw._table.selectRow(0)
+        mw._select_tree_row(0)
 
         mw._on_move_down()
         assert mw._actions[0] is a1
@@ -240,12 +247,11 @@ class TestMoveUpDown:
 
 class TestDuplicate:
     def test_duplicates_action(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         orig = _make_delay(42)
         mw._actions = [orig]
         mw._refresh_table()
-        mw._table.selectRow(0)
+        mw._select_tree_row(0)
 
         mw._on_duplicate()
 
@@ -254,7 +260,6 @@ class TestDuplicate:
         assert mw._actions[1] is not orig  # different object
 
     def test_no_selection_noop(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._actions = [_make_delay()]
 
@@ -269,20 +274,18 @@ class TestDuplicate:
 
 class TestToggleEnabled:
     def test_toggle_flips(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         action = _make_delay()
         assert action.enabled is True
         mw._actions = [action]
         mw._refresh_table()
-        mw._table.selectRow(0)
+        mw._select_tree_row(0)
 
         mw._on_toggle_enabled()
 
         assert action.enabled is False
 
     def test_toggle_multiple_rows(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         a1, a2, a3 = _make_delay(), _make_delay(), _make_delay()
         mw._actions = [a1, a2, a3]
@@ -303,7 +306,6 @@ class TestToggleEnabled:
 
 class TestDeleteAction:
     def test_delete_single(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._actions = [_make_delay(1), _make_delay(2)]
         mw._refresh_table()
@@ -317,7 +319,6 @@ class TestDeleteAction:
         assert mw._actions[0].duration_ms == 2
 
     def test_delete_multiple(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         a1, a2, a3, a4, a5 = [_make_delay(i) for i in range(1, 6)]
         mw._actions = [a1, a2, a3, a4, a5]
@@ -334,7 +335,6 @@ class TestDeleteAction:
         assert mw._actions[1] is a4
 
     def test_delete_all_ctrl_a(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._actions = [_make_delay(i) for i in range(10)]
         mw._refresh_table()
@@ -347,10 +347,9 @@ class TestDeleteAction:
 
         assert len(mw._actions) == 0
         mw._refresh_table()
-        assert mw._table.rowCount() == 0
+        assert mw._tree_model.rowCount() == 0
 
     def test_delete_cancelled(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._actions = [_make_delay()]
         mw._refresh_table()
@@ -369,7 +368,6 @@ class TestDeleteAction:
 
 class TestOnPlay:
     def test_play_no_actions_blocked(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._actions = []
 
@@ -381,7 +379,6 @@ class TestOnPlay:
         assert status != "Ready"  # status must have changed
 
     def test_play_all_disabled_blocked(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         a = _make_delay()
         a.enabled = False
@@ -395,7 +392,6 @@ class TestOnPlay:
         assert status != "Ready"
 
     def test_play_resume_when_paused(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._actions = [_make_delay()]
         mw._engine.is_paused = True
@@ -411,7 +407,6 @@ class TestOnPlay:
 
 class TestOnStop:
     def test_stop_calls_engine(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._on_stop()
         mw._engine.stop.assert_called_once()
@@ -423,7 +418,6 @@ class TestOnStop:
 
 class TestOnRecordingDone:
     def test_extends_actions(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._actions = [_make_delay()]
         new_actions = [_make_delay(1), _make_delay(2)]
@@ -434,7 +428,6 @@ class TestOnRecordingDone:
         assert "2" in mw._status_label.text()
 
     def test_empty_recording_noop(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._actions = [_make_delay()]
 
@@ -449,16 +442,14 @@ class TestOnRecordingDone:
 
 class TestOnCoordPicked:
     def test_copies_to_clipboard(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
-        # Need to make it a real QMainWindow for show()
+        mock_clipboard = MagicMock()
         with patch.object(type(mw), 'show'), \
-             patch.object(type(mw), 'activateWindow'):
+             patch.object(type(mw), 'activateWindow'), \
+             patch('gui.main_window.QApplication.clipboard', return_value=mock_clipboard):
             mw._on_coord_picked(123, 456)
 
-        clipboard = QApplication.clipboard()
-        assert clipboard is not None
-        assert clipboard.text() == "123, 456"
+        mock_clipboard.setText.assert_called_once_with("123, 456")
         assert "123" in mw._status_label.text()
 
 
@@ -468,7 +459,6 @@ class TestOnCoordPicked:
 
 class TestAutosaveCallback:
     def test_no_file_returns_false(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._current_file = ""
 
@@ -476,7 +466,6 @@ class TestAutosaveCallback:
         assert result is False
 
     def test_with_file_saves(self, tmp_path: Any) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._current_file = str(tmp_path / "test.json")
         mw._actions = [_make_delay()]
@@ -493,43 +482,38 @@ class TestAutosaveCallback:
 
 class TestEngineCallbacks:
     def test_on_engine_started_locks_ui(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._on_engine_started()
         assert "Đang chạy" in mw._status_label.text()  # Vietnamese
-        assert not mw._table.isEnabled()
+        assert not mw._tree.isEnabled()
 
     def test_on_engine_stopped_unlocks_ui(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._on_engine_started()  # lock first
         mw._on_engine_stopped()
         assert "dừng" in mw._status_label.text().lower()  # Vietnamese
-        assert mw._table.isEnabled()
+        assert mw._tree.isEnabled()
 
     def test_on_engine_progress(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._on_engine_progress(3, 10)
+        mw._flush_progress()  # flush buffered update
         assert mw._progress_bar.value() == 3
         assert mw._progress_bar.maximum() == 10
 
     def test_on_engine_error(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         with patch.object(QMessageBox, 'warning', return_value=None):
             mw._on_engine_error("Something broke")
         assert "Something broke" in mw._status_label.text()
 
     def test_on_engine_loop(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._on_engine_loop(2, 5)
         assert "2" in mw._loop_label.text()
         assert "5" in mw._loop_label.text()
 
     def test_on_engine_loop_infinite(self) -> None:
-        from gui.main_window import MainWindow
         mw = _make_stub()
         mw._on_engine_loop(7, -1)
         assert "∞" in mw._loop_label.text()

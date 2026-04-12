@@ -13,9 +13,8 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import MagicMock, patch
 
-import cv2
 import numpy as np
 import pytest
 
@@ -24,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # QApplication singleton needed for engine signals
 from PyQt6.QtWidgets import QApplication
+
 _app = QApplication.instance() or QApplication([])
 
 
@@ -105,8 +105,8 @@ class TestEngineExecution:
     """Test MacroEngine execution paths."""
 
     def test_engine_run_basic(self):
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=10)])
@@ -116,8 +116,8 @@ class TestEngineExecution:
         assert finished
 
     def test_engine_stop_mid_execution(self):
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=500)] * 10)
@@ -130,8 +130,8 @@ class TestEngineExecution:
         assert not engine.isRunning()
 
     def test_engine_pause_resume(self):
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=100)] * 20)
@@ -149,8 +149,8 @@ class TestEngineExecution:
         engine.wait(3000)
 
     def test_engine_multi_loop(self):
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=5)])
@@ -203,8 +203,8 @@ class TestEngineExecution:
         assert not engine.isRunning()
 
     def test_engine_loop_delay(self):
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=1)])
@@ -266,8 +266,8 @@ class TestEngineExecution:
 class TestMacroVersioning:
 
     def test_save_includes_version(self, tmp_path):
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         path = str(tmp_path / "v.json")
         MacroEngine.save_macro(path, [DelayAction(duration_ms=100)])
@@ -333,9 +333,9 @@ class TestAutoSave:
         from core.autosave import AutoSaveManager
         asm = AutoSaveManager()
         asm.mark_dirty()
-        assert asm._dirty
+        assert asm._dirty_event.is_set()
         asm.mark_clean()
-        assert not asm._dirty
+        assert not asm._dirty_event.is_set()
 
     def test_set_current_file(self):
         from core.autosave import AutoSaveManager
@@ -423,8 +423,9 @@ class TestAutoSave:
 class TestRecorderCallbacks:
 
     def test_on_mouse_click_catches_exception(self):
-        from core.recorder import Recorder
         from pynput.mouse import Button
+
+        from core.recorder import Recorder
         r = Recorder()
         r._is_recording = True
         r._last_time = time.perf_counter()

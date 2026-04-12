@@ -27,7 +27,7 @@ Run the full test suite before submitting changes:
 python -m pytest tests/ -q
 ```
 
-All 558 tests must pass. Tests run headless via `QT_QPA_PLATFORM=offscreen`.
+All 880 tests must pass. Tests run headless via `QT_QPA_PLATFORM=offscreen`.
 
 ## Adding a New Action Type
 

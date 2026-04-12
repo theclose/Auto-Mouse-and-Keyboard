@@ -3,6 +3,21 @@
 All notable changes to AutoMacro are documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/) + [Semantic Versioning](https://semver.org/).
 
+## [3.0.2] - 2026-03-27
+
+### Fixed
+- **RunCommand**: Now returns `False` on non-zero exit code (was always `True`). Added `ignore_exit_code` param for backward compatibility. Auto-stores `__exit_code__` and `__stderr__` in context.
+- **crash_handler**: Fixed `VERSION` → `__version__` import — crash reports now show "3.0.0" instead of "unknown".
+- **SecureTypeText**: Logs warning when typing plaintext (not encrypted).
+- **Import side-effects**: `import main` no longer creates log files/handlers. Logging initialization moved to `setup_logging()`.
+
+### Added
+- **`core/app_paths.py`**: Single source of truth for APP_DIR, LOG_DIR, CONFIG_PATH, TEMPLATES_DIR. Eliminates `from main import APP_DIR` side-effects.
+- **Preflight validation**: `_preflight_check()` runs 11-rule smart_hints analysis before engine start. Errors block execution; warnings show Cancel-default dialog.
+- **Engine macro context**: Sets `__current_macro_file__` and `__current_macro_dir__` in execution context for accurate relative path resolution.
+- **3 new smart_hints rules**: RunCommand empty command (error), SecureTypeText plaintext (warning), RunMacro empty path (error). Total: 11 rules.
+- Updated README, ARCHITECTURE, CONTRIBUTING to v3.0.0 (34 action types, 880 tests).
+
 ## [3.0.1] - 2026-03-23
 
 ### Fixed

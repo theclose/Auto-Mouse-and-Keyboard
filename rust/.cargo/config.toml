@@ -1,0 +1,7 @@
+[build]
+target = "x86_64-pc-windows-gnu"
+target-dir = "C:/AMK/target"
+rustflags = ["-Clink-self-contained=yes"]
+
+[target.x86_64-pc-windows-gnu]
+linker = "C:/Users/Admin/.rustup/toolchains/stable-x86_64-pc-windows-gnu/lib/rustlib/x86_64-pc-windows-gnu/bin/rust-lld.exe"

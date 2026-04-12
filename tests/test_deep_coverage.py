@@ -11,28 +11,24 @@ Run: python -m pytest tests/test_deep_coverage.py -v
 import os
 import sys
 import time
-import copy
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch, MagicMock, PropertyMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
 
 # Force-register all action types
-import core.action       # noqa: F401
-import modules.mouse     # noqa: F401
+import core.action  # noqa: F401
+import core.scheduler  # noqa: F401
+import modules.image  # noqa: F401
 import modules.keyboard  # noqa: F401
-import modules.image     # noqa: F401
-import modules.pixel     # noqa: F401
-import core.scheduler    # noqa: F401
-
+import modules.mouse  # noqa: F401
+import modules.pixel  # noqa: F401
 
 # ============================================================
 # 1. CrashHandler
@@ -74,7 +70,6 @@ class TestCrashHandler:
         try:
             raise ValueError("test crash")
         except ValueError:
-            import traceback
             exc_type, exc_val, exc_tb = sys.exc_info()
             dialog = CrashDialog(exc_type, exc_val, exc_tb)  # type: ignore
             assert dialog.windowTitle() == "AutoMacro – Error"
@@ -156,9 +151,10 @@ class TestImageCapture:
     """Verify ImageCaptureOverlay signal and save logic."""
 
     def test_save_region_emits_signal(self, tmp_path: Path) -> None:
-        from gui.image_capture import ImageCaptureOverlay
         from PyQt6.QtCore import QRect
         from PyQt6.QtGui import QPixmap
+
+        from gui.image_capture import ImageCaptureOverlay
 
         overlay = ImageCaptureOverlay(save_dir=str(tmp_path))
         received: list[str] = []
@@ -176,10 +172,10 @@ class TestImageCapture:
         assert received[0].endswith(".png")
 
     def test_small_region_ignored(self) -> None:
+        from PyQt6.QtCore import QPoint, QRect
+        from PyQt6.QtGui import QPixmap
+
         from gui.image_capture import ImageCaptureOverlay
-        from PyQt6.QtCore import QRect, QPoint
-        from PyQt6.QtGui import QPixmap, QMouseEvent
-        from PyQt6.QtCore import QPointF
 
         overlay = ImageCaptureOverlay()
         overlay._screenshot = QPixmap(100, 100)
@@ -196,9 +192,10 @@ class TestImageCapture:
         assert rect.width() <= 5 or rect.height() <= 5
 
     def test_save_dir_created_if_missing(self, tmp_path: Path) -> None:
-        from gui.image_capture import ImageCaptureOverlay
         from PyQt6.QtCore import QRect
         from PyQt6.QtGui import QPixmap
+
+        from gui.image_capture import ImageCaptureOverlay
 
         new_dir = str(tmp_path / "new_subdir" / "templates")
         overlay = ImageCaptureOverlay(save_dir=new_dir)
@@ -223,9 +220,10 @@ class TestCoordinatePicker:
         assert hasattr(picker, 'cancelled')
 
     def test_escape_emits_cancelled(self) -> None:
-        from gui.coordinate_picker import CoordinatePickerOverlay
-        from PyQt6.QtGui import QKeyEvent
         from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+
+        from gui.coordinate_picker import CoordinatePickerOverlay
 
         picker = CoordinatePickerOverlay()
         received: list[bool] = []
@@ -262,8 +260,8 @@ class TestEngineSignals:
             time.sleep(0.01)
 
     def test_started_and_stopped_signals(self) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=10)])
@@ -281,8 +279,8 @@ class TestEngineSignals:
         assert len(stopped) == 1
 
     def test_progress_signal_emitted(self) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([
@@ -303,8 +301,8 @@ class TestEngineSignals:
         assert progress[1] == (2, 2)
 
     def test_action_signal_emitted(self) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=10)])
@@ -320,8 +318,8 @@ class TestEngineSignals:
         assert "delay" in names[0].lower()
 
     def test_loop_signal_emitted(self) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=10)])
@@ -339,8 +337,8 @@ class TestEngineSignals:
         assert loops[2] == (3, 3)
 
     def test_error_signal_on_action_failure(self) -> None:
-        from core.engine import MacroEngine
         from core.action import Action
+        from core.engine import MacroEngine
 
         # Create a mock action that always fails
         fail_action = MagicMock(spec=Action)
@@ -372,8 +370,8 @@ class TestLoopBlock:
     """Verify LoopBlock nested execution and cancellation."""
 
     def test_loop_3_iterations(self) -> None:
-        from core.scheduler import LoopBlock
         from core.action import DelayAction
+        from core.scheduler import LoopBlock
 
         loop = LoopBlock(iterations=3)
         counter_action = DelayAction(duration_ms=0)
@@ -384,8 +382,9 @@ class TestLoopBlock:
 
     def test_loop_cancel_infinite(self) -> None:
         import threading
-        from core.scheduler import LoopBlock
+
         from core.action import DelayAction
+        from core.scheduler import LoopBlock
 
         loop = LoopBlock(iterations=0)  # infinite
         loop.add_action(DelayAction(duration_ms=1))
@@ -400,8 +399,8 @@ class TestLoopBlock:
         assert result is True
 
     def test_loop_display_name(self) -> None:
-        from core.scheduler import LoopBlock
         from core.action import DelayAction
+        from core.scheduler import LoopBlock
 
         loop = LoopBlock(iterations=5)
         loop.add_action(DelayAction(duration_ms=1))
@@ -417,8 +416,8 @@ class TestLoopBlock:
         assert "∞" in loop.get_display_name()
 
     def test_loop_serialization(self) -> None:
-        from core.scheduler import LoopBlock
         from core.action import Action, DelayAction
+        from core.scheduler import LoopBlock
 
         loop = LoopBlock(iterations=3)
         loop.add_action(DelayAction(duration_ms=100))
@@ -437,8 +436,8 @@ class TestIfImageFound:
     """Verify IfImageFound conditional branching with mocked image."""
 
     def test_then_branch_on_found(self) -> None:
-        from core.scheduler import IfImageFound
         from core.action import DelayAction
+        from core.scheduler import IfImageFound
 
         cond = IfImageFound(image_path="test.png")
         then_action = DelayAction(duration_ms=0)
@@ -452,8 +451,8 @@ class TestIfImageFound:
         assert result is True
 
     def test_else_branch_on_not_found(self) -> None:
-        from core.scheduler import IfImageFound
         from core.action import DelayAction
+        from core.scheduler import IfImageFound
 
         cond = IfImageFound(image_path="test.png")
         else_action = DelayAction(duration_ms=0)
@@ -471,8 +470,8 @@ class TestIfImageFound:
         assert "button.png" in cond.get_display_name()
 
     def test_serialization_roundtrip(self) -> None:
-        from core.scheduler import IfImageFound
         from core.action import Action
+        from core.scheduler import IfImageFound
 
         cond = IfImageFound(
             image_path="test.png", confidence=0.9, timeout_ms=3000)
@@ -509,7 +508,8 @@ class TestActionRunMocked:
         from core.action import DelayAction
         action = DelayAction(duration_ms=0, repeat_count=3)
 
-        with patch.object(action, 'execute', return_value=True) as mock_exec:
+        # Patch on class (not instance) — __slots__ prevents instance-level patching
+        with patch.object(DelayAction, 'execute', return_value=True) as mock_exec:
             result = action.run()
 
         assert result is True
@@ -588,8 +588,8 @@ class TestEngineStopOnError:
             time.sleep(0.01)
 
     def test_stop_on_error_aborts_early(self) -> None:
-        from core.engine import MacroEngine
         from core.action import Action, DelayAction
+        from core.engine import MacroEngine
 
         fail = MagicMock(spec=Action)
         fail.enabled = True
@@ -614,8 +614,8 @@ class TestEngineStopOnError:
         assert progress[0] == (1, 2)
 
     def test_continue_on_error_runs_all(self) -> None:
-        from core.engine import MacroEngine
         from core.action import Action, DelayAction
+        from core.engine import MacroEngine
 
         fail = MagicMock(spec=Action)
         fail.enabled = True

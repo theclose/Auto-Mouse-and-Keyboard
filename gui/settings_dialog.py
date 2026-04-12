@@ -42,15 +42,21 @@ DEFAULT_CONFIG = {
     },
     "ui": {
         "theme": "dark",
+        "accent_color": "Tím",
         "language": "en",
         "minimize_to_tray": True,
-        "window_width": 900,
-        "window_height": 650,
+        "window_width": -1,
+        "window_height": -1,
+        "window_x": -1,
+        "window_y": -1,
+        "window_maximized": False,
+        "h_splitter_sizes": [],
+        "v_splitter_sizes": [],
     },
     "performance": {
         "screenshot_method": "mss",
         "max_fps": 30,
-        "memory_limit_mb": 200,
+        "memory_limit_mb": 400,
     },
 }
 
@@ -109,9 +115,20 @@ _MODIFIER_QT_KEYS = {
 }
 
 
+def _resolve_config_path(path: str) -> Path:
+    """Resolve config path relative to APP_DIR for frozen EXE support."""
+    p = Path(path)
+    if p.is_absolute():
+        return p
+    from core.app_paths import APP_DIR
+
+    return APP_DIR / path
+
+
+
 def load_config(path: str = "config.json") -> dict[str, Any]:
     """Load config from file, falling back to defaults."""
-    p = Path(path)
+    p = _resolve_config_path(path)
     if p.exists():
         try:
             with open(p, "r", encoding="utf-8") as f:
@@ -125,8 +142,9 @@ def load_config(path: str = "config.json") -> dict[str, Any]:
 
 def save_config(config: dict[str, Any], path: str = "config.json") -> None:
     """Save config to file."""
-    p = Path(path)
+    p = _resolve_config_path(path)
     p.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+
 
 
 def _deep_merge(defaults: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
@@ -312,12 +330,39 @@ class SettingsDialog(QDialog):
         ui_layout.addRow("Cỡ chữ:", font_size)
         self._widgets["ui.font_size"] = font_size
 
+        accent_combo = QComboBox()
+        accent_combo.addItems(["Tím", "Xanh dương", "Xanh lá", "Đỏ", "Cam", "Hồng"])
+        accent_combo.setCurrentText(ui.get("accent_color", "Tím"))
+        ui_layout.addRow("Màu nhấn (Accent):", accent_combo)
+        self._widgets["ui.accent_color"] = accent_combo
+
         tray_check = QCheckBox("Thu nhỏ vào khay hệ thống")
         tray_check.setChecked(ui.get("minimize_to_tray", True))
         ui_layout.addRow("", tray_check)
         self._widgets["ui.minimize_to_tray"] = tray_check
 
         tabs.addTab(ui_tab, "Giao diện")
+
+        # --- Performance tab ---
+        perf_tab = QWidget()
+        pf_layout = QFormLayout(perf_tab)
+        perf = self._config.get("performance", {})
+
+        mem_limit = QSpinBox()
+        mem_limit.setRange(100, 1000)
+        mem_limit.setSingleStep(50)
+        mem_limit.setSuffix(" MB")
+        mem_limit.setValue(perf.get("memory_limit_mb", 200))
+        mem_limit.setToolTip(
+            "Ngưỡng RAM tối đa. Khi vượt ngưỡng, app tự dọn cache.\n"
+            "• 200MB: Phù hợp máy 4GB RAM\n"
+            "• 400MB: Phù hợp máy 8-16GB RAM\n"
+            "• 800MB: Phù hợp máy 32GB+ RAM"
+        )
+        pf_layout.addRow("Ngưỡng RAM:", mem_limit)
+        self._widgets["performance.memory_limit_mb"] = mem_limit
+
+        tabs.addTab(perf_tab, "⚡ Hiệu năng")
 
         layout.addWidget(tabs)
 

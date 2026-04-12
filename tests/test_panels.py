@@ -3,27 +3,25 @@ Tests for gui.panels — panel widget initialization and signals.
 Exercises all 6 extracted panels to bring coverage from 0%.
 """
 import os
-import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication
+
 app = QApplication.instance() or QApplication([])
 
 from PyQt6.QtWidgets import (
-    QWidget, QGroupBox, QPushButton, QLabel, QTableWidget,
-    QTextEdit, QTreeView, QProgressBar,
+    QGroupBox,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QTableWidget,
+    QTreeView,
+    QWidget,
 )
 
 # Import action modules for ActionListPanel
-import modules.mouse
-import modules.keyboard
-import modules.image
-import modules.pixel
-import modules.system
-import core.scheduler
 from core.action import get_action_class
-
 
 # ── PlaybackPanel ──────────────────────────────────────
 
@@ -175,12 +173,13 @@ class TestActionListPanel:
         from gui.panels.action_list_panel import ActionListPanel
         delay = get_action_class("delay")()
         p = ActionListPanel([delay])
-        assert p.table is not None
+        assert p.tree is not None
 
-    def test_table_property(self):
+    def test_tree_model_property(self):
+        from gui.action_tree_model import ActionTreeModel
         from gui.panels.action_list_panel import ActionListPanel
         p = ActionListPanel([])
-        assert isinstance(p.table, QTableWidget)
+        assert isinstance(p.tree_model, ActionTreeModel)
 
     def test_tree_property(self):
         from gui.panels.action_list_panel import ActionListPanel
@@ -188,8 +187,9 @@ class TestActionListPanel:
         assert isinstance(p.tree, QTreeView)
 
     def test_filter_edit_property(self):
-        from gui.panels.action_list_panel import ActionListPanel
         from PyQt6.QtWidgets import QLineEdit
+
+        from gui.panels.action_list_panel import ActionListPanel
         p = ActionListPanel([])
         assert isinstance(p.filter_edit, QLineEdit)
 
@@ -201,7 +201,7 @@ class TestActionListPanel:
     def test_empty_overlay(self):
         from gui.panels.action_list_panel import ActionListPanel
         p = ActionListPanel([])
-        assert isinstance(p.empty_overlay, QLabel)
+        assert isinstance(p.empty_overlay, QWidget)
 
     def test_signals_exist(self):
         from gui.panels.action_list_panel import ActionListPanel
@@ -210,27 +210,25 @@ class TestActionListPanel:
             'edit_requested', 'context_menu_requested',
             'move_up_requested', 'move_down_requested',
             'duplicate_requested', 'copy_requested',
-            'paste_requested', 'filter_changed', 'view_mode_changed',
+            'paste_requested', 'filter_changed',
         ]
         for s in signals:
             assert hasattr(p, s), f"Missing signal: {s}"
 
-    def test_view_toggle(self):
+    def test_filter_proxy_property(self):
+        from gui.action_tree_model import ActionTreeFilterProxy
         from gui.panels.action_list_panel import ActionListPanel
         delay = get_action_class("delay")()
         p = ActionListPanel([delay])
-        # Switch to tree mode
-        p._on_view_toggle(True)
-        assert p._tree_mode is True
-        # Switch back to table mode
-        p._on_view_toggle(False)
-        assert p._tree_mode is False
+        assert isinstance(p.filter_proxy, ActionTreeFilterProxy)
 
     def test_buttons_exist(self):
+        from PyQt6.QtWidgets import QToolButton
+
         from gui.panels.action_list_panel import ActionListPanel
         p = ActionListPanel([])
-        assert isinstance(p._up_btn, QPushButton)
-        assert isinstance(p._down_btn, QPushButton)
-        assert isinstance(p._dup_btn, QPushButton)
-        assert isinstance(p._copy_btn, QPushButton)
-        assert isinstance(p._paste_btn, QPushButton)
+        assert isinstance(p._up_btn, QToolButton)
+        assert isinstance(p._down_btn, QToolButton)
+        assert isinstance(p._dup_btn, QToolButton)
+        assert isinstance(p._copy_btn, QToolButton)
+        assert isinstance(p._paste_btn, QToolButton)

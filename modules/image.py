@@ -8,6 +8,7 @@ import logging
 import os
 import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Optional
 
@@ -37,10 +38,19 @@ class ImageFinder:
     - Timeout with retry
     """
 
-    # --- Screen cache for rapid sequential calls (50ms TTL) ---
-    _cache: dict[str, tuple[float, Any]] = {}
+    # --- Screen cache for rapid sequential calls (50ms TTL, LRU) ---
+    _cache: OrderedDict[str, tuple[float, Any]] = OrderedDict()
     _cache_lock = threading.Lock()
     _CACHE_TTL = 0.050  # 50 milliseconds
+    _CACHE_MAX = 4  # max entries (full, full_gray, region, region_gray)
+
+    # --- Performance metrics (R6) ---
+    _perf_capture_count: int = 0
+    _perf_capture_total_ms: float = 0.0
+    _perf_match_count: int = 0
+    _perf_match_total_ms: float = 0.0
+    _perf_cache_hits: int = 0
+    _perf_lock = threading.Lock()
 
     @classmethod
     def _get_cached_screen(
@@ -55,9 +65,13 @@ class ImageFinder:
             if key in cls._cache:
                 ts, img = cls._cache[key]
                 if (now - ts) < cls._CACHE_TTL:
+                    cls._cache.move_to_end(key)  # LRU: mark as recently used
+                    with cls._perf_lock:
+                        cls._perf_cache_hits += 1
                     return img
 
         # Capture fresh — use direct grayscale path when possible
+        t0 = time.perf_counter()
         if region:
             if grayscale:
                 screen = capture_region_gray(*region)
@@ -68,10 +82,16 @@ class ImageFinder:
         else:
             screen = capture_full_screen()
 
+        capture_ms = (time.perf_counter() - t0) * 1000
+        with cls._perf_lock:
+            cls._perf_capture_count += 1
+            cls._perf_capture_total_ms += capture_ms
+
         with cls._cache_lock:
-            if len(cls._cache) > 8:
-                cls._cache.clear()
             cls._cache[key] = (now, screen)
+            # LRU eviction: remove oldest entry when exceeding max
+            while len(cls._cache) > cls._CACHE_MAX:
+                cls._cache.popitem(last=False)
         return screen
 
     @classmethod
@@ -82,37 +102,100 @@ class ImageFinder:
         with cls._tpl_lock:
             cls._tpl_cache.clear()
 
-    # --- Template image cache (disk I/O → RAM, mtime invalidation) ---
-    _tpl_cache: dict[str, tuple[float, Any]] = {}
+    # --- Template image cache (hybrid: strong LRU + WeakRef spillover) ---
+    _tpl_cache: OrderedDict[str, tuple[float, Any]] = OrderedDict()
     _tpl_lock = threading.Lock()
+    _TPL_STRONG_MAX = 20  # hot templates with strong refs (never GC'd)
+    _TPL_CACHE_MAX = 100  # total cap including weak tier
+
+    # WeakRef spillover: evicted entries stay accessible until GC reclaims
+    import weakref as _weakref
+
+    class _CachedTemplate:
+        """Weakref-compatible wrapper for numpy template array."""
+        __slots__ = ('data', 'mtime', '__weakref__')
+        def __init__(self, data: Any, mtime: float) -> None:
+            self.data = data
+            self.mtime = mtime
+
+    _tpl_weak: _weakref.WeakValueDictionary[str, _CachedTemplate] = _weakref.WeakValueDictionary()
 
     @classmethod
     def _load_template(cls, path: str, grayscale: bool) -> Any:
-        """Load template from cache or disk. Invalidate on file modification."""
+        """Load template from cache or disk. Hybrid: strong LRU → weak → disk."""
         try:
             mtime = os.path.getmtime(path)
         except OSError:
             return None
         key = f"{path}:{grayscale}"
+
+        # 1. Check strong LRU cache
         with cls._tpl_lock:
             if key in cls._tpl_cache:
                 cached_mtime, img = cls._tpl_cache[key]
                 if cached_mtime == mtime:
-                    return img  # Cache hit
-        # Cache miss — read from disk
+                    cls._tpl_cache.move_to_end(key)  # LRU: mark as recently used
+                    return img  # Cache hit (strong)
+                else:
+                    del cls._tpl_cache[key]  # stale: remove before re-add
+
+        # 2. Check weak ref spillover (may have been evicted from strong tier)
+        weak_entry = cls._tpl_weak.get(key)
+        if weak_entry is not None and weak_entry.mtime == mtime:
+            img = weak_entry.data
+            # Promote back to strong tier
+            with cls._tpl_lock:
+                cls._tpl_cache[key] = (mtime, img)
+                cls._tpl_cache.move_to_end(key)
+                cls._evict_to_weak()
+            return img  # Cache hit (weak → promoted)
+
+        # 3. Cache miss — read from disk
         img = cv2.imread(path)
         if img is None or img.size == 0:
             return None
         if grayscale:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         with cls._tpl_lock:
-            if len(cls._tpl_cache) > 100:
-                cls._tpl_cache.clear()  # Prevent unbounded growth
             cls._tpl_cache[key] = (mtime, img)
+            cls._evict_to_weak()
+        # Also store in weak tier for recovery after eviction
+        cls._tpl_weak[key] = cls._CachedTemplate(img, mtime)
         return img
+
+    @classmethod
+    def _evict_to_weak(cls) -> None:
+        """Move oldest strong entries to weak tier when exceeding STRONG_MAX."""
+        while len(cls._tpl_cache) > cls._TPL_STRONG_MAX:
+            evicted_key, (evicted_mtime, evicted_img) = cls._tpl_cache.popitem(last=False)
+            # Spillover to weak tier — GC can reclaim under memory pressure
+            cls._tpl_weak[evicted_key] = cls._CachedTemplate(evicted_img, evicted_mtime)
 
     def __init__(self, method: int = cv2.TM_CCOEFF_NORMED) -> None:
         self.method = method
+
+    @classmethod
+    def get_perf_stats(cls) -> dict[str, Any]:
+        """Return performance metrics for monitoring."""
+        with cls._perf_lock:
+            avg_capture = (
+                round(cls._perf_capture_total_ms / cls._perf_capture_count, 1)
+                if cls._perf_capture_count > 0
+                else 0.0
+            )
+            avg_match = (
+                round(cls._perf_match_total_ms / cls._perf_match_count, 1)
+                if cls._perf_match_count > 0
+                else 0.0
+            )
+            return {
+                "capture_count": cls._perf_capture_count,
+                "avg_capture_ms": avg_capture,
+                "match_count": cls._perf_match_count,
+                "avg_match_ms": avg_match,
+                "cache_hits": cls._perf_cache_hits,
+                "tpl_cache_size": len(cls._tpl_cache),
+            }
 
     def find_on_screen(
         self,
@@ -177,11 +260,18 @@ class ImageFinder:
         region: Optional[tuple[int, int, int, int]],
     ) -> Optional[tuple[int, int, int, int]]:
         """Try single-scale then multi-scale matching."""
+        t0 = time.perf_counter()
         t_h, t_w = template.shape[:2]
 
         # Single-scale match
         result = cv2.matchTemplate(screen, template, self.method)
         _, max_val, _, max_loc = cv2.minMaxLoc(result)
+
+        match_ms = (time.perf_counter() - t0) * 1000
+        with self._perf_lock:
+            ImageFinder._perf_match_count += 1
+            ImageFinder._perf_match_total_ms += match_ms
+
         if max_val >= confidence:
             x, y = max_loc
             if region:
@@ -311,19 +401,35 @@ def _nms(
 class WaitForImage(Action):
     """Wait until an image appears on screen (with timeout)."""
 
-    def __init__(self, image_path: str = "", confidence: float = 0.8, timeout_ms: int = 10000, **kwargs: Any) -> None:
+    __slots__ = ('image_path', 'confidence', 'timeout_ms', 'region_x', 'region_y', 'region_w', 'region_h')
+
+    def __init__(self, image_path: str = "", confidence: float = 0.8, timeout_ms: int = 10000,
+                 region_x: int = 0, region_y: int = 0, region_w: int = 0, region_h: int = 0,
+                 **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.image_path = image_path
         self.confidence = confidence
         self.timeout_ms = timeout_ms
+        self.region_x = region_x
+        self.region_y = region_y
+        self.region_w = region_w
+        self.region_h = region_h
+
+    def _get_search_region(self) -> Optional[tuple[int, int, int, int]]:
+        """Return user-defined region or None for full-screen."""
+        if self.region_w > 0 and self.region_h > 0:
+            return (self.region_x, self.region_y, self.region_w, self.region_h)
+        return None
 
     def execute(self) -> bool:
         from core.engine_context import get_context
 
         finder = get_image_finder()
         ctx = get_context()
-        # Use smart ROI if available
-        region = ctx.suggest_roi_cached(self.image_path) if ctx else None
+        # User-defined region takes priority over smart ROI
+        region = self._get_search_region()
+        if region is None:
+            region = ctx.suggest_roi_cached(self.image_path) if ctx else None
         result = finder.find_on_screen(
             self.image_path,
             confidence=self.confidence,
@@ -331,7 +437,7 @@ class WaitForImage(Action):
             region=region,
         )
         if result is None and region is not None:
-            # Fallback: full-screen search if ROI missed
+            # Fallback: full-screen search if region missed
             result = finder.find_on_screen(
                 self.image_path,
                 confidence=self.confidence,
@@ -349,21 +455,32 @@ class WaitForImage(Action):
             "image_path": self.image_path,
             "confidence": self.confidence,
             "timeout_ms": self.timeout_ms,
+            "region_x": self.region_x,
+            "region_y": self.region_y,
+            "region_w": self.region_w,
+            "region_h": self.region_h,
         }
 
     def _set_params(self, params: dict[str, Any]) -> None:
         self.image_path = params.get("image_path", "")
         self.confidence = params.get("confidence", 0.8)
         self.timeout_ms = params.get("timeout_ms", 10000)
+        self.region_x = params.get("region_x", 0)
+        self.region_y = params.get("region_y", 0)
+        self.region_w = params.get("region_w", 0)
+        self.region_h = params.get("region_h", 0)
 
     def get_display_name(self) -> str:
         name = Path(self.image_path).name if self.image_path else "?"
-        return f"Wait for '{name}' ({self.timeout_ms}ms)"
+        rgn = f" [{self.region_w}×{self.region_h}]" if self.region_w > 0 else ""
+        return f"Wait for '{name}' ({self.timeout_ms}ms){rgn}"
 
 
 @register_action("click_on_image")
 class ClickOnImage(Action):
     """Find an image on screen and click its center."""
+
+    __slots__ = ('image_path', 'confidence', 'timeout_ms', 'button', 'region_x', 'region_y', 'region_w', 'region_h')
 
     def __init__(
         self,
@@ -371,6 +488,7 @@ class ClickOnImage(Action):
         confidence: float = 0.8,
         timeout_ms: int = 10000,
         button: str = "left",
+        region_x: int = 0, region_y: int = 0, region_w: int = 0, region_h: int = 0,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -378,6 +496,15 @@ class ClickOnImage(Action):
         self.confidence = confidence
         self.timeout_ms = timeout_ms
         self.button = button
+        self.region_x = region_x
+        self.region_y = region_y
+        self.region_w = region_w
+        self.region_h = region_h
+
+    def _get_search_region(self) -> Optional[tuple[int, int, int, int]]:
+        if self.region_w > 0 and self.region_h > 0:
+            return (self.region_x, self.region_y, self.region_w, self.region_h)
+        return None
 
     def execute(self) -> bool:
         import pyautogui
@@ -394,8 +521,10 @@ class ClickOnImage(Action):
             pyautogui.click(cx, cy, button=self.button)
             logger.info("Clicked cached image at (%d, %d)", cx, cy)
             return True
-        # No cache — search with smart ROI
-        region = ctx.suggest_roi_cached(self.image_path) if ctx else None
+        # User-defined region takes priority over smart ROI
+        region = self._get_search_region()
+        if region is None:
+            region = ctx.suggest_roi_cached(self.image_path) if ctx else None
         result = finder.find_on_screen(
             self.image_path,
             confidence=self.confidence,
@@ -420,6 +549,10 @@ class ClickOnImage(Action):
             "confidence": self.confidence,
             "timeout_ms": self.timeout_ms,
             "button": self.button,
+            "region_x": self.region_x,
+            "region_y": self.region_y,
+            "region_w": self.region_w,
+            "region_h": self.region_h,
         }
 
     def _set_params(self, params: dict[str, Any]) -> None:
@@ -427,28 +560,45 @@ class ClickOnImage(Action):
         self.confidence = params.get("confidence", 0.8)
         self.timeout_ms = params.get("timeout_ms", 10000)
         self.button = params.get("button", "left")
+        self.region_x = params.get("region_x", 0)
+        self.region_y = params.get("region_y", 0)
+        self.region_w = params.get("region_w", 0)
+        self.region_h = params.get("region_h", 0)
 
     def get_display_name(self) -> str:
         name = Path(self.image_path).name if self.image_path else "?"
-        return f"Click on '{name}'"
+        rgn = f" [{self.region_w}×{self.region_h}]" if self.region_w > 0 else ""
+        return f"Click on '{name}'{rgn}"
 
 
 @register_action("image_exists")
 class ImageExists(Action):
     """Check if an image exists on screen (non-blocking)."""
 
-    def __init__(self, image_path: str = "", confidence: float = 0.8, **kwargs: Any) -> None:
+    __slots__ = ('image_path', 'confidence', 'region_x', 'region_y', 'region_w', 'region_h', '_found')
+
+    def __init__(self, image_path: str = "", confidence: float = 0.8,
+                 region_x: int = 0, region_y: int = 0, region_w: int = 0, region_h: int = 0,
+                 **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.image_path = image_path
         self.confidence = confidence
+        self.region_x = region_x
+        self.region_y = region_y
+        self.region_w = region_w
+        self.region_h = region_h
         self._found = False
 
     def execute(self) -> bool:
         finder = get_image_finder()
+        region = None
+        if self.region_w > 0 and self.region_h > 0:
+            region = (self.region_x, self.region_y, self.region_w, self.region_h)
         result = finder.find_on_screen(
             self.image_path,
             confidence=self.confidence,
             timeout_ms=0,
+            region=region,
         )
         self._found = result is not None
         return True  # always succeeds – just sets the flag
@@ -461,20 +611,31 @@ class ImageExists(Action):
         return {
             "image_path": self.image_path,
             "confidence": self.confidence,
+            "region_x": self.region_x,
+            "region_y": self.region_y,
+            "region_w": self.region_w,
+            "region_h": self.region_h,
         }
 
     def _set_params(self, params: dict[str, Any]) -> None:
         self.image_path = params.get("image_path", "")
         self.confidence = params.get("confidence", 0.8)
+        self.region_x = params.get("region_x", 0)
+        self.region_y = params.get("region_y", 0)
+        self.region_w = params.get("region_w", 0)
+        self.region_h = params.get("region_h", 0)
 
     def get_display_name(self) -> str:
         name = Path(self.image_path).name if self.image_path else "?"
-        return f"Image exists? '{name}'"
+        rgn = f" [{self.region_w}×{self.region_h}]" if self.region_w > 0 else ""
+        return f"Image exists? '{name}'{rgn}"
 
 
 @register_action("take_screenshot")
 class TakeScreenshot(Action):
     """Capture a screenshot during macro execution and save to disk."""
+
+    __slots__ = ('save_dir', 'filename_pattern', 'region_x', 'region_y', 'region_w', 'region_h')
 
     def __init__(
         self,

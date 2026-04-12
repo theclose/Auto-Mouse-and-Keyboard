@@ -1,0 +1,42 @@
+[workspace]
+members = [
+    "crates/amk-app",
+    "crates/amk-domain",
+    "crates/amk-platform-win",
+    "crates/amk-runtime",
+    "crates/amk-schema",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.85"
+authors = ["TungDo"]
+
+[workspace.dependencies]
+anyhow = "1.0"
+csv = "1.4"
+flume = "0.11"
+once_cell = "1.21"
+parking_lot = "0.12"
+regex = "1.12"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "3.15"
+thiserror = "2.0"
+time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+wait-timeout = "0.2"
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }

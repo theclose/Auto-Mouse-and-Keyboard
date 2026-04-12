@@ -11,11 +11,10 @@ Reads version.py, increments the specified part, writes back.
 Returns the new version string to stdout for use in scripts.
 """
 
+import datetime
 import re
 import sys
-import datetime
 from pathlib import Path
-
 
 VERSION_FILE = Path(__file__).parent.parent / "version.py"
 
@@ -81,7 +80,7 @@ def main() -> None:
     old = read_version()
     new = bump(old, part)
     write_version(new)
-    print(f"{old} → {new}")
+    print(f"{old} -> {new}")
 
 
 if __name__ == "__main__":

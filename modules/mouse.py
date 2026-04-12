@@ -53,6 +53,8 @@ def _resolve_visual(context_image: str, fallback_x: int, fallback_y: int) -> tup
 class MouseClick(Action):
     """Left-click at (x, y) with optional visual context fallback."""
 
+    __slots__ = ('x', 'y', 'duration', 'context_image', '_dynamic_x', '_dynamic_y')
+
     def __init__(self, x: int = 0, y: int = 0, duration: float = 0.0, context_image: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.x = x
@@ -118,6 +120,8 @@ class MouseClick(Action):
 class MouseDoubleClick(Action):
     """Double-click at (x, y) with optional visual context fallback."""
 
+    __slots__ = ('x', 'y', 'context_image', '_dynamic_x', '_dynamic_y')
+
     def __init__(self, x: int = 0, y: int = 0, context_image: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.x = x
@@ -180,6 +184,8 @@ class MouseDoubleClick(Action):
 @register_action("mouse_right_click")
 class MouseRightClick(Action):
     """Right-click at (x, y) with optional visual context fallback."""
+
+    __slots__ = ('x', 'y', 'context_image', '_dynamic_x', '_dynamic_y')
 
     def __init__(self, x: int = 0, y: int = 0, context_image: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -244,6 +250,8 @@ class MouseRightClick(Action):
 class MouseMove(Action):
     """Move the cursor to (x, y). Supports ${var} in coordinates."""
 
+    __slots__ = ('x', 'y', 'duration', '_dynamic_x', '_dynamic_y')
+
     def __init__(self, x: int = 0, y: int = 0, duration: float = 0.25, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.x = x
@@ -302,10 +310,15 @@ class MouseMove(Action):
 class MouseDrag(Action):
     """Drag from current position to (x, y). Supports ${var} in coordinates."""
 
-    def __init__(self, x: int = 0, y: int = 0, duration: float = 0.5, button: str = "left", **kwargs: Any) -> None:
+    __slots__ = ('x', 'y', 'start_x', 'start_y', 'duration', 'button', '_dynamic_x', '_dynamic_y')
+
+    def __init__(self, x: int = 0, y: int = 0, duration: float = 0.5, button: str = "left",
+                 start_x: int = 0, start_y: int = 0, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.x = x
         self.y = y
+        self.start_x = start_x
+        self.start_y = start_y
         self.duration = duration
         self.button = button
         self._dynamic_x: str = ""
@@ -332,11 +345,17 @@ class MouseDrag(Action):
 
     def execute(self) -> bool:
         rx, ry = self._resolve_coords()
+        # Move to start position first if specified
+        if self.start_x or self.start_y:
+            _pag().moveTo(self.start_x, self.start_y, duration=0.05)
         _pag().dragTo(rx, ry, duration=self.duration, button=self.button)
         return True
 
     def _get_params(self) -> dict[str, Any]:
         p: dict[str, Any] = {"x": self.x, "y": self.y, "duration": self.duration, "button": self.button}
+        if self.start_x or self.start_y:
+            p["start_x"] = self.start_x
+            p["start_y"] = self.start_y
         if self._dynamic_x:
             p["dynamic_x"] = self._dynamic_x
         if self._dynamic_y:
@@ -346,20 +365,25 @@ class MouseDrag(Action):
     def _set_params(self, params: dict[str, Any]) -> None:
         self.x = params.get("x", 0)
         self.y = params.get("y", 0)
+        self.start_x = params.get("start_x", 0)
+        self.start_y = params.get("start_y", 0)
         self.duration = params.get("duration", 0.5)
         self.button = params.get("button", "left")
         self._dynamic_x = params.get("dynamic_x", "")
         self._dynamic_y = params.get("dynamic_y", "")
 
     def get_display_name(self) -> str:
+        start = f"({self.start_x}, {self.start_y}) " if (self.start_x or self.start_y) else ""
         if self._dynamic_x or self._dynamic_y:
-            return f"Drag to ({self._dynamic_x or self.x}, {self._dynamic_y or self.y})"
-        return f"Drag to ({self.x}, {self.y})"
+            return f"Drag {start}to ({self._dynamic_x or self.x}, {self._dynamic_y or self.y})"
+        return f"Drag {start}to ({self.x}, {self.y})"
 
 
 @register_action("mouse_scroll")
 class MouseScroll(Action):
     """Scroll the mouse wheel."""
+
+    __slots__ = ('x', 'y', 'clicks')
 
     def __init__(self, x: int = 0, y: int = 0, clicks: int = 3, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -368,6 +392,9 @@ class MouseScroll(Action):
         self.clicks = clicks  # positive = up, negative = down
 
     def execute(self) -> bool:
+        if self.clicks == 0:
+            logger.debug("MouseScroll: clicks=0 — skipping")
+            return True
         _pag().scroll(self.clicks, self.x, self.y)
         return True
 
@@ -382,3 +409,139 @@ class MouseScroll(Action):
     def get_display_name(self) -> str:
         direction = "up" if self.clicks > 0 else "down"
         return f"Scroll {direction} {abs(self.clicks)} clicks"
+
+
+# ══════════════════════════════════════════════════════════════
+#  STEALTH ACTIONS — PostMessage-based (non-invasive)
+#  Physical mouse/keyboard are NEVER hijacked.
+# ══════════════════════════════════════════════════════════════
+
+
+@register_action("stealth_click")
+class StealthClick(Action):
+    """Click a window via PostMessage — does NOT move the physical cursor.
+
+    Sends MOUSEMOVE → LBUTTONDOWN → (humanized delay) → LBUTTONUP
+    directly to the target window's message queue. Works on hidden,
+    minimized, or occluded windows.
+
+    Limitations:
+    - Does not work with DirectX/OpenGL fullscreen apps.
+    - Coordinates are client-relative (relative to window's top-left).
+    """
+
+    __slots__ = ('x', 'y', 'window_title', 'right_click', 'double_click')
+
+    def __init__(
+        self,
+        x: int = 0,
+        y: int = 0,
+        window_title: str = "",
+        right_click: bool = False,
+        double_click: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.x = x
+        self.y = y
+        self.window_title = window_title
+        self.right_click = right_click
+        self.double_click = double_click
+
+    def execute(self) -> bool:
+        from core.win32_stealth import (
+            find_window_by_title,
+            stealth_click,
+            stealth_double_click,
+        )
+
+        if not self.window_title:
+            logger.error("StealthClick: no window_title specified")
+            return False
+
+        hwnd = find_window_by_title(self.window_title)
+        if not hwnd:
+            logger.error("StealthClick: window not found: '%s'", self.window_title)
+            return False
+
+        if self.double_click:
+            stealth_double_click(hwnd, self.x, self.y)
+        else:
+            stealth_click(hwnd, self.x, self.y, right=self.right_click)
+        return True
+
+    def _get_params(self) -> dict[str, Any]:
+        return {
+            "x": self.x,
+            "y": self.y,
+            "window_title": self.window_title,
+            "right_click": self.right_click,
+            "double_click": self.double_click,
+        }
+
+    def _set_params(self, params: dict[str, Any]) -> None:
+        self.x = params.get("x", 0)
+        self.y = params.get("y", 0)
+        self.window_title = params.get("window_title", "")
+        self.right_click = params.get("right_click", False)
+        self.double_click = params.get("double_click", False)
+
+    def get_display_name(self) -> str:
+        btn = "Double" if self.double_click else ("Right" if self.right_click else "Left")
+        win = self.window_title[:20] + "…" if len(self.window_title) > 20 else self.window_title
+        return f"👻 Stealth {btn} Click ({self.x}, {self.y}) → {win}"
+
+
+@register_action("stealth_type")
+class StealthType(Action):
+    """Type text into a window via WM_CHAR — does NOT use the physical keyboard.
+
+    Each character is sent as a WM_CHAR message directly to the target
+    window's message queue. Works on hidden or background windows.
+    """
+
+    __slots__ = ('text', 'window_title', 'key_delay_ms')
+
+    def __init__(
+        self,
+        text: str = "",
+        window_title: str = "",
+        key_delay_ms: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.text = text
+        self.window_title = window_title
+        self.key_delay_ms = key_delay_ms
+
+    def execute(self) -> bool:
+        from core.win32_stealth import find_window_by_title, stealth_type_text
+
+        if not self.window_title:
+            logger.error("StealthType: no window_title specified")
+            return False
+
+        hwnd = find_window_by_title(self.window_title)
+        if not hwnd:
+            logger.error("StealthType: window not found: '%s'", self.window_title)
+            return False
+
+        stealth_type_text(hwnd, self.text, delay_ms=self.key_delay_ms)
+        return True
+
+    def _get_params(self) -> dict[str, Any]:
+        return {
+            "text": self.text,
+            "window_title": self.window_title,
+            "key_delay_ms": self.key_delay_ms,
+        }
+
+    def _set_params(self, params: dict[str, Any]) -> None:
+        self.text = params.get("text", "")
+        self.window_title = params.get("window_title", "")
+        self.key_delay_ms = params.get("key_delay_ms", 0)
+
+    def get_display_name(self) -> str:
+        preview = self.text[:25] + "…" if len(self.text) > 25 else self.text
+        win = self.window_title[:20] + "…" if len(self.window_title) > 20 else self.window_title
+        return f"👻 Stealth Type \"{preview}\" → {win}"

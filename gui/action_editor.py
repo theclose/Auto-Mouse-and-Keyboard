@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QTextBrowser,
@@ -102,6 +103,14 @@ ACTION_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
             ("secure_type_text", "Secure Type Text"),
             ("run_macro", "Run Sub-Macro"),
             ("capture_text", "Capture Text (OCR)"),
+            ("run_command", "Run Command"),
+        ],
+    ),
+    (
+        "👻 Stealth",
+        [
+            ("stealth_click", "Stealth Click"),
+            ("stealth_type", "Stealth Type"),
         ],
     ),
 ]
@@ -117,7 +126,7 @@ _ACTION_DESCRIPTIONS: dict[str, str] = {
     "key_press": "Nhấn một phím (đơn hoặc đặc biệt như Enter, Tab)",
     "key_combo": "Nhấn tổ hợp phím (ví dụ: Ctrl+C, Alt+F4)",
     "type_text": "Gõ chuỗi ký tự vào ô nhập liệu hiện tại",
-    "hotkey": "Nhấn tổ hợp phím nóng (hỗ trợ nhiều phím)",
+    "hotkey": "Tương tự Key Combo — dùng cho tương thích ngược",
     "wait_for_image": "Đợi cho đến khi ảnh mẫu xuất hiện trên màn hình",
     "click_on_image": "Tìm ảnh mẫu trên màn hình và click vào vị trí tìm thấy",
     "image_exists": "Kiểm tra ảnh mẫu có tồn tại trên màn hình không",
@@ -140,6 +149,9 @@ _ACTION_DESCRIPTIONS: dict[str, str] = {
     "secure_type_text": "Gõ text bảo mật (dùng cho mật khẩu)",
     "run_macro": "Chạy một macro khác như sub-routine",
     "capture_text": "Nhận dạng chữ trên màn hình (OCR) và lưu vào biến",
+    "run_command": "Chạy lệnh hệ thống (CMD/PowerShell) và lưu kết quả vào biến",
+    "stealth_click": "Click ẩn vào cửa sổ qua PostMessage — không chiếm chuột vật lý",
+    "stealth_type": "Gõ text ẩn vào cửa sổ qua WM_CHAR — không chiếm bàn phím vật lý",
 }
 
 from gui.help_content import _ACTION_HELP  # noqa: F401
@@ -213,10 +225,17 @@ class ActionEditorDialog(QDialog):
         self._macro_dir = macro_dir
         self._result_action: Optional[Action] = None
         self._param_widgets: dict[str, Any] = {}
+        self._branch_data: dict[str, list] = {}  # Store Action objects per branch
+        self._guard_type_changing = False  # Re-entrancy guard for _on_type_changed
 
         self.setWindowTitle("Sửa Action" if action else "Thêm Action")
-        self.setMinimumWidth(480)
-        self.resize(500, 520)
+        self.setMinimumSize(420, 280)
+        # Dynamic max height: 85% of available screen
+        from PyQt6.QtWidgets import QApplication
+        screen = QApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            self.setMaximumHeight(int(avail.height() * 0.85))
         self.setSizeGripEnabled(True)
         self.setModal(True)
         self._param_cache: dict[str, Any] = {}  # persist x,y across types
@@ -228,18 +247,38 @@ class ActionEditorDialog(QDialog):
 
     def _setup_ui(self) -> None:
         """Build the editor UI: type combo, param area, buttons."""
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        # Scrollable content area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(scroll.Shape.NoFrame)
+        scroll_widget = QWidget()
+        layout = QVBoxLayout(scroll_widget)
+        layout.setSpacing(8)
+        layout.setContentsMargins(12, 8, 12, 4)
+        scroll.setWidget(scroll_widget)
+        outer_layout.addWidget(scroll)
 
         # Action type selector — grouped with category headers
         type_group = QGroupBox("Loại Action")
         type_layout = QVBoxLayout(type_group)
+
+        # Search filter for action types
+        self._type_search = QLineEdit()
+        self._type_search.setPlaceholderText("🔍 Tìm action...")
+        self._type_search.setClearButtonEnabled(True)
+        self._type_search.textChanged.connect(self._filter_action_types)
+        type_layout.addWidget(self._type_search)
 
         # Combo + Help button in same row
         combo_row = QHBoxLayout()
         self._type_combo = QComboBox()
         self._type_combo.blockSignals(True)
         self._build_grouped_combo()
+        self._all_combo_items: list[tuple[str, str | None]] = []  # (label, atype)
         # Skip to first non-header item before connecting signals
         for i in range(self._type_combo.count()):
             if self._type_combo.itemData(i, Qt.ItemDataRole.UserRole) is not None:
@@ -269,9 +308,23 @@ class ActionEditorDialog(QDialog):
         self._params_layout = QFormLayout(self._params_group)
         layout.addWidget(self._params_group)
 
-        # Common settings
-        common_group = QGroupBox("Cài đặt chung")
-        common_layout = QFormLayout(common_group)
+        # Common settings — collapsible "Advanced" section
+        self._advanced_toggle = QPushButton("▶ Nâng cao (5 tuỳ chọn)")
+        self._advanced_toggle.setCheckable(True)
+        self._advanced_toggle.setChecked(False)
+        self._advanced_toggle.setStyleSheet(
+            "QPushButton { text-align: left; padding: 6px 12px; "
+            "font-weight: 600; color: #ababc0; border: 1px solid #3a3c60; "
+            "border-radius: 6px; background: #232442; }"
+            "QPushButton:checked { color: #6c63ff; }"
+        )
+        self._advanced_toggle.clicked.connect(self._toggle_advanced)
+        layout.addWidget(self._advanced_toggle)
+
+        self._advanced_widget = QWidget()
+        self._advanced_widget.setVisible(False)
+        common_layout = QFormLayout(self._advanced_widget)
+        common_layout.setContentsMargins(8, 4, 8, 4)
 
         self._delay_spin = QSpinBox()
         self._delay_spin.setRange(0, 60000)
@@ -312,10 +365,11 @@ class ActionEditorDialog(QDialog):
         )
         common_layout.addRow("Khi lỗi:", self._error_combo)
 
-        layout.addWidget(common_group)
+        layout.addWidget(self._advanced_widget)
 
-        # OK / Cancel
+        # OK / Cancel — always visible at bottom (outside scroll area)
         btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(12, 6, 12, 8)
         btn_layout.addStretch()
         cancel_btn = QPushButton("Hủy")
         cancel_btn.clicked.connect(self.reject)
@@ -325,16 +379,53 @@ class ActionEditorDialog(QDialog):
         ok_btn.setObjectName("primaryButton")
         ok_btn.clicked.connect(self._on_ok)
         btn_layout.addWidget(ok_btn)
-        layout.addLayout(btn_layout)
+        outer_layout.addLayout(btn_layout)
 
         # Initialize params for the pre-selected type
         self._on_type_changed()
+        self._type_combo.setFocus()
+
+        # Static tab order for bottom section
+
+        QWidget.setTabOrder(self._advanced_toggle, self._delay_spin)
+        QWidget.setTabOrder(self._delay_spin, self._repeat_spin)
+        QWidget.setTabOrder(self._repeat_spin, self._desc_edit)
+        QWidget.setTabOrder(self._desc_edit, self._enabled_check)
+        QWidget.setTabOrder(self._enabled_check, self._error_combo)
+        QWidget.setTabOrder(self._error_combo, cancel_btn)
+        QWidget.setTabOrder(cancel_btn, ok_btn)
+        
+        self._cancel_btn = cancel_btn
+        self._ok_btn = ok_btn
 
     def _build_grouped_combo(self) -> None:
         """Build grouped combo box with category headers."""
+        from PyQt6.QtCore import QSettings
         from PyQt6.QtGui import QFont, QStandardItem, QStandardItemModel
 
         model = QStandardItemModel()
+
+        # Recent Actions section
+        recent = QSettings("AutoMacro", "ActionEditor").value("recent_actions", [])
+        if recent and isinstance(recent, list):
+            header = QStandardItem("⏱ Gần đây")
+            header_font = QFont()
+            header_font.setBold(True)
+            header.setFont(header_font)
+            header.setEnabled(False)
+            header.setSelectable(False)
+            model.appendRow(header)
+            # Find display names for recent types
+            _type_labels = {}
+            for _, actions in ACTION_CATEGORIES:
+                for atype, label in actions:
+                    _type_labels[atype] = label
+            for atype in recent[:5]:
+                label = _type_labels.get(atype, atype)
+                item = QStandardItem(f"    {label}")
+                item.setData(atype, Qt.ItemDataRole.UserRole)
+                model.appendRow(item)
+
         for cat_label, actions in ACTION_CATEGORIES:
             # Category header (non-selectable, bold)
             header = QStandardItem(cat_label)
@@ -351,6 +442,55 @@ class ActionEditorDialog(QDialog):
                 model.appendRow(item)
         self._type_combo.setModel(model)
 
+    def _filter_action_types(self, text: str) -> None:
+        """Filter action type combo items based on search text."""
+        text = text.strip().lower()
+        # Rebuild combo with filtered items
+        self._type_combo.blockSignals(True)
+        current_type = self._type_combo.currentData(Qt.ItemDataRole.UserRole)
+
+        from PyQt6.QtGui import QFont, QStandardItem, QStandardItemModel
+
+        model = QStandardItemModel()
+        first_selectable = -1
+        idx = 0
+        for cat_label, actions in ACTION_CATEGORIES:
+            # Filter actions in this category
+            filtered = [(atype, label) for atype, label in actions
+                        if not text or text in label.lower() or text in atype.lower()]
+            if not filtered:
+                continue
+            # Category header
+            header = QStandardItem(cat_label)
+            header_font = QFont()
+            header_font.setBold(True)
+            header.setFont(header_font)
+            header.setEnabled(False)
+            header.setSelectable(False)
+            model.appendRow(header)
+            idx += 1
+            for atype, label in filtered:
+                item = QStandardItem(f"    {label}")
+                item.setData(atype, Qt.ItemDataRole.UserRole)
+                model.appendRow(item)
+                if first_selectable < 0:
+                    first_selectable = idx
+                if atype == current_type:
+                    first_selectable = idx  # prefer current selection
+                idx += 1
+
+        self._type_combo.setModel(model)
+        if first_selectable >= 0:
+            self._type_combo.setCurrentIndex(first_selectable)
+        self._type_combo.blockSignals(False)
+        self._on_type_changed()
+
+    def _toggle_advanced(self, checked: bool) -> None:
+        """Show/hide advanced settings section."""
+        self._advanced_widget.setVisible(checked)
+        icon = "▼" if checked else "▶"
+        self._advanced_toggle.setText(f"{icon} Nâng cao (5 tuỳ chọn)")
+
     def _clear_params(self) -> None:
         """Remove all dynamic parameter widgets, cache reusable values."""
         # Cache x,y before clearing
@@ -366,67 +506,80 @@ class ActionEditorDialog(QDialog):
             if widget:
                 widget.deleteLater()
         self._param_widgets.clear()
+        self._branch_data.clear()
 
     def _on_type_changed(self) -> None:
         """Rebuild parameter widgets when action type changes."""
-        self._clear_params()
-        atype = self._type_combo.currentData(Qt.ItemDataRole.UserRole)
-        if not atype:
-            self._type_desc_label.setText("")
-            return
+        if self._guard_type_changing:
+            return  # Prevent re-entrant calls (Qt signal double-fire)
+        self._guard_type_changing = True
+        try:
+            self._clear_params()
+            atype = self._type_combo.currentData(Qt.ItemDataRole.UserRole)
+            if not atype:
+                self._type_desc_label.setText("")
+                return
 
-        # Update description (P2 #8)
-        self._type_desc_label.setText(f"ℹ️ {_ACTION_DESCRIPTIONS.get(atype, '')}")
+            # Update description (P2 #8)
+            self._type_desc_label.setText(f"ℹ️ {_ACTION_DESCRIPTIONS.get(atype, '')}")
 
-        # Dispatch to per-category builder
-        builders: dict[str, Callable[[], None]] = {
-            "mouse_click": lambda: self._build_mouse_params(atype),
-            "mouse_double_click": lambda: self._build_mouse_params(atype),
-            "mouse_right_click": lambda: self._build_mouse_params(atype),
-            "mouse_move": lambda: self._build_mouse_params(atype),
-            "mouse_drag": self._build_drag_params,
-            "mouse_scroll": self._build_scroll_params,
-            "key_press": self._build_key_press_params,
-            "key_combo": self._build_key_combo_params,
-            "hotkey": self._build_key_combo_params,
-            "type_text": self._build_type_text_params,
-            "delay": self._build_delay_params,
-            "wait_for_image": lambda: self._build_image_params(atype),
-            "click_on_image": lambda: self._build_image_params(atype),
-            "image_exists": lambda: self._build_image_params(atype),
-            "check_pixel_color": lambda: self._build_pixel_params(atype),
-            "wait_for_color": lambda: self._build_pixel_params(atype),
-            "take_screenshot": self._build_screenshot_params,
-            "if_pixel_color": self._build_if_pixel_color_params,
-            "if_image_found": self._build_if_image_found_params,
-            "loop_block": self._build_loop_block_params,
-            "if_variable": self._build_if_variable_params,
-            "set_variable": self._build_set_variable_params,
-            "split_string": self._build_split_string_params,
-            "comment": self._build_comment_params,
-            "activate_window": self._build_activate_window_params,
-            "log_to_file": self._build_log_params,
-            "read_clipboard": self._build_read_clipboard_params,
-            "read_file_line": self._build_read_file_line_params,
-            "write_to_file": self._build_write_file_params,
-            "secure_type_text": self._build_secure_text_params,
-            "run_macro": self._build_run_macro_params,
-            "capture_text": self._build_capture_text_params,
-        }
-        builder = builders.get(atype)
-        if builder:
-            builder()
-        elif atype:
-            import logging
+            # Dispatch to per-category builder
+            builders: dict[str, Callable[[], None]] = {
+                "mouse_click": lambda: self._build_mouse_params(atype),
+                "mouse_double_click": lambda: self._build_mouse_params(atype),
+                "mouse_right_click": lambda: self._build_mouse_params(atype),
+                "mouse_move": lambda: self._build_mouse_params(atype),
+                "mouse_drag": self._build_drag_params,
+                "mouse_scroll": self._build_scroll_params,
+                "key_press": self._build_key_press_params,
+                "key_combo": self._build_key_combo_params,
+                "hotkey": self._build_key_combo_params,
+                "type_text": self._build_type_text_params,
+                "delay": self._build_delay_params,
+                "wait_for_image": lambda: self._build_image_params(atype),
+                "click_on_image": lambda: self._build_image_params(atype),
+                "image_exists": lambda: self._build_image_params(atype),
+                "check_pixel_color": lambda: self._build_pixel_params(atype),
+                "wait_for_color": lambda: self._build_pixel_params(atype),
+                "take_screenshot": self._build_screenshot_params,
+                "if_pixel_color": self._build_if_pixel_color_params,
+                "if_image_found": self._build_if_image_found_params,
+                "loop_block": self._build_loop_block_params,
+                "if_variable": self._build_if_variable_params,
+                "set_variable": self._build_set_variable_params,
+                "split_string": self._build_split_string_params,
+                "comment": self._build_comment_params,
+                "activate_window": self._build_activate_window_params,
+                "log_to_file": self._build_log_params,
+                "read_clipboard": self._build_read_clipboard_params,
+                "read_file_line": self._build_read_file_line_params,
+                "write_to_file": self._build_write_file_params,
+                "secure_type_text": self._build_secure_text_params,
+                "run_macro": self._build_run_macro_params,
+                "capture_text": self._build_capture_text_params,
+                "run_command": self._build_run_command_params,
+                "stealth_click": self._build_stealth_click_params,
+                "stealth_type": self._build_stealth_type_params,
+            }
+            builder = builders.get(atype)
+            if builder:
+                builder()
+            elif atype:
+                import logging
+                logging.getLogger(__name__).warning("No param builder registered for action type '%s'", atype)
 
-            logging.getLogger(__name__).warning("No param builder registered for action type '%s'", atype)
+            # Restore cached x,y values if new type also has them
+            for key in ("x", "y"):
+                if key in self._param_cache and key in self._param_widgets:
+                    w = self._param_widgets[key]
+                    if isinstance(w, QSpinBox):
+                        w.setValue(self._param_cache[key])
 
-        # Restore cached x,y values if new type also has them
-        for key in ("x", "y"):
-            if key in self._param_cache and key in self._param_widgets:
-                w = self._param_widgets[key]
-                if isinstance(w, QSpinBox):
-                    w.setValue(self._param_cache[key])
+            # Resize dialog to fit new content
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, self.adjustSize)
+        finally:
+            self._guard_type_changing = False
 
     def _show_action_help(self) -> None:
         """Show persistent help popup for the selected action type."""
@@ -480,22 +633,96 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["clicks"] = clicks
 
     def _build_key_press_params(self) -> None:
-        """Create widgets for single key press."""
-        key_edit = QLineEdit("enter")
-        self._params_layout.addRow("Phím:", key_edit)
-        self._param_widgets["key"] = key_edit
+        """Create widgets for single key press — dropdown with all keys."""
+        from modules.keyboard import SPECIAL_KEYS
+        key_combo = QComboBox()
+        key_combo.setEditable(True)  # Allow custom key names
+        key_combo.addItems(SPECIAL_KEYS)
+        key_combo.setCurrentText("enter")
+        self._params_layout.addRow("Phím:", key_combo)
+        self._param_widgets["key"] = key_combo
 
     def _build_key_combo_params(self) -> None:
-        """Create widgets for key combination."""
-        keys_edit = QLineEdit("ctrl+c")
-        keys_edit.setPlaceholderText("VD: ctrl+shift+s")
-        self._params_layout.addRow("Tổ hợp phím (+):", keys_edit)
-        self._param_widgets["keys_str"] = keys_edit
+        """Create tag-chip UI for key combination."""
+        from PyQt6.QtWidgets import QHBoxLayout, QWidget
+
+        from modules.keyboard import SPECIAL_KEYS
+
+        # Container for tag chips
+        self._combo_keys: list[str] = []
+        chip_container = QWidget()
+        self._chip_layout = QHBoxLayout(chip_container)
+        self._chip_layout.setContentsMargins(0, 0, 0, 0)
+        self._chip_layout.setSpacing(4)
+        self._chip_layout.addStretch()
+        self._params_layout.addRow("Tổ hợp phím:", chip_container)
+
+        # Key selector dropdown + Add button
+        add_row = QHBoxLayout()
+        key_selector = QComboBox()
+        key_selector.setEditable(True)
+        key_selector.addItems(["ctrl", "shift", "alt", "win"] + SPECIAL_KEYS)
+        add_btn = QPushButton("➕")
+        add_btn.setFixedSize(28, 28)
+        add_btn.setToolTip("Thêm phím vào tổ hợp")
+        add_btn.clicked.connect(lambda: self._add_combo_key(key_selector.currentText()))
+        add_row.addWidget(key_selector, stretch=1)
+        add_row.addWidget(add_btn)
+        add_wrapper = QWidget()
+        add_wrapper.setLayout(add_row)
+        self._params_layout.addRow("Thêm phím:", add_wrapper)
+
+        # Store as hidden QLineEdit for _collect_params compatibility
+        hidden = QLineEdit()
+        hidden.setVisible(False)
+        self._params_layout.addRow(hidden)  # Add to layout so it's managed
+        self._param_widgets["keys_str"] = hidden
+
+    def _add_combo_key(self, key: str) -> None:
+        """Add a tag chip for a key in the combo."""
+        key = key.strip().lower()
+        if not key or key in getattr(self, "_combo_keys", []):
+            return
+        self._combo_keys.append(key)
+        self._rebuild_key_chips()
+
+    def _remove_combo_key(self, key: str) -> None:
+        """Remove a tag chip."""
+        if key in getattr(self, "_combo_keys", []):
+            self._combo_keys.remove(key)
+            self._rebuild_key_chips()
+
+    def _rebuild_key_chips(self) -> None:
+        """Rebuild tag chip buttons from _combo_keys list."""
+        if not hasattr(self, "_chip_layout"):
+            return
+        # Clear existing chips (keep stretch at end)
+        while self._chip_layout.count() > 1:
+            item = self._chip_layout.takeAt(0)
+            if item and item.widget():
+                item.widget().deleteLater()
+        # Add chips before stretch
+        for i, key in enumerate(self._combo_keys):
+            chip = QPushButton(f"{key} ×")
+            chip.setFixedHeight(24)
+            chip.setStyleSheet(
+                "border-radius: 10px; padding: 2px 8px; "
+                "background: #3a6; color: #fff; font-weight: bold;"
+            )
+            chip.setToolTip(f"Click để xoá phím '{key}'")
+            chip.clicked.connect(lambda _, k=key: self._remove_combo_key(k))
+            self._chip_layout.insertWidget(i, chip)
+        # Update hidden keys_str widget
+        hidden = self._param_widgets.get("keys_str")
+        if hidden:
+            hidden.setText("+".join(self._combo_keys))
 
     def _build_type_text_params(self) -> None:
-        """Create widgets for text typing action."""
-        text_edit = QLineEdit()
-        text_edit.setPlaceholderText("Nội dung cần gõ...")
+        """Create widgets for text typing action — multiline support."""
+        from PyQt6.QtWidgets import QTextEdit as _QTextEdit
+        text_edit = _QTextEdit()
+        text_edit.setPlaceholderText("Nội dung cần gõ (hỗ trợ nhiều dòng, ${var})...")
+        text_edit.setMaximumHeight(80)
         self._params_layout.addRow("Nội dung:", text_edit)
         self._param_widgets["text"] = text_edit
         interval = QDoubleSpinBox()
@@ -527,6 +754,116 @@ class ActionEditorDialog(QDialog):
             self._param_widgets["timeout_ms"] = timeout
         if atype == "click_on_image":
             self._add_button_param()
+        # Region search fields
+        self._add_region_params()
+
+    def _add_region_params(self) -> None:
+        """Add optional search region fields (shared by all image actions).
+
+        When all values are 0: search full screen (default).
+        When w/h > 0: constrain search to the specified rectangle.
+        """
+        from PyQt6.QtWidgets import QGroupBox
+
+        region_group = QGroupBox("🔲 Vùng tìm kiếm (tuỳ chọn)")
+        region_group.setCheckable(True)
+        region_group.setChecked(False)  # Default: full screen
+        region_group.setToolTip(
+            "Bật để giới hạn vùng tìm kiếm hình ảnh.\n"
+            "Tắt = tìm toàn màn hình (mặc định).\n"
+            "Bật = chỉ tìm trong vùng (x, y, w, h) → nhanh hơn \u0026 chính xác hơn."
+        )
+        region_layout = QFormLayout(region_group)
+        region_layout.setContentsMargins(8, 4, 8, 4)
+
+        for label, key, tooltip in [
+            ("X:", "region_x", "Toạ độ X góc trái trên của vùng"),
+            ("Y:", "region_y", "Toạ độ Y góc trái trên của vùng"),
+            ("Rộng (W):", "region_w", "Chiều rộng vùng tìm kiếm (pixel)"),
+            ("Cao (H):", "region_h", "Chiều cao vùng tìm kiếm (pixel)"),
+        ]:
+            spin = QSpinBox()
+            spin.setRange(0, 9999)
+            spin.setValue(0)
+            spin.setToolTip(tooltip)
+            region_layout.addRow(label, spin)
+            self._param_widgets[key] = spin
+
+        # Region picker button
+        pick_btn = QPushButton("🖱 Chọn vùng trên màn hình")
+        pick_btn.setToolTip("Kéo chuột để chọn vùng tìm kiếm trực tiếp trên màn hình")
+        pick_btn.clicked.connect(lambda: self._start_region_picker())
+        region_layout.addRow("", pick_btn)
+
+        self._params_layout.addRow(region_group)
+        self._param_widgets["_region_group"] = region_group
+
+        # Connect checkbox to enable/disable region fields
+        def _on_region_toggled(checked: bool) -> None:
+            if not checked:
+                # Reset to 0 when unchecked
+                for k in ("region_x", "region_y", "region_w", "region_h"):
+                    w = self._param_widgets.get(k)
+                    if isinstance(w, QSpinBox):
+                        w.setValue(0)
+        region_group.toggled.connect(_on_region_toggled)
+
+    def _start_region_picker(self) -> None:
+        """Launch snipping-tool-style overlay to drag-select a search region."""
+        try:
+            from gui.region_picker import RegionPickerOverlay
+        except ImportError:
+            return
+
+        # Store as instance variable to prevent garbage collection
+        self._region_picker = RegionPickerOverlay()
+
+        # Get reference to main window for minimize/restore
+        self._region_parent_window = self.parent()
+        self._region_was_maximized = (
+            self._region_parent_window.isMaximized()  # type: ignore[union-attr]
+            if self._region_parent_window else False
+        )
+
+        def _restore_and_apply(x: int, y: int, w: int, h: int) -> None:
+            for key, val in [("region_x", x), ("region_y", y),
+                             ("region_w", w), ("region_h", h)]:
+                widget = self._param_widgets.get(key)
+                if isinstance(widget, QSpinBox):
+                    widget.setValue(val)
+            # Auto-check the region group
+            grp = self._param_widgets.get("_region_group")
+            if grp is not None:
+                grp.setChecked(True)
+            # Restore main window and dialog
+            if self._region_parent_window:
+                if self._region_was_maximized:
+                    self._region_parent_window.showMaximized()  # type: ignore[attr-defined]
+                else:
+                    self._region_parent_window.showNormal()  # type: ignore[attr-defined]
+                self._region_parent_window.activateWindow()  # type: ignore[attr-defined]
+            self.show()
+            self.activateWindow()
+
+        def _restore_cancelled() -> None:
+            if self._region_parent_window:
+                if self._region_was_maximized:
+                    self._region_parent_window.showMaximized()  # type: ignore[attr-defined]
+                else:
+                    self._region_parent_window.showNormal()  # type: ignore[attr-defined]
+                self._region_parent_window.activateWindow()  # type: ignore[attr-defined]
+            self.show()
+            self.activateWindow()
+
+        self._region_picker.region_selected.connect(_restore_and_apply)
+        self._region_picker.cancelled.connect(_restore_cancelled)
+
+        # Minimize main window + hide dialog, then show picker after delay
+        self.hide()
+        if self._region_parent_window:
+            self._region_parent_window.showMinimized()  # type: ignore[attr-defined]
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(400, self._region_picker.start)
 
     def _build_screenshot_params(self) -> None:
         """Create widgets for screenshot parameters."""
@@ -583,6 +920,22 @@ class ActionEditorDialog(QDialog):
         tol.setValue(10)
         self._params_layout.addRow("Sai số:", tol)
         self._param_widgets["tolerance"] = tol
+
+        # R5: Color Preview square
+        self._color_preview = QLabel()
+        self._color_preview.setFixedSize(32, 32)
+        self._color_preview.setStyleSheet("border: 1px solid #666; border-radius: 4px;")
+        self._params_layout.addRow("Màu đã chọn:", self._color_preview)
+        for c in ("r", "g", "b"):
+            self._param_widgets[c].valueChanged.connect(self._update_color_preview)
+        self._update_color_preview()
+
+        # Color Picker — click screen to auto-fill R,G,B
+        pick_color_btn = QPushButton("🎨 Chọn màu trên màn hình")
+        pick_color_btn.setObjectName("primaryButton")
+        pick_color_btn.setToolTip("Click bất kỳ trên màn hình → tự điền X, Y, R, G, B")
+        pick_color_btn.clicked.connect(self._pick_pixel_color)
+        self._params_layout.addRow("", pick_color_btn)
         if atype in ("wait_for_color", "if_pixel_color"):
             timeout = QSpinBox()
             timeout.setRange(0, 120000)
@@ -591,16 +944,63 @@ class ActionEditorDialog(QDialog):
             self._params_layout.addRow("Giới hạn:", timeout)
             self._param_widgets["timeout_ms"] = timeout
 
+    def _build_branch_editor(self, label: str, branch_key: str) -> None:
+        """Create inline branch editor with mini action list + Add/Remove."""
+        from PyQt6.QtWidgets import QListWidget
+
+        group = QGroupBox(label)
+        group_layout = QVBoxLayout(group)
+        group_layout.setContentsMargins(6, 8, 6, 4)
+        group_layout.setSpacing(4)
+
+        action_list = QListWidget()
+        action_list.setMaximumHeight(80)
+        action_list.setStyleSheet("QListWidget { font-size: 11px; }")
+        action_list.setToolTip("Danh sách actions trong nhánh này")
+        group_layout.addWidget(action_list)
+
+        btn_row = QHBoxLayout()
+        add_btn = QPushButton("➕ Thêm")
+        add_btn.setFixedHeight(24)
+        add_btn.clicked.connect(lambda: self._add_branch_action(branch_key, action_list))
+        remove_btn = QPushButton("➖ Xoá")
+        remove_btn.setFixedHeight(24)
+        remove_btn.clicked.connect(lambda: self._remove_branch_action(branch_key, action_list))
+        btn_row.addWidget(add_btn)
+        btn_row.addWidget(remove_btn)
+        btn_row.addStretch()
+        group_layout.addLayout(btn_row)
+
+        self._params_layout.addRow(group)
+        # Store list widget for later reference
+        self._param_widgets[f"_branch_list_{branch_key}"] = action_list
+        # Initialize branch data
+        if branch_key not in self._branch_data:
+            self._branch_data[branch_key] = []
+
+    def _add_branch_action(self, branch_key: str, list_widget: Any) -> None:
+        """Open nested editor to add an action to a branch."""
+        dialog = ActionEditorDialog(parent=self, macro_dir=self._macro_dir)
+        dialog.setWindowTitle("Thêm Action vào nhánh")
+        if dialog.exec():
+            action = dialog.get_action()
+            if action:
+                self._branch_data.setdefault(branch_key, []).append(action)
+                list_widget.addItem(f"{action.ACTION_TYPE}: {action.get_display_name()}")
+
+    def _remove_branch_action(self, branch_key: str, list_widget: Any) -> None:
+        """Remove selected action from branch."""
+        row = list_widget.currentRow()
+        if row >= 0 and branch_key in self._branch_data:
+            if row < len(self._branch_data[branch_key]):
+                self._branch_data[branch_key].pop(row)
+                list_widget.takeItem(row)
+
     def _build_if_pixel_color_params(self) -> None:
         """Builder for IfPixelColor — pixel check with timeout and ELSE."""
         self._build_pixel_params("if_pixel_color")
-
-        # ELSE action (optional)
-        else_action = QLineEdit()
-        else_action.setPlaceholderText('Tuỳ chọn: {"type":"log_to_file","params":{"message":"Pixel not found"}}')
-        else_action.setToolTip("Action thực thi khi pixel KHÔNG khớp (JSON)")
-        self._params_layout.addRow("Nếu không:", else_action)
-        self._param_widgets["else_action_json"] = else_action
+        self._build_branch_editor("✅ Khi khớp (THEN)", "then_actions")
+        self._build_branch_editor("❌ Khi không khớp (ELSE)", "else_actions")
 
     def _add_xy_params(self) -> None:
         """Add standard X/Y coordinate fields with coordinate picker."""
@@ -624,7 +1024,7 @@ class ActionEditorDialog(QDialog):
         self._params_layout.addRow("", pick_btn)
 
     def _build_if_image_found_params(self) -> None:
-        """Builder for IfImageFound — image path, confidence, timeout, ELSE."""
+        """Builder for IfImageFound — image path, confidence, timeout, region, ELSE."""
         self._add_image_params()
 
         timeout = QSpinBox()
@@ -634,12 +1034,12 @@ class ActionEditorDialog(QDialog):
         self._params_layout.addRow("Giới hạn:", timeout)
         self._param_widgets["timeout_ms"] = timeout
 
-        # 3.1: ELSE action (optional)
-        else_action = QLineEdit()
-        else_action.setPlaceholderText('Tuỳ chọn: {"type":"log_to_file","params":{"message":"Không tìm thấy ảnh"}}')
-        else_action.setToolTip("Action thực thi khi ảnh KHÔNG tìm thấy (JSON)")
-        self._params_layout.addRow("Nếu không:", else_action)
-        self._param_widgets["else_action_json"] = else_action
+        # Region search fields
+        self._add_region_params()
+
+        # 3.1: Inline branch editors
+        self._build_branch_editor("✅ Khi tìm thấy (THEN)", "then_actions")
+        self._build_branch_editor("❌ Khi không thấy (ELSE)", "else_actions")
 
     def _build_loop_block_params(self) -> None:
         """Builder for LoopBlock — iterations count."""
@@ -650,6 +1050,8 @@ class ActionEditorDialog(QDialog):
         iterations.setToolTip("0 = lặp vô hạn (cho đến khi dừng)")
         self._params_layout.addRow("Số lần lặp:", iterations)
         self._param_widgets["iterations"] = iterations
+        # R4: Sub-actions editor (same pattern as If* branches)
+        self._build_branch_editor("🔁 Actions trong vòng lặp", "sub_actions")
 
     def _build_if_variable_params(self) -> None:
         """Create widgets for variable conditional."""
@@ -668,14 +1070,9 @@ class ActionEditorDialog(QDialog):
         self._params_layout.addRow("Giá trị so sánh:", compare_value)
         self._param_widgets["compare_value"] = compare_value
 
-        # 3.1: ELSE action (optional)
-        else_action = QLineEdit()
-        else_action.setPlaceholderText(
-            'Tuỳ chọn: {"type":"set_variable","params":{"var_name":"x","value":"0","operation":"set"}}'
-        )
-        else_action.setToolTip("Action thực thi khi điều kiện SAI (JSON)")
-        self._params_layout.addRow("Nếu không:", else_action)
-        self._param_widgets["else_action_json"] = else_action
+        # Inline branch editors
+        self._build_branch_editor("✅ Khi đúng (THEN)", "then_actions")
+        self._build_branch_editor("❌ Khi sai (ELSE)", "else_actions")
 
     def _build_set_variable_params(self) -> None:
         """Create widgets for set-variable action."""
@@ -690,7 +1087,20 @@ class ActionEditorDialog(QDialog):
         self._param_widgets["value"] = value
 
         operation = QComboBox()
-        operation.addItems(["set", "increment", "decrement", "add", "subtract", "multiply", "divide", "modulo", "eval"])
+        _ops = [
+            ("Gán giá trị", "set"),
+            ("Tăng +N", "increment"),
+            ("Giảm -N", "decrement"),
+            ("Cộng", "add"),
+            ("Trừ", "subtract"),
+            ("Nhân", "multiply"),
+            ("Chia", "divide"),
+            ("Chia dư (%)", "modulo"),
+            ("Nối chuỗi", "concat"),
+            ("Tính biểu thức", "eval"),
+        ]
+        for label, val in _ops:
+            operation.addItem(label, val)
         self._params_layout.addRow("Phép toán:", operation)
         self._param_widgets["operation"] = operation
 
@@ -852,30 +1262,199 @@ class ActionEditorDialog(QDialog):
         self._params_layout.addRow("Ngôn ngữ:", lang)
         self._param_widgets["lang"] = lang
 
+    def _build_run_command_params(self) -> None:
+        """Create widgets for run_command action."""
+        cmd = QLineEdit()
+        cmd.setPlaceholderText("Lệnh (ví dụ: echo hello, dir C:\\Users)")
+        self._params_layout.addRow("Lệnh:", cmd)
+        self._param_widgets["command"] = cmd
+
+        timeout = QSpinBox()
+        timeout.setRange(1, 300)
+        timeout.setValue(30)
+        timeout.setSuffix(" giây")
+        self._params_layout.addRow("Timeout:", timeout)
+        self._param_widgets["timeout"] = timeout
+
+        var_name = QLineEdit()
+        var_name.setPlaceholderText("Tên biến lưu stdout (bỏ trống = không lưu)")
+        self._params_layout.addRow("Lưu output:", var_name)
+        self._param_widgets["var_name"] = var_name
+
+        cwd = QLineEdit()
+        cwd.setPlaceholderText("Thư mục làm việc (bỏ trống = mặc định)")
+        self._params_layout.addRow("Thư mục:", cwd)
+        self._param_widgets["working_dir"] = cwd
+
+    # ── Stealth action builders ──────────────────────────
+
+    def _add_window_picker(self) -> None:
+        """Add a window title ComboBox with Refresh button for stealth actions."""
+        win_row = QHBoxLayout()
+        win_combo = QComboBox()
+        win_combo.setEditable(True)
+        win_combo.setPlaceholderText("Chọn hoặc nhập tên cửa sổ mục tiêu...")
+        win_combo.setMinimumWidth(200)
+
+        refresh_btn = QPushButton("↻")
+        refresh_btn.setFixedSize(28, 28)
+        refresh_btn.setToolTip("Làm mới danh sách cửa sổ")
+
+        def _refresh_windows() -> None:
+            current = win_combo.currentText()
+            win_combo.clear()
+            try:
+                from core.win32_stealth import get_visible_windows
+                windows = get_visible_windows()
+                for _hwnd, title in windows:
+                    win_combo.addItem(title)
+            except Exception:
+                logger.debug("Failed to enumerate windows for stealth picker")
+            win_combo.setCurrentText(current)
+
+        refresh_btn.clicked.connect(_refresh_windows)
+        # Auto-populate on first build
+        _refresh_windows()
+
+        win_row.addWidget(win_combo, stretch=1)
+        win_row.addWidget(refresh_btn)
+        win_wrapper = QWidget()
+        win_wrapper.setLayout(win_row)
+        self._params_layout.addRow("Cửa sổ:", win_wrapper)
+        self._param_widgets["window_title"] = win_combo
+
+        # Info label
+        info = QLabel(
+            "⚠ Click ẩn: gửi trực tiếp vào cửa sổ qua PostMessage.\n"
+            "  Không chiếm chuột/bàn phím vật lý.\n"
+            "  Tọa độ client-relative (góc trên-trái cửa sổ)."
+        )
+        info.setObjectName("subtitleLabel")
+        info.setWordWrap(True)
+        info.setStyleSheet("color: #f9e2af; font-size: 11px; padding: 4px;")
+        self._params_layout.addRow(info)
+
+    def _build_stealth_click_params(self) -> None:
+        """Create widgets for stealth click (PostMessage-based)."""
+        self._add_window_picker()
+        self._add_xy_params()
+
+        right_check = QCheckBox("Click phải")
+        right_check.setToolTip("Gửi WM_RBUTTONDOWN/UP thay vì WM_LBUTTONDOWN/UP")
+        self._params_layout.addRow("", right_check)
+        self._param_widgets["right_click"] = right_check
+
+        double_check = QCheckBox("Double-click")
+        double_check.setToolTip("Gửi WM_LBUTTONDBLCLK sequence")
+        self._params_layout.addRow("", double_check)
+        self._param_widgets["double_click"] = double_check
+
+    def _build_stealth_type_params(self) -> None:
+        """Create widgets for stealth type (WM_CHAR-based)."""
+        self._add_window_picker()
+
+        from PyQt6.QtWidgets import QTextEdit as _QTextEdit
+        text_edit = _QTextEdit()
+        text_edit.setPlaceholderText("Nội dung gõ ẩn (hỗ trợ nhiều dòng)...")
+        text_edit.setMaximumHeight(80)
+        self._params_layout.addRow("Nội dung:", text_edit)
+        self._param_widgets["text"] = text_edit
+
+        delay = QSpinBox()
+        delay.setRange(0, 1000)
+        delay.setSuffix(" ms")
+        delay.setValue(0)
+        delay.setToolTip("0 = gõ tức thì (bulk), >0 = delay giữa mỗi ký tự")
+        self._params_layout.addRow("Delay giữa phím:", delay)
+        self._param_widgets["key_delay_ms"] = delay
+
+
     def _start_coordinate_picker(self, x_spin: QSpinBox, y_spin: QSpinBox) -> None:
-        """Launch coordinate picker overlay after hiding the dialog."""
+        """Launch coordinate picker overlay after minimizing the app."""
         self._picker = CoordinatePickerOverlay()
         self._picker_x_target = x_spin
         self._picker_y_target = y_spin
         self._picker.coordinate_picked.connect(self._on_coordinate_picked)
         self._picker.cancelled.connect(self._on_picker_cancelled)
-        # Hide both the dialog AND the main window behind it
+        # Minimize main window + hide dialog so screen is clean for picking
         self._parent_window = self.parent()
-        if self._parent_window:
-            self._parent_window.hide()  # type: ignore[attr-defined]
+        self._picker_was_maximized = (
+            self._parent_window.isMaximized()  # type: ignore[union-attr]
+            if self._parent_window else False
+        )
         self.hide()
-        # Short delay so windows fully hide before screenshot
-        QTimer.singleShot(300, self._picker.start)
+        if self._parent_window:
+            self._parent_window.showMinimized()  # type: ignore[attr-defined]
+        # Short delay so windows fully minimize before screenshot
+        QTimer.singleShot(400, self._picker.start)
 
     def _on_coordinate_picked(self, x: int, y: int) -> None:
         """Handle picked coordinates."""
         self._picker_x_target.setValue(x)
         self._picker_y_target.setValue(y)
+
+        # If in color-pick mode, also fill R,G,B
+        if getattr(self, "_color_pick_mode", False):
+            self._color_pick_mode = False
+            try:
+                import ctypes
+                hdc = ctypes.windll.user32.GetDC(0)
+                color = ctypes.windll.gdi32.GetPixel(hdc, x, y)
+                ctypes.windll.user32.ReleaseDC(0, hdc)
+                r = color & 0xFF
+                g = (color >> 8) & 0xFF
+                b = (color >> 16) & 0xFF
+                if "r" in self._param_widgets:
+                    self._param_widgets["r"].setValue(r)
+                if "g" in self._param_widgets:
+                    self._param_widgets["g"].setValue(g)
+                if "b" in self._param_widgets:
+                    self._param_widgets["b"].setValue(b)
+                logger.info("Color picked: (%d, %d) → RGB(%d, %d, %d)", x, y, r, g, b)
+            except Exception as e:
+                logger.warning("Color pick failed: %s", e)
+
         if self._parent_window:
-            self._parent_window.show()  # type: ignore[attr-defined]
+            if getattr(self, '_picker_was_maximized', False):
+                self._parent_window.showMaximized()  # type: ignore[attr-defined]
+            else:
+                self._parent_window.showNormal()  # type: ignore[attr-defined]
             self._parent_window.activateWindow()  # type: ignore[attr-defined]
         self.show()
         self.activateWindow()
+
+    def _on_picker_cancelled(self) -> None:
+        """Handle coordinate picker cancellation — restore windows."""
+        if self._parent_window:
+            if getattr(self, '_picker_was_maximized', False):
+                self._parent_window.showMaximized()  # type: ignore[attr-defined]
+            else:
+                self._parent_window.showNormal()  # type: ignore[attr-defined]
+            self._parent_window.activateWindow()  # type: ignore[attr-defined]
+        self.show()
+        self.activateWindow()
+
+    def _update_color_preview(self) -> None:
+        """Update the color preview square with current R,G,B values."""
+        r = self._param_widgets.get("r")
+        g = self._param_widgets.get("g")
+        b = self._param_widgets.get("b")
+        if r and g and b and hasattr(self, "_color_preview"):
+            rv, gv, bv = r.value(), g.value(), b.value()
+            self._color_preview.setStyleSheet(
+                f"background-color: rgb({rv},{gv},{bv}); "
+                f"border: 1px solid #666; border-radius: 4px;"
+            )
+            self._color_preview.setToolTip(f"RGB({rv}, {gv}, {bv}) | #{rv:02x}{gv:02x}{bv:02x}")
+
+    def _pick_pixel_color(self) -> None:
+        """Launch coordinate picker in color-pick mode — fills X,Y AND R,G,B."""
+        x_spin = self._param_widgets.get("x")
+        y_spin = self._param_widgets.get("y")
+        if not x_spin or not y_spin:
+            return
+        self._color_pick_mode = True
+        self._start_coordinate_picker(x_spin, y_spin)
 
     def _on_picker_cancelled(self) -> None:
         """Handle picker cancellation."""
@@ -950,6 +1529,10 @@ class ActionEditorDialog(QDialog):
         self._capture_overlay.cancelled.connect(self._on_capture_cancelled)
         # Hide both dialog and main window
         self._capture_parent = self.parent()
+        self._capture_was_maximized = (
+            self._capture_parent.isMaximized()  # type: ignore[union-attr]
+            if self._capture_parent else False
+        )
         if self._capture_parent:
             self._capture_parent.hide()  # type: ignore[attr-defined]
         self.hide()
@@ -959,28 +1542,40 @@ class ActionEditorDialog(QDialog):
         """Handle captured image — fill path into target edit."""
         self._capture_target_edit.setText(path)
         if self._capture_parent:
-            self._capture_parent.show()  # type: ignore[attr-defined]
+            if self._capture_was_maximized:
+                self._capture_parent.showMaximized()  # type: ignore[attr-defined]
+            else:
+                self._capture_parent.show()  # type: ignore[attr-defined]
             self._capture_parent.activateWindow()  # type: ignore[attr-defined]
         self.show()
         self.activateWindow()
+        self._capture_overlay = None  # Release ref → allow GC
         logger.info("Image captured for template: %s", path)
 
     def _on_capture_cancelled(self) -> None:
         """Restore windows if capture was cancelled."""
         if self._capture_parent:
-            self._capture_parent.show()  # type: ignore[attr-defined]
+            if self._capture_was_maximized:
+                self._capture_parent.showMaximized()  # type: ignore[attr-defined]
+            else:
+                self._capture_parent.show()  # type: ignore[attr-defined]
             self._capture_parent.activateWindow()  # type: ignore[attr-defined]
         self.show()
         self.activateWindow()
+        self._capture_overlay = None  # Release ref → allow GC
 
     def _load_action(self, action: Action) -> None:
         """Pre-fill dialog from an existing action."""
         self._editing_action = action  # Store for context_image preservation
-        # Select the correct type
+        # Block signals to prevent double _on_type_changed (first call was in _setup_ui)
+        self._type_combo.blockSignals(True)
         for i in range(self._type_combo.count()):
             if self._type_combo.itemData(i, Qt.ItemDataRole.UserRole) == action.ACTION_TYPE:
                 self._type_combo.setCurrentIndex(i)
                 break
+        self._type_combo.blockSignals(False)
+        # Manually fire type change once (re-entrancy guard prevents double-fire)
+        self._on_type_changed()
 
         # Common settings
         self._delay_spin.setValue(action.delay_after)
@@ -993,26 +1588,96 @@ class ActionEditorDialog(QDialog):
                 self._error_combo.setCurrentIndex(i)
                 break
 
+        # Auto-expand advanced section if any value is non-default
+        has_custom = (
+            action.delay_after > 0
+            or action.repeat_count > 1
+            or action.description != ""
+            or not action.enabled
+            or action.on_error != "stop"
+        )
+        if has_custom:
+            self._advanced_toggle.setChecked(True)
+            self._advanced_widget.setVisible(True)
+            self._advanced_toggle.setText("▼ Nâng cao (5 tuỳ chọn)")
+
         # Type-specific params
         params = action._get_params()
+        from PyQt6.QtWidgets import QTextEdit as _QTextEdit
         for key, widget in self._param_widgets.items():
             if key == "keys_str" and "keys" in params:
                 widget.setText("+".join(params["keys"]))
+                # R3: Restore tag chips
+                for k in params["keys"]:
+                    self._add_combo_key(k)
             elif key in params:
                 val = params[key]
                 if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
                     widget.setValue(val)
+                elif isinstance(widget, _QTextEdit):
+                    widget.setPlainText(str(val))
                 elif isinstance(widget, QLineEdit):
                     widget.setText(str(val))
                 elif isinstance(widget, QComboBox):
-                    idx = widget.findText(str(val))
-                    if idx >= 0:
-                        widget.setCurrentIndex(idx)
+                    # Match by data value first, then by display text
+                    data = widget.findData(str(val))
+                    if data >= 0:
+                        widget.setCurrentIndex(data)
+                    else:
+                        idx = widget.findText(str(val))
+                        if idx >= 0:
+                            widget.setCurrentIndex(idx)
+                        elif widget.isEditable():
+                            widget.setCurrentText(str(val))
+
+        # Auto-check region group if action has region values
+        region_w_val = params.get("region_w", 0)
+        region_group = self._param_widgets.get("_region_group")
+        if region_group is not None and region_w_val and int(region_w_val) > 0:
+            region_group.setChecked(True)
+
+        # Load existing branch actions into inline editors (synchronous)
+        for branch_key, attr_name in [
+            ("then_actions", "_then_actions"),
+            ("else_actions", "_else_actions"),
+            ("sub_actions", "_sub_actions"),  # R4: Loop Block children
+        ]:
+            actions_list = getattr(action, attr_name, None)
+            if actions_list:
+                list_widget = self._param_widgets.get(f"_branch_list_{branch_key}")
+                if list_widget is not None:
+                    self._branch_data[branch_key] = list(actions_list)
+                    for a in actions_list:
+                        list_widget.addItem(f"{a.ACTION_TYPE}: {a.get_display_name()}")
+                    logger.info("Loaded %d actions into %s branch", len(actions_list), branch_key)
+
+    def _validate_params(self, atype: str, params: dict) -> str | None:
+        """Return error message if params invalid, None if OK."""
+        if atype in ("set_variable", "split_string") and not params.get("var_name", "").strip():
+            return "Tên biến không được để trống"
+        if atype in ("key_combo", "hotkey"):
+            keys = params.get("keys", [])
+            if not keys:
+                return "Chưa nhập tổ hợp phím"
+        if atype == "key_press" and not params.get("key", "").strip():
+            return "Chưa chọn phím"
+        if atype == "run_command" and not params.get("command", "").strip():
+            return "Chưa nhập lệnh"
+        if atype == "activate_window" and not params.get("window_title", "").strip():
+            return "Chưa nhập tiêu đề cửa sổ"
+        return None
 
     def _on_ok(self) -> None:
         """Build the action from widget values and accept."""
         atype = self._type_combo.currentData(Qt.ItemDataRole.UserRole)
         params = self._collect_params()
+
+        # P0: Validate params before creating action
+        warn = self._validate_params(atype, params)
+        if warn:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Thiếu thông số", warn)
+            return
 
         # Create action
         try:
@@ -1043,11 +1708,32 @@ class ActionEditorDialog(QDialog):
                         # If* ELSE branch
                         action._else_actions = list(orig._else_actions)
 
+            # Inject inline branch editor data
+            if self._branch_data:
+                if "then_actions" in self._branch_data and hasattr(action, "_then_actions"):
+                    action._then_actions = list(action._then_actions) + self._branch_data["then_actions"]
+                if "else_actions" in self._branch_data and hasattr(action, "_else_actions"):
+                    action._else_actions = list(action._else_actions) + self._branch_data["else_actions"]
+                if "sub_actions" in self._branch_data and hasattr(action, "_sub_actions"):
+                    action._sub_actions = list(action._sub_actions) + self._branch_data["sub_actions"]
+
             if not self._validate_image_path(action):
                 return
 
             self._result_action = action
             self.action_ready.emit(action)  # fire BEFORE accept
+
+            # Save to recent actions
+            from PyQt6.QtCore import QSettings
+            settings = QSettings("AutoMacro", "ActionEditor")
+            recent = settings.value("recent_actions", [])
+            if not isinstance(recent, list):
+                recent = []
+            if atype in recent:
+                recent.remove(atype)
+            recent.insert(0, atype)
+            settings.setValue("recent_actions", recent[:5])
+
             self.accept()
             logger.info("Action created: type=%s params=%s", atype, params)
         except Exception as e:
@@ -1060,14 +1746,23 @@ class ActionEditorDialog(QDialog):
 
     def _collect_params(self) -> dict[str, Any]:
         """Extract parameter values from widgets."""
+        from PyQt6.QtWidgets import QTextEdit as _QTextEdit
         params: dict[str, Any] = {}
         for key, widget in self._param_widgets.items():
+            if key.startswith("_branch_list_"):
+                continue  # Internal widget, skip
             if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
                 params[key] = widget.value()
+            elif isinstance(widget, _QTextEdit):
+                params[key] = widget.toPlainText()
             elif isinstance(widget, QLineEdit):
                 params[key] = widget.text()
+            elif isinstance(widget, QCheckBox):
+                params[key] = widget.isChecked()
             elif isinstance(widget, QComboBox):
-                params[key] = widget.currentText()
+                # Prefer itemData if set, else fallback to text
+                data = widget.currentData()
+                params[key] = data if data is not None else widget.currentText()
 
         # Handle keys_str → keys list
         if "keys_str" in params:

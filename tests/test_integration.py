@@ -5,10 +5,10 @@ Integration Tests — chains of 5+ actions running together.
 Tests verify END-TO-END data flow through ExecutionContext, 
 not just individual action isolation. These are the *honest audit* tests.
 """
-import sys
 import os
-import threading
+import sys
 import tempfile
+import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,17 +22,11 @@ sys.modules['pynput'] = mock.MagicMock()
 sys.modules['pynput.mouse'] = mock.MagicMock()
 sys.modules['pynput.keyboard'] = mock.MagicMock()
 
-from core.action import Action, get_action_class
-from core.execution_context import ExecutionContext
-from core.engine_context import set_context, set_stop_event, set_speed
 
 # Import to register all action types
-import modules.mouse
-import modules.keyboard
-import modules.image
-import modules.pixel
-import modules.system
-import core.scheduler
+from core.action import Action, get_action_class
+from core.engine_context import set_context, set_speed, set_stop_event
+from core.execution_context import ExecutionContext
 
 
 def _setup_ctx():
@@ -289,11 +283,11 @@ class TestIntegration05_FileReadLineCachePerformance(unittest.TestCase):
         elapsed = time.perf_counter() - t0
 
         self.assertEqual(ctx.get_var("data"), "line_499_data_4990")
-        
+
         # Should be fast (cached) — under 1 second for 10K reads
-        self.assertLess(elapsed, 2.0, 
+        self.assertLess(elapsed, 2.0,
                        f"10K cached reads took {elapsed:.2f}s — too slow, cache not working")
-        
+
         # Verify cache hit: file should only have been opened once
         # (We can't directly check, but the timing proves it)
         us_per_read = elapsed / 10000 * 1e6

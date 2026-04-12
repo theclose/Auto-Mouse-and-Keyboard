@@ -2,14 +2,15 @@
 Tests for core.event_bus — AppEventBus singleton and signal forwarding.
 """
 import os
-import sys
+
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from unittest.mock import MagicMock
+
+from PyQt6.QtCore import QObject
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QObject, pyqtSignal
 
 app = QApplication.instance() or QApplication([])
 

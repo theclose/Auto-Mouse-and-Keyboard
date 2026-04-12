@@ -1,22 +1,28 @@
 # -*- coding: utf-8 -*-
 """Quick audit check for remaining bugs."""
-import sys, os, threading, tempfile, shutil
+import os
+import shutil
+import sys
+import tempfile
+import threading
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import unittest.mock as mock
+
 sys.modules['pyautogui'] = mock.MagicMock()
 sys.modules['pynput'] = mock.MagicMock()
 sys.modules['pynput.mouse'] = mock.MagicMock()
 sys.modules['pynput.keyboard'] = mock.MagicMock()
 
+from core.engine_context import set_context, set_speed, set_stop_event
 from core.execution_context import ExecutionContext
-from core.engine_context import set_context, set_stop_event, set_speed
+
 ctx = ExecutionContext()
 ctx.reset()
 set_context(ctx)
 set_speed(1.0)
 set_stop_event(threading.Event())
 
-import core.scheduler, modules.system, modules.mouse, modules.keyboard, modules.image
 from core.action import get_action_class
 
 bugs = []
@@ -61,7 +67,8 @@ for name in ["split_string", "delay", "run_macro", "capture_text", "set_variable
         bugs.append(("BUG-3-%s" % name, "Roundtrip mismatch"))
 
 # 4: MouseMove dynamic serialize roundtrip
-from modules.mouse import MouseMove, MouseDrag
+from modules.mouse import MouseDrag, MouseMove
+
 mm = MouseMove(x=100, y=200)
 mm._dynamic_x = "${tx}"
 mm._dynamic_y = "${ty}"

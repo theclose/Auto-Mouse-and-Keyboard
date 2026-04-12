@@ -95,15 +95,35 @@ class MemoryManager:
         self._cleanup_callbacks: list[Callable[[], None]] = []
         self._cleanup_count = 0
         self._peak_bytes = 0
+        self._baseline_bytes = 0
+
+    def set_threshold(self, threshold_mb: int) -> None:
+        """Update the memory threshold (can be called before start)."""
+        self._threshold_bytes = max(50, threshold_mb) * 1024 * 1024
 
     def register_cleanup(self, callback: Callable[[], None]) -> None:
         """Register a function to call during memory cleanup."""
         self._cleanup_callbacks.append(callback)
 
     def start(self) -> None:
-        """Start background monitoring."""
+        """Start background monitoring with adaptive threshold."""
         if self._running:
             return
+
+        # P2: Measure baseline RAM and auto-adjust if threshold too low
+        self._baseline_bytes = self._get_memory()
+        _MB = 1024 * 1024
+        margin = 20 * _MB  # 20MB headroom
+        if self._threshold_bytes <= self._baseline_bytes + margin:
+            old_mb = self._threshold_bytes // _MB
+            self._threshold_bytes = self._baseline_bytes + 150 * _MB
+            logger.info(
+                "Adaptive threshold: %dMB → %dMB (baseline=%dMB + 150MB margin)",
+                old_mb,
+                self._threshold_bytes // _MB,
+                self._baseline_bytes // _MB,
+            )
+
         self._running = True
         self._thread = threading.Thread(target=self._monitor_loop, daemon=True, name="MemoryManager")
         self._thread.start()
@@ -175,14 +195,22 @@ class MemoryManager:
         )
 
     def get_stats(self) -> dict[str, Any]:
-        """Current memory statistics."""
+        """Current memory and performance statistics."""
         current = self._get_memory()
-        return {
+        stats = {
             "current_mb": round(current / (1024 * 1024), 1),
             "peak_mb": round(self._peak_bytes / (1024 * 1024), 1),
+            "baseline_mb": round(self._baseline_bytes / (1024 * 1024), 1),
             "threshold_mb": self._threshold_bytes // (1024 * 1024),
             "cleanup_count": self._cleanup_count,
         }
+        # Merge ImageFinder perf stats if available
+        try:
+            from modules.image import ImageFinder
+            stats.update(ImageFinder.get_perf_stats())
+        except Exception:
+            pass
+        return stats
 
     def force_gc(self) -> None:
         """Manual garbage collection trigger."""

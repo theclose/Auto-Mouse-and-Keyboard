@@ -7,29 +7,25 @@ Run: python -m pytest tests/test_edge_cases_v2.py -v
 
 import os
 import sys
-import json
-import tempfile
-import threading
 import time
 from pathlib import Path
-from typing import Any
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PyQt6.QtWidgets import QApplication
+
 _app = QApplication.instance() or QApplication([])
 
 # Force-register all action types
-import core.action       # noqa: F401
-import modules.mouse     # noqa: F401
+import core.action  # noqa: F401
+import core.scheduler  # noqa: F401
+import modules.image  # noqa: F401
 import modules.keyboard  # noqa: F401
-import modules.image     # noqa: F401
-import modules.pixel     # noqa: F401
-import core.scheduler    # noqa: F401
-
+import modules.mouse  # noqa: F401
+import modules.pixel  # noqa: F401
 
 # ============================================================
 # Edge 1: Unregistered action type
@@ -66,8 +62,8 @@ class TestSaveLoadBoundary:
         assert settings["name"] == "Empty"
 
     def test_save_load_1000_actions(self, tmp_path: Path) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         actions = [DelayAction(duration_ms=i) for i in range(1000)]
         path = str(tmp_path / "large.json")
@@ -79,8 +75,8 @@ class TestSaveLoadBoundary:
         assert loaded[999].duration_ms == 999
 
     def test_save_load_unicode_name(self, tmp_path: Path) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         unicode_name = "Tự động hóa 🖱️ — テスト"
         actions = [DelayAction(duration_ms=100)]
@@ -90,8 +86,8 @@ class TestSaveLoadBoundary:
         assert settings["name"] == unicode_name
 
     def test_save_load_unicode_filepath(self, tmp_path: Path) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         # Create a unicode subdirectory
         unicode_dir = tmp_path / "thư_mục_tiếng_việt"
@@ -115,8 +111,8 @@ class TestEngineRapidToggle:
     """Verify engine doesn't deadlock under rapid start/stop."""
 
     def test_rapid_start_stop_no_deadlock(self) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=50)])
@@ -131,8 +127,8 @@ class TestEngineRapidToggle:
         assert not engine.isRunning(), "Engine should stop cleanly"
 
     def test_double_start_ignored(self) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=10)])
@@ -184,8 +180,8 @@ class TestIOFaultInjection:
     """Simulate I/O failures to verify error handling."""
 
     def test_save_to_readonly_path(self) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         # Patch Path.write_text to simulate write-protected file
         with patch("pathlib.Path.write_text",
@@ -211,9 +207,7 @@ class TestAllActionsSerialization:
     """Every registered action type must survive to_dict → from_dict."""
 
     def test_all_types_roundtrip(self) -> None:
-        from core.action import (
-            get_all_action_types, get_action_class, Action
-        )
+        from core.action import Action, get_action_class, get_all_action_types
 
         for atype in get_all_action_types():
             cls = get_action_class(atype)
@@ -238,8 +232,8 @@ class TestEnginePauseResume:
     """Verify engine pause/resume without deadlock."""
 
     def test_pause_resume_completes(self) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=50)])
@@ -258,8 +252,8 @@ class TestEnginePauseResume:
         assert not engine.isRunning()
 
     def test_stop_while_paused(self) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         engine.load_actions([DelayAction(duration_ms=50)])
@@ -327,10 +321,13 @@ class TestConfigRoundtrip:
     """Verify config save→load preserves all keys."""
 
     def test_full_roundtrip(self, tmp_path: Path) -> None:
-        from gui.settings_dialog import (
-            DEFAULT_CONFIG, save_config, load_config,
-        )
         import copy
+
+        from gui.settings_dialog import (
+            DEFAULT_CONFIG,
+            load_config,
+            save_config,
+        )
 
         config = copy.deepcopy(DEFAULT_CONFIG)
         config["defaults"]["click_delay"] = 42
@@ -343,7 +340,7 @@ class TestConfigRoundtrip:
         assert "hotkeys" in loaded
 
     def test_missing_section_filled_from_defaults(self, tmp_path: Path) -> None:
-        from gui.settings_dialog import save_config, load_config
+        from gui.settings_dialog import load_config, save_config
         path = str(tmp_path / "partial.json")
 
         # Save a config with only one section

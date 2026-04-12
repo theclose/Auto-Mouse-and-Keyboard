@@ -1,19 +1,15 @@
 """
 End-to-end flow tests – validates the full user journey WITHOUT a GUI.
-Tests the data layer that the GUI wires to: _actions list management,
-save/load persistence, recorder snapshot API, and engine safeguards.
+Tests the data layer that the GUI wires to: undo commands, save/load
+persistence, recorder snapshot API, and engine safeguards.
 
 Run: python -m pytest tests/test_e2e_flows.py -v
 """
 
-import json
 import os
 import sys
-import tempfile
-import time
 import threading
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -21,265 +17,246 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # QApplication singleton for engine signals
 from PyQt6.QtWidgets import QApplication
+
 _app = QApplication.instance() or QApplication([])
 
 # Force-register all action types
-import core.action       # noqa: F401
-import modules.mouse     # noqa: F401
+import core.action  # noqa: F401
+import core.scheduler  # noqa: F401
+import modules.image  # noqa: F401
 import modules.keyboard  # noqa: F401
-import modules.image     # noqa: F401
-import modules.pixel     # noqa: F401
-import core.scheduler    # noqa: F401
-
+import modules.mouse  # noqa: F401
+import modules.pixel  # noqa: F401
+from core.action import Action, DelayAction
+from core.undo_commands import (
+    AddActionCommand,
+    DeleteActionsCommand,
+    DuplicateActionCommand,
+    EditActionCommand,
+    MoveActionCommand,
+    ToggleEnabledCommand,
+)
+from modules.keyboard import TypeText
+from modules.mouse import MouseClick
 
 # ============================================================
-# Flow 1: Add → Verify in list → Verify table data
+# Flow 1: Add via AddActionCommand → verify insertion + undo
 # ============================================================
 
-class TestAddActionFlow:
-    """Simulate: User clicks Add → fills dialog → action appears in list."""
+class TestAddActionCommand:
+    """Verify AddActionCommand inserts at correct position and undoes cleanly."""
 
     def test_add_to_empty_list(self) -> None:
-        from modules.mouse import MouseClick
-        actions: list = []
-
-        action = MouseClick(x=100, y=200)
-        actions.append(action)
-
-        assert len(actions) == 1
+        actions: list[Action] = []
+        cmd = AddActionCommand(actions, 0, MouseClick(x=100, y=200))
+        cmd.redo()
+        assert len(actions) == 1, "Should have 1 action after add"
         assert actions[0].x == 100
-        assert actions[0].y == 200
 
-    def test_add_inserts_after_selection(self) -> None:
-        from core.action import DelayAction
-        from modules.mouse import MouseClick
-
-        actions = [DelayAction(duration_ms=100), DelayAction(duration_ms=200)]
-        new_action = MouseClick(x=50, y=60)
-        selected_row = 0  # first row selected
-        actions.insert(selected_row + 1, new_action)
-
-        assert len(actions) == 3
-        assert actions[0].ACTION_TYPE == "delay"
+    def test_add_inserts_at_position(self) -> None:
+        actions: list[Action] = [DelayAction(duration_ms=100), DelayAction(duration_ms=200)]
+        new = MouseClick(x=50, y=60)
+        cmd = AddActionCommand(actions, 1, new)
+        cmd.redo()
+        assert len(actions) == 3, "Should insert between existing"
         assert actions[1].ACTION_TYPE == "mouse_click"
-        assert actions[2].ACTION_TYPE == "delay"
 
-    def test_add_appends_when_no_selection(self) -> None:
-        from core.action import DelayAction
-        from modules.mouse import MouseClick
-
-        actions = [DelayAction(duration_ms=100)]
-        new_action = MouseClick(x=50, y=60)
-        selected_row = -1  # no selection
-        if selected_row >= 0:
-            actions.insert(selected_row + 1, new_action)
-        else:
-            actions.append(new_action)
-
+    def test_add_undo_removes(self) -> None:
+        actions: list[Action] = [DelayAction(duration_ms=100)]
+        cmd = AddActionCommand(actions, 1, MouseClick(x=50, y=60))
+        cmd.redo()
         assert len(actions) == 2
-        assert actions[1].ACTION_TYPE == "mouse_click"
+        cmd.undo()
+        assert len(actions) == 1, "Undo should restore to original length"
+        assert actions[0].duration_ms == 100
 
-    def test_add_multiple_types(self) -> None:
-        from modules.mouse import MouseClick
-        from modules.keyboard import TypeText, KeyPress
-        from core.action import DelayAction
-
-        actions: list = []
-        actions.append(MouseClick(x=10, y=20))
-        actions.append(TypeText(text="hello"))
-        actions.append(KeyPress(key="enter"))
-        actions.append(DelayAction(duration_ms=500))
-
-        assert len(actions) == 4
-        types = [a.ACTION_TYPE for a in actions]
-        assert types == ["mouse_click", "type_text", "key_press", "delay"]
+    def test_add_redo_after_undo(self) -> None:
+        actions: list[Action] = []
+        action = MouseClick(x=10, y=20)
+        cmd = AddActionCommand(actions, 0, action)
+        cmd.redo()
+        cmd.undo()
+        cmd.redo()
+        assert len(actions) == 1, "Re-redo should re-add"
+        assert actions[0] is action, "Should be same object reference"
 
 
 # ============================================================
-# Flow 2: Edit → Verify change
+# Flow 2: Edit via EditActionCommand → verify swap + undo
 # ============================================================
 
-class TestEditActionFlow:
-    """Simulate: User edits an existing action → verify mutation."""
+class TestEditActionCommand:
+    """Verify EditActionCommand replaces action and undoes correctly."""
 
     def test_edit_replaces_action(self) -> None:
-        from modules.mouse import MouseClick
+        old = MouseClick(x=100, y=200)
+        new = MouseClick(x=300, y=400)
+        actions: list[Action] = [old]
+        cmd = EditActionCommand(actions, 0, old, new)
+        cmd.redo()
+        assert actions[0].x == 300, "Edit should replace action"
 
-        actions = [MouseClick(x=100, y=200)]
-        # User edits: change x to 300
-        new_action = MouseClick(x=300, y=200)
-        actions[0] = new_action
+    def test_edit_undo_restores(self) -> None:
+        old = MouseClick(x=100, y=200)
+        new = MouseClick(x=300, y=400)
+        actions: list[Action] = [old]
+        cmd = EditActionCommand(actions, 0, old, new)
+        cmd.redo()
+        cmd.undo()
+        assert actions[0].x == 100, "Undo should restore original"
+        assert actions[0] is old
 
-        assert actions[0].x == 300
-
-    def test_edit_preserves_other_actions(self) -> None:
-        from core.action import DelayAction
-        from modules.mouse import MouseClick
-
-        actions = [
+    def test_edit_preserves_neighbors(self) -> None:
+        actions: list[Action] = [
             DelayAction(duration_ms=100),
             MouseClick(x=50, y=60),
             DelayAction(duration_ms=200),
         ]
-        # Edit middle action
-        actions[1] = MouseClick(x=999, y=888)
-
-        assert actions[0].duration_ms == 100
-        assert actions[1].x == 999
-        assert actions[2].duration_ms == 200
-
-    def test_edit_no_selection_noop(self) -> None:
-        from modules.mouse import MouseClick
-
-        actions = [MouseClick(x=100, y=200)]
-        selected_row = -1
-        if selected_row < 0:
-            pass  # noop
-        else:
-            actions[selected_row] = MouseClick(x=999, y=999)
-
-        # Unchanged
-        assert actions[0].x == 100
+        old = actions[1]
+        new = MouseClick(x=999, y=888)
+        cmd = EditActionCommand(actions, 1, old, new)
+        cmd.redo()
+        assert actions[0].duration_ms == 100, "Neighbor 0 unchanged"
+        assert actions[1].x == 999, "Middle replaced"
+        assert actions[2].duration_ms == 200, "Neighbor 2 unchanged"
 
 
 # ============================================================
-# Flow 3: Delete → Verify removal
+# Flow 3: Delete via DeleteActionsCommand → verify removal + undo
 # ============================================================
 
-class TestDeleteActionFlow:
-    """Simulate: User deletes an action → verify list shrinks."""
+class TestDeleteActionsCommand:
+    """Verify DeleteActionsCommand removes and re-inserts on undo."""
 
-    def test_delete_single_action(self) -> None:
-        from modules.mouse import MouseClick
+    def test_delete_single(self) -> None:
+        actions: list[Action] = [MouseClick(x=100, y=200)]
+        cmd = DeleteActionsCommand(actions, [0])
+        cmd.redo()
+        assert len(actions) == 0, "Should be empty after delete"
 
-        actions = [MouseClick(x=100, y=200)]
-        actions.pop(0)
-        assert len(actions) == 0
-
-    def test_delete_middle_action(self) -> None:
-        from core.action import DelayAction
-        from modules.mouse import MouseClick
-
-        actions = [
+    def test_delete_middle(self) -> None:
+        actions: list[Action] = [
             DelayAction(duration_ms=100),
             MouseClick(x=50, y=60),
             DelayAction(duration_ms=200),
         ]
-        actions.pop(1)
-
+        cmd = DeleteActionsCommand(actions, [1])
+        cmd.redo()
         assert len(actions) == 2
         assert actions[0].duration_ms == 100
         assert actions[1].duration_ms == 200
 
-    def test_delete_last_action(self) -> None:
-        from core.action import DelayAction
-
-        actions = [DelayAction(duration_ms=100), DelayAction(duration_ms=200)]
-        actions.pop(len(actions) - 1)
-
+    def test_delete_multiple_rows(self) -> None:
+        actions: list[Action] = [
+            DelayAction(duration_ms=100),
+            MouseClick(x=50, y=60),
+            DelayAction(duration_ms=200),
+        ]
+        cmd = DeleteActionsCommand(actions, [0, 2])
+        cmd.redo()
         assert len(actions) == 1
-        assert actions[0].duration_ms == 100
+        assert actions[0].ACTION_TYPE == "mouse_click"
+
+    def test_delete_undo_restores_positions(self) -> None:
+        a1, a2, a3 = DelayAction(duration_ms=100), MouseClick(x=1, y=2), DelayAction(duration_ms=200)
+        actions: list[Action] = [a1, a2, a3]
+        cmd = DeleteActionsCommand(actions, [1])
+        cmd.redo()
+        cmd.undo()
+        assert len(actions) == 3, "Undo should restore all"
+        assert actions[1] is a2, "Should restore same object at same position"
 
 
 # ============================================================
-# Flow 4: Move Up/Down → Verify order
+# Flow 4: Move via MoveActionCommand → verify swap + undo
 # ============================================================
 
-class TestMoveActionFlow:
-    """Simulate: User moves actions up/down → verify order swaps."""
+class TestMoveActionCommand:
+    """Verify MoveActionCommand swaps adjacent items and undoes."""
 
     def test_move_up(self) -> None:
-        from core.action import DelayAction
-
-        actions = [
-            DelayAction(duration_ms=100),
-            DelayAction(duration_ms=200),
-            DelayAction(duration_ms=300),
-        ]
-        row = 1  # move second item up
-        actions[row - 1], actions[row] = actions[row], actions[row - 1]
-
-        assert actions[0].duration_ms == 200
-        assert actions[1].duration_ms == 100
-        assert actions[2].duration_ms == 300
+        a1, a2 = DelayAction(duration_ms=100), DelayAction(duration_ms=200)
+        actions: list[Action] = [a1, a2]
+        cmd = MoveActionCommand(actions, 1, 0)
+        cmd.redo()
+        assert actions[0] is a2, "a2 should move up"
+        assert actions[1] is a1
 
     def test_move_down(self) -> None:
-        from core.action import DelayAction
+        a1, a2 = DelayAction(duration_ms=100), DelayAction(duration_ms=200)
+        actions: list[Action] = [a1, a2]
+        cmd = MoveActionCommand(actions, 0, 1)
+        cmd.redo()
+        assert actions[0] is a2
+        assert actions[1] is a1
 
-        actions = [
-            DelayAction(duration_ms=100),
-            DelayAction(duration_ms=200),
-            DelayAction(duration_ms=300),
-        ]
-        row = 1  # move second item down
-        actions[row], actions[row + 1] = actions[row + 1], actions[row]
-
-        assert actions[0].duration_ms == 100
-        assert actions[1].duration_ms == 300
-        assert actions[2].duration_ms == 200
-
-    def test_move_up_first_item_noop(self) -> None:
-        from core.action import DelayAction
-
-        actions = [
-            DelayAction(duration_ms=100),
-            DelayAction(duration_ms=200),
-        ]
-        row = 0
-        if row <= 0:
-            pass  # noop
-        else:
-            actions[row - 1], actions[row] = actions[row], actions[row - 1]
-
-        assert actions[0].duration_ms == 100
-
-    def test_move_down_last_item_noop(self) -> None:
-        from core.action import DelayAction
-
-        actions = [
-            DelayAction(duration_ms=100),
-            DelayAction(duration_ms=200),
-        ]
-        row = len(actions) - 1
-        if row >= len(actions) - 1:
-            pass  # noop
-        else:
-            actions[row], actions[row + 1] = actions[row + 1], actions[row]
-
-        assert actions[1].duration_ms == 200
+    def test_move_undo_restores(self) -> None:
+        a1, a2, a3 = DelayAction(duration_ms=100), DelayAction(duration_ms=200), DelayAction(duration_ms=300)
+        actions: list[Action] = [a1, a2, a3]
+        cmd = MoveActionCommand(actions, 1, 0)
+        cmd.redo()
+        cmd.undo()
+        assert actions == [a1, a2, a3], "Undo should restore original order"
 
 
 # ============================================================
-# Flow 5: Duplicate → Verify copy
+# Flow 5: Duplicate via DuplicateActionCommand → verify copy + undo
 # ============================================================
 
-class TestDuplicateActionFlow:
-    """Simulate: User duplicates an action → verify independent copy."""
+class TestDuplicateActionCommand:
+    """Verify DuplicateActionCommand creates independent copy and undoes."""
 
-    def test_duplicate_creates_copy(self) -> None:
-        from core.action import Action
-        from modules.mouse import MouseClick
-
-        actions = [MouseClick(x=100, y=200, delay_after=50)]
-        row = 0
-        dup = Action.from_dict(actions[row].to_dict())
-        actions.insert(row + 1, dup)
-
+    def test_duplicate_inserts_after(self) -> None:
+        original = MouseClick(x=100, y=200, delay_after=50)
+        dup = Action.from_dict(original.to_dict())
+        actions: list[Action] = [original]
+        cmd = DuplicateActionCommand(actions, 0, dup)
+        cmd.redo()
         assert len(actions) == 2
-        assert actions[0].x == 100
         assert actions[1].x == 100
-        assert actions[0].id != actions[1].id  # different IDs
+        assert actions[0].id != actions[1].id, "Must have different IDs"
 
     def test_duplicate_is_independent(self) -> None:
-        from core.action import Action
-        from modules.mouse import MouseClick
-
         original = MouseClick(x=100, y=200)
         dup = Action.from_dict(original.to_dict())
-
-        # Modify original — dup should NOT change
+        actions: list[Action] = [original]
+        cmd = DuplicateActionCommand(actions, 0, dup)
+        cmd.redo()
         original.x = 999
-        assert dup.x == 100
+        assert actions[1].x == 100, "Duplicate should be independent"
+
+    def test_duplicate_undo_removes(self) -> None:
+        original = MouseClick(x=100, y=200)
+        dup = Action.from_dict(original.to_dict())
+        actions: list[Action] = [original]
+        cmd = DuplicateActionCommand(actions, 0, dup)
+        cmd.redo()
+        cmd.undo()
+        assert len(actions) == 1
+        assert actions[0] is original
+
+
+# ============================================================
+# Flow 5b: Toggle via ToggleEnabledCommand
+# ============================================================
+
+class TestToggleEnabledCommand:
+    """Verify ToggleEnabledCommand flips enabled state and undoes."""
+
+    def test_toggle_disables(self) -> None:
+        a = DelayAction(duration_ms=100, enabled=True)
+        actions: list[Action] = [a]
+        cmd = ToggleEnabledCommand(actions, [0])
+        cmd.redo()
+        assert a.enabled is False, "Should disable"
+
+    def test_toggle_undo_re_enables(self) -> None:
+        a = DelayAction(duration_ms=100, enabled=True)
+        actions: list[Action] = [a]
+        cmd = ToggleEnabledCommand(actions, [0])
+        cmd.redo()
+        cmd.undo()
+        assert a.enabled is True, "Undo should re-enable"
 
 
 # ============================================================
@@ -290,10 +267,9 @@ class TestSaveLoadPersistence:
     """Full save/load roundtrip with all settings."""
 
     def test_full_roundtrip(self, tmp_path: Path) -> None:
+        from core.action import DelayAction
         from core.engine import MacroEngine
         from modules.mouse import MouseClick
-        from modules.keyboard import TypeText
-        from core.action import DelayAction
 
         actions = [
             MouseClick(x=42, y=99, delay_after=100),
@@ -318,8 +294,8 @@ class TestSaveLoadPersistence:
         assert settings["name"] == "MyMacro"
 
     def test_save_load_preserves_enabled_state(self, tmp_path: Path) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         actions = [
             DelayAction(duration_ms=100, enabled=True),
@@ -333,8 +309,8 @@ class TestSaveLoadPersistence:
         assert loaded[1].enabled is False
 
     def test_save_load_preserves_repeat_count(self, tmp_path: Path) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         actions = [DelayAction(duration_ms=100, repeat_count=5)]
         path = str(tmp_path / "repeat.json")
@@ -366,8 +342,8 @@ class TestRecorderSnapshot:
         assert r.get_actions_snapshot() == []
 
     def test_snapshot_returns_copy(self) -> None:
-        from core.recorder import Recorder
         from core.action import DelayAction
+        from core.recorder import Recorder
 
         r = Recorder()
         # Manually add actions for testing
@@ -382,8 +358,8 @@ class TestRecorderSnapshot:
         assert r.action_count == 2
 
     def test_snapshot_with_start_index(self) -> None:
-        from core.recorder import Recorder
         from core.action import DelayAction
+        from core.recorder import Recorder
 
         r = Recorder()
         with r._actions_lock:
@@ -397,8 +373,8 @@ class TestRecorderSnapshot:
         assert snapshot[1].duration_ms == 400
 
     def test_snapshot_thread_safety(self) -> None:
-        from core.recorder import Recorder
         from core.action import DelayAction
+        from core.recorder import Recorder
 
         r = Recorder()
         errors: list[str] = []
@@ -446,8 +422,8 @@ class TestEngineDisabledActions:
         assert da.run() is True
 
     def test_all_disabled_still_completes(self) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         actions = [
@@ -461,8 +437,8 @@ class TestEngineDisabledActions:
         assert not engine.isRunning()
 
     def test_mixed_enabled_disabled(self) -> None:
-        from core.engine import MacroEngine
         from core.action import DelayAction
+        from core.engine import MacroEngine
 
         engine = MacroEngine()
         actions = [
@@ -485,7 +461,7 @@ class TestAllActionDisplayNames:
     """Verify every registered action type returns a non-empty display name."""
 
     def test_all_types_have_display_name(self) -> None:
-        from core.action import get_all_action_types, get_action_class
+        from core.action import get_action_class, get_all_action_types
 
         for atype in get_all_action_types():
             try:

@@ -7,8 +7,7 @@ Run: python -m pytest tests/test_retry_secure.py -v
 import os
 import sys
 import time
-from typing import Any
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 

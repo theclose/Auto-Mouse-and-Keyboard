@@ -22,6 +22,7 @@ class VariablePanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._get_vars_fn: Optional[Callable[[], dict]] = None
+        self._last_snapshot: dict[str, tuple[str, str]] = {}  # P3-B: cache for diff-based updates
         self._setup_ui()
         self._setup_timer()
 
@@ -57,6 +58,7 @@ class VariablePanel(QWidget):
 
     def start(self) -> None:
         """Show panel and start polling variables."""
+        self._last_snapshot.clear()  # P3-B: reset cache on start
         self._group.setVisible(True)
         self._timer.start()
 
@@ -68,15 +70,46 @@ class VariablePanel(QWidget):
     # -- Internal -----------------------------------------------------------
 
     def _refresh(self) -> None:
-        """Poll variables and update table."""
+        """P3-B: Diff-based refresh — only update cells that changed."""
         if not self._get_vars_fn:
             return
         try:
             variables = self._get_vars_fn()
         except Exception:
             return
-        self._var_table.setRowCount(len(variables))
-        for row, (name, value) in enumerate(sorted(variables.items())):
-            self._var_table.setItem(row, 0, QTableWidgetItem(str(name)))
-            self._var_table.setItem(row, 1, QTableWidgetItem(str(value)))
-            self._var_table.setItem(row, 2, QTableWidgetItem(type(value).__name__))
+
+        # Build new snapshot: {name: (str_value, type_name)}
+        new_snap: dict[str, tuple[str, str]] = {}
+        for name, value in sorted(variables.items()):
+            new_snap[name] = (str(value), type(value).__name__)
+
+        # Compare keys — if set of variable names changed, rebuild rows
+        old_keys = set(self._last_snapshot.keys())
+        new_keys = set(new_snap.keys())
+
+        if old_keys != new_keys:
+            # Keys changed — full rebuild (rare: only on new variable or deletion)
+            self._var_table.setRowCount(len(new_snap))
+            for row, (name, (val, typ)) in enumerate(new_snap.items()):
+                self._var_table.setItem(row, 0, QTableWidgetItem(name))
+                self._var_table.setItem(row, 1, QTableWidgetItem(val))
+                self._var_table.setItem(row, 2, QTableWidgetItem(typ))
+        else:
+            # Same keys — only update values that changed (hot path)
+            for row, (name, (val, typ)) in enumerate(new_snap.items()):
+                old_val, old_typ = self._last_snapshot.get(name, ("", ""))
+                if val != old_val:
+                    item = self._var_table.item(row, 1)
+                    if item:
+                        item.setText(val)
+                    else:
+                        self._var_table.setItem(row, 1, QTableWidgetItem(val))
+                if typ != old_typ:
+                    item = self._var_table.item(row, 2)
+                    if item:
+                        item.setText(typ)
+                    else:
+                        self._var_table.setItem(row, 2, QTableWidgetItem(typ))
+
+        self._last_snapshot = dict(new_snap)
+

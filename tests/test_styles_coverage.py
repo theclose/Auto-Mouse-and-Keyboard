@@ -2,14 +2,18 @@
 Tests for gui.styles — theme generation, font size, system theme detection.
 """
 import os
-import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from gui.styles import (
-    get_theme, get_system_theme,
-    DARK_THEME, LIGHT_THEME, DARK_COLORS, LIGHT_COLORS,
+    ACCENT_PRESETS,
+    DARK_COLORS,
+    DARK_THEME,
+    LIGHT_COLORS,
+    LIGHT_THEME,
     _build_theme,
+    get_system_theme,
+    get_theme,
 )
 
 
@@ -96,3 +100,35 @@ class TestGetSystemTheme:
 
     def test_returns_string(self):
         assert isinstance(get_system_theme(), str)
+
+
+class TestAccentPresets:
+    """BS-4: Verify all accent × theme combos generate valid QSS."""
+
+    def test_all_presets_parse(self):
+        """Every accent preset × dark/light must produce valid QSS."""
+        for accent_name in ACCENT_PRESETS:
+            for pref in ("dark", "light"):
+                qss = get_theme(pref, accent=accent_name)
+                assert len(qss) > 100, (
+                    f"QSS too short for {accent_name}/{pref}: {len(qss)} chars"
+                )
+
+    def test_accent_color_appears_in_output(self):
+        """The actual accent hex color must appear in the generated QSS."""
+        for accent_name, colors in ACCENT_PRESETS.items():
+            qss = get_theme("dark", accent=accent_name)
+            assert colors["accent"] in qss, (
+                f"Accent color {colors['accent']} missing from QSS for preset '{accent_name}'"
+            )
+
+    def test_no_unsubstituted_placeholders(self):
+        """No {placeholder} should remain in any theme output."""
+        import re
+        for accent_name in ACCENT_PRESETS:
+            for pref in ("dark", "light"):
+                qss = get_theme(pref, accent=accent_name)
+                unsubstituted = re.findall(r'\{[a-z_]+\}', qss)
+                assert len(unsubstituted) == 0, (
+                    f"Unsubstituted in {accent_name}/{pref}: {unsubstituted}"
+                )

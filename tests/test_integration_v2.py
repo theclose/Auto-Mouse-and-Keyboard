@@ -17,13 +17,9 @@ Run: python -m pytest tests/test_integration_v2.py -v
 import json
 import os
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -41,11 +37,10 @@ import modules.keyboard  # noqa: F401
 import modules.mouse  # noqa: F401
 import modules.pixel  # noqa: F401
 import modules.system  # noqa: F401
-
 from core.action import Action, get_action_class
 from core.engine import MacroEngine
-from core.execution_context import ExecutionContext
 from core.engine_context import set_context, set_speed, set_stop_event
+from core.execution_context import ExecutionContext
 
 
 def _setup_ctx() -> ExecutionContext:
@@ -364,13 +359,13 @@ class TestAutoSaveIntegration:
         from core.autosave import AutoSaveManager
 
         mgr = AutoSaveManager(interval_s=300)
-        assert mgr._dirty is False
+        assert not mgr._dirty_event.is_set()
 
         mgr.mark_dirty()
-        assert mgr._dirty is True
+        assert mgr._dirty_event.is_set()
 
         mgr.mark_clean()
-        assert mgr._dirty is False
+        assert not mgr._dirty_event.is_set()
 
     def test_backup_rotation(self, tmp_path: Path) -> None:
         """Backup rotation removes oldest files beyond max_backups."""
@@ -409,16 +404,16 @@ class TestAutoSaveIntegration:
         mgr._save_callback = mock_save
         mgr._backup_dir = tmp_path
         mgr._current_file = None
-        mgr._dirty = True
+        mgr._dirty_event.set()
         mgr._running = True
 
         # Simulate one loop cycle manually
-        if mgr._dirty and mgr._save_callback:
+        if mgr._dirty_event.is_set() and mgr._save_callback:
             mgr._save_callback()
-            mgr._dirty = False
+            mgr._dirty_event.clear()
 
         assert saved["called"] is True
-        assert mgr._dirty is False
+        assert not mgr._dirty_event.is_set()
 
 
 # ============================================================
@@ -664,7 +659,6 @@ class TestCrashHandlerResilience:
         try:
             raise ValueError("Test error")
         except ValueError:
-            import traceback
 
             exc_type, exc_val, exc_tb = sys.exc_info()
             dialog = CrashDialog(exc_type, exc_val, exc_tb)

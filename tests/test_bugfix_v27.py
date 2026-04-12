@@ -7,27 +7,21 @@ Run: python -m pytest tests/test_bugfix_v27.py -v
 
 import os
 import sys
-import time
-import threading
 from pathlib import Path
-from unittest.mock import patch, MagicMock, PropertyMock
-from typing import Any
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
 
 # Force-register all action types
-import core.action       # noqa: F401
-import modules.mouse     # noqa: F401
+import core.action  # noqa: F401
+import core.scheduler  # noqa: F401
 import modules.keyboard  # noqa: F401
-import core.scheduler    # noqa: F401
-
+import modules.mouse  # noqa: F401
 
 # ============================================================
 # B1: CrashHandler — clipboard safety + version in report
@@ -82,9 +76,10 @@ class TestB3ImageCaptureUnique:
     """B3: Rapid captures get unique filenames."""
 
     def test_rapid_captures_unique_names(self, tmp_path: Path) -> None:
-        from gui.image_capture import ImageCaptureOverlay
         from PyQt6.QtCore import QRect
         from PyQt6.QtGui import QPixmap
+
+        from gui.image_capture import ImageCaptureOverlay
 
         overlay = ImageCaptureOverlay(save_dir=str(tmp_path))
         overlay._screenshot = QPixmap(100, 100)
@@ -109,9 +104,10 @@ class TestB4PickerRightClickCancel:
     """B4: Right-click cancels picker overlay."""
 
     def test_right_click_emits_cancelled(self) -> None:
-        from gui.coordinate_picker import CoordinatePickerOverlay
-        from PyQt6.QtGui import QMouseEvent
         from PyQt6.QtCore import QEvent, QPointF
+        from PyQt6.QtGui import QMouseEvent
+
+        from gui.coordinate_picker import CoordinatePickerOverlay
 
         picker = CoordinatePickerOverlay()
         cancelled: list[bool] = []
@@ -136,7 +132,7 @@ class TestB5RecursionGuard:
     """B5: Deeply nested LoopBlocks fail gracefully."""
 
     def test_deep_nesting_fails_safely(self) -> None:
-        from core.scheduler import LoopBlock, MAX_COMPOSITE_DEPTH, _depth_local
+        from core.scheduler import MAX_COMPOSITE_DEPTH, LoopBlock, _depth_local
 
         # Reset depth counter
         _depth_local.depth = 0

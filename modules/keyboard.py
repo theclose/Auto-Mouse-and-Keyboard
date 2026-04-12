@@ -94,6 +94,8 @@ def _send_unicode_string(text: str, interval: float = 0.02) -> None:
 class KeyPress(Action):
     """Press and release a single key."""
 
+    __slots__ = ('key',)
+
     def __init__(self, key: str = "enter", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.key = key
@@ -120,6 +122,8 @@ class KeyCombo(Action):
     Keys are specified as a list: ["ctrl", "c"]
     """
 
+    __slots__ = ('keys',)
+
     def __init__(self, keys: "list[str] | str | None" = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # B7: Handle string input from recorder (e.g. "ctrl+c" → ["ctrl","c"])
@@ -129,6 +133,9 @@ class KeyCombo(Action):
             self.keys = list(keys) if keys else ["ctrl", "c"]
 
     def execute(self) -> bool:
+        if not self.keys:
+            logger.warning("KeyCombo: empty keys list — skipping")
+            return True
         pyautogui.hotkey(*self.keys)
         logger.debug("Key combo: %s", "+".join(self.keys))
         return True
@@ -151,6 +158,8 @@ class KeyCombo(Action):
 @register_action("type_text")
 class TypeText(Action):
     """Type a string of text character by character."""
+
+    __slots__ = ('text', 'interval')
 
     def __init__(self, text: str = "", interval: float = 0.02, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -191,6 +200,8 @@ class HotKey(Action):
     Alias for KeyCombo but with a friendlier name for the UI.
     """
 
+    __slots__ = ('keys',)
+
     def __init__(self, keys: "list[str] | str | None" = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # B7: Handle string input from recorder
@@ -200,6 +211,9 @@ class HotKey(Action):
             self.keys = list(keys) if keys else []
 
     def execute(self) -> bool:
+        if not self.keys:
+            logger.warning("HotKey: empty keys list — skipping")
+            return True
         if self.keys:
             pyautogui.hotkey(*self.keys)
             logger.debug("Hotkey: %s", "+".join(self.keys))

@@ -55,31 +55,26 @@ class TrayManager(QObject):
         # Context menu
         menu = QMenu()
         show_action = menu.addAction("Show Window")
-        assert show_action is not None
         self._show_action = show_action
         self._show_action.triggered.connect(self.show_requested.emit)
 
         menu.addSeparator()
 
         play_action = menu.addAction("▶ Play")
-        assert play_action is not None
         self._play_action = play_action
         self._play_action.triggered.connect(self.play_requested.emit)
 
         pause_action = menu.addAction("⏸ Pause")
-        assert pause_action is not None
         self._pause_action = pause_action
         self._pause_action.triggered.connect(self.pause_requested.emit)
 
         stop_action = menu.addAction("⏹ Stop")
-        assert stop_action is not None
         self._stop_action = stop_action
         self._stop_action.triggered.connect(self.stop_requested.emit)
 
         menu.addSeparator()
 
         quit_act = menu.addAction("Quit")
-        assert quit_act is not None
         quit_act.triggered.connect(self.quit_requested.emit)
 
         self._tray.setContextMenu(menu)

@@ -3,13 +3,11 @@ Comprehensive unit tests for AutoPilot.
 Covers action system, engine, scheduler, modules, and edge cases.
 Run: python -m pytest tests/ -v
 """
-import json
 import os
 import sys
-import tempfile
 import threading
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -58,7 +56,7 @@ class TestAction:
         assert da.enabled is False
 
     def test_serialization_roundtrip(self):
-        from core.action import DelayAction, Action
+        from core.action import Action, DelayAction
         da = DelayAction(duration_ms=750, description="roundtrip test")
         d = da.to_dict()
         assert d["type"] == "delay"
@@ -120,8 +118,8 @@ class TestMouseActions:
         assert "99" in mc.get_display_name()
 
     def test_click_serialization(self):
-        from modules.mouse import MouseClick
         from core.action import Action
+        from modules.mouse import MouseClick
         mc = MouseClick(x=10, y=20, duration=0.1)
         d = mc.to_dict()
         mc2 = Action.from_dict(d)
@@ -194,6 +192,7 @@ class TestKeyboardActions:
     def test_typetext_unicode_uses_sendinput(self):
         """TypeText for non-ASCII should use _send_unicode_string."""
         import inspect
+
         from modules.keyboard import TypeText
         src = inspect.getsource(TypeText.execute)
         assert "_send_unicode_string" in src
@@ -214,7 +213,6 @@ class TestKeyboardActions:
 class TestScheduler:
     def test_loop_block_finite(self):
         from core.scheduler import LoopBlock
-        from core.action import DelayAction
         counter = {"value": 0}
 
         class CountAction:
@@ -235,8 +233,8 @@ class TestScheduler:
         assert counter["value"] == 5
 
     def test_loop_block_cancel_infinite(self):
-        from core.scheduler import LoopBlock
         from core.action import DelayAction
+        from core.scheduler import LoopBlock
         lb = LoopBlock(iterations=0)
         lb.add_action(DelayAction(duration_ms=5))
 
@@ -249,7 +247,6 @@ class TestScheduler:
 
     def test_loop_block_serialization(self):
         from core.scheduler import LoopBlock
-        from core.action import Action
         lb = LoopBlock(iterations=3)
         d = lb.to_dict()
         assert d["type"] == "loop_block"
@@ -409,7 +406,7 @@ class TestPixelModule:
         assert 0 <= b <= 255
 
     def test_check_pixel_color_match(self):
-        from modules.pixel import get_pixel_checker, CheckPixelColor
+        from modules.pixel import CheckPixelColor, get_pixel_checker
         pc = get_pixel_checker()
         r, g, b = pc.get_pixel(0, 0)
         cpc = CheckPixelColor(x=0, y=0, r=r, g=g, b=b, tolerance=5)
@@ -432,10 +429,10 @@ class TestMacroIO:
     """Test macro save/load round-trip."""
 
     def test_save_load_roundtrip(self, tmp_path):
-        from core.engine import MacroEngine
         from core.action import DelayAction
-        from modules.mouse import MouseClick
+        from core.engine import MacroEngine
         from modules.keyboard import TypeText
+        from modules.mouse import MouseClick
 
         actions = [
             DelayAction(duration_ms=100),
@@ -472,7 +469,7 @@ class TestConfigIO:
     """Test settings load/save."""
 
     def test_load_default_config(self):
-        from gui.settings_dialog import load_config, DEFAULT_CONFIG
+        from gui.settings_dialog import DEFAULT_CONFIG, load_config
         config = load_config("nonexistent_config.json")
         assert config == DEFAULT_CONFIG
 
@@ -520,8 +517,8 @@ class TestEdgeCases:
         assert isinstance(name, str)
 
     def test_key_combo_serialization_roundtrip(self):
-        from modules.keyboard import KeyCombo
         from core.action import Action
+        from modules.keyboard import KeyCombo
         kc = KeyCombo(keys=["ctrl", "alt", "delete"])
         d = kc.to_dict()
         kc2 = Action.from_dict(d)

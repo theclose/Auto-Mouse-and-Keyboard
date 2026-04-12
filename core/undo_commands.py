@@ -168,10 +168,12 @@ class CompositeChildrenCommand(QUndoCommand):
     def __init__(self, parent_action: Action, description: str) -> None:
         super().__init__(description)
         self._parent = parent_action
-        # Snapshot BEFORE state
-        self._old_subs = list(parent_action._sub_actions) if hasattr(parent_action, "_sub_actions") else None
-        self._old_then = list(parent_action._then_actions) if hasattr(parent_action, "_then_actions") else None
-        self._old_else = list(parent_action._else_actions) if hasattr(parent_action, "_else_actions") else None
+        import copy
+
+        # Snapshot BEFORE state (M6: deep copy to prevent undo corruption)
+        self._old_subs = copy.deepcopy(parent_action._sub_actions) if hasattr(parent_action, "_sub_actions") else None
+        self._old_then = copy.deepcopy(parent_action._then_actions) if hasattr(parent_action, "_then_actions") else None
+        self._old_else = copy.deepcopy(parent_action._else_actions) if hasattr(parent_action, "_else_actions") else None
         # AFTER state — set via capture_new_state()
         self._new_subs: list[Action] | None = None
         self._new_then: list[Action] | None = None
@@ -179,13 +181,15 @@ class CompositeChildrenCommand(QUndoCommand):
 
     def capture_new_state(self) -> None:
         """Call AFTER mutating children to capture the new state."""
+        import copy
+
         p = self._parent
         if hasattr(p, "_sub_actions"):
-            self._new_subs = list(p._sub_actions)
+            self._new_subs = copy.deepcopy(p._sub_actions)
         if hasattr(p, "_then_actions"):
-            self._new_then = list(p._then_actions)
+            self._new_then = copy.deepcopy(p._then_actions)
         if hasattr(p, "_else_actions"):
-            self._new_else = list(p._else_actions)
+            self._new_else = copy.deepcopy(p._else_actions)
 
     def redo(self) -> None:
         self._apply(self._new_subs, self._new_then, self._new_else)

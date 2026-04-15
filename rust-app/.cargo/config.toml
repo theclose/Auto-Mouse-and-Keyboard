@@ -1,0 +1,7 @@
+[build]
+target = "x86_64-pc-windows-gnu"
+target-dir = "C:/AMK/rust-app-target"
+
+[target.x86_64-pc-windows-gnu]
+linker = "C:/Ruby40-x64/msys64/ucrt64/bin/gcc.exe"
+rustflags = ["-Clink-arg=-Wl,--stack,16777216"]

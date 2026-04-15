@@ -1,0 +1,26 @@
+# AutoMacro Cursor AI Rules
+
+As an AI Assistant, you must obey the following architectural rules when editing this codebase:
+
+## Build Rules (CRITICAL — violations cause STATUS_STACK_OVERFLOW)
+1. **NEVER use `-Clink-self-contained=yes`**: Rust's self-contained MinGW CRT has a fatal TLS initialization bug that causes stack overflow BEFORE `main()`. The `.cargo/config.toml` MUST use the MSYS2 UCRT GCC linker at `C:/Ruby40-x64/msys64/ucrt64/bin/gcc.exe`.
+2. **NEVER use `rust-lld` as the linker**: It does not support `-Wl,--stack` syntax and its self-contained CRT is broken. Always use the GCC linker.
+3. **Stack size is 16MB** via `-Clink-arg=-Wl,--stack,16777216`. Do not reduce this.
+
+## Code Safety Rules
+4. **NO BLOCKING SLEEPS**: Under no circumstance write `std::thread::sleep(Duration::from_millis(x))` for `x > 15` in `amk-platform`. Use `SmartSleeper` with an `AtomicBool` to chunk waits.
+5. **STRICT WIN32 GDI RAII**: `GetDC`, `CreateCompatibleDC`, `CreateCompatibleBitmap` can return NULL. Check `is_null()` immediately. Use `Drop` wrapper structs. Memory/handle leaks are unacceptable.
+6. **FAIL ON INPUT BLOCKS**: Capture `SendInput` return values. Return `Result::Err` if `ret == 0`.
+7. **NO THREAD BLOAT**: For UI/Background communication, pass `Arc<AtomicBool>` directly. No spin-polling bridge threads.
+8. **SAFE INSTANT ARITHMETIC**: Use `saturating_duration_since()` not `duration_since()` to prevent panics from clock scheduling races.
+9. **CRYPTO MEMORY WIPE**: Zero-fill decrypted buffers with `.fill(0)` BEFORE calling `LocalFree`.
+
+## Architecture Rules
+10. **CODE LOCATION ALIGNMENT**:
+    - `amk-schema`: ONLY traits and raw structs. NO business logic.
+    - `amk-domain`: ONLY action translation and struct verification.
+    - `amk-runtime`: ONLY loop controls, variable bindings, and state management.
+    - `amk-platform`: ONLY Win32 FFI execution.
+11. **CLEAN BUILDS**: `cargo build` must produce ZERO warnings. Fix all warnings before proceeding.
+
+Do not suggest features that undermine memory safety or synchronous cancellation.

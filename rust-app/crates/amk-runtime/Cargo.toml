@@ -1,0 +1,15 @@
+[package]
+name = "amk-runtime"
+description = "Macro engine, executor, and playback for AutoMacro"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[dependencies]
+amk-domain = { path = "../amk-domain" }
+amk-schema = { path = "../amk-schema" }
+anyhow = { workspace = true }
+parking_lot = { workspace = true }
+tracing = { workspace = true }

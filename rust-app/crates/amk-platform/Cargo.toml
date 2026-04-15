@@ -1,0 +1,17 @@
+[package]
+name = "amk-platform"
+description = "Windows platform layer: input, capture, hooks, stealth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[dependencies]
+amk-domain = { path = "../amk-domain" }
+amk-runtime = { path = "../amk-runtime" }
+anyhow = { workspace = true }
+base64 = "0.22.1"
+image = { workspace = true }
+tracing = { workspace = true }
+windows-sys = { workspace = true }

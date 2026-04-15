@@ -47,3 +47,8 @@ logs/
 
 # ===== Gemini Agent =====
 .gemini/
+
+# ===== Rust =====
+**/target/
+*.exe
+*.pdb

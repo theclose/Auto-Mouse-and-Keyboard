@@ -1,0 +1,13 @@
+# Rust build artifacts
+/target/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Cargo lock is committed for binaries
+# Cargo.lock
+
+# IDE
+.idea/
+*.swp
